@@ -1,0 +1,336 @@
+// contacts.schema — contacts aligned to vCard 4.0 (RFC 6350), versioned
+// (Contact / ContactVersion) and user-scoped. Multi-valued properties are typed
+// lists; PHOTO/LOGO/SOUND/KEY are media references (uuid), not inline base64.
+// Beyond vCard: custom_fields, plus favorite / archived / deleted flags
+// (deleted drives the Trash tab).
+//
+// Translated from the GraphQL SDL. Mapping notes:
+//   - GraphQL ID         -> uuid   (the DSL has no ID scalar; emits as UUID)
+//   - created_at/updated_at are typed `timestamp` (were String! in GraphQL)
+//   - input object types are derived by the GraphQL emitter: a model used as an
+//     op parameter emits an `<Name>Input`. So Name/Gender/Geo/... double as
+//     their *Input companions, and createContact/updateContact derive their
+//     argument shape (ContactInput) straight from Contact — no separate
+//     CreateContact/UpdateContact models.
+//   - op parameters cannot carry GraphQL defaults (e.g. scope = ACTIVE); such
+//     arguments are modelled as nullable (optional) instead.
+//
+// @input: filter DTOs (ContactFilter, ContactSort, …) are @input — they emit as
+// GraphQL/OpenAPI inputs only, never as output types or SQL/SurrealDB tables.
+// On Contact, server-managed fields are @visibility("read") so the derived
+// ContactInput excludes them; the create and update inputs therefore collapse
+// into one ContactInput (required-on-create is enforced by the resolver).
+
+namespace contacts
+
+import { StringFilter, IntFilter, BoolFilter, DateFilter, StringListFilter, GeoFilter, SortDirection } from "./shared"
+
+// ── Structured value objects ──────────────────────────────────────────────────
+
+/// vCard N — the structured name.
+model Name {
+  1 family: string?
+  2 given: string?
+  3 additional: [string]?
+  4 prefixes: [string]?
+  5 suffixes: [string]?
+}
+
+/// vCard GENDER.
+model Gender {
+  /// vCard sex component: M F O N U.
+  1 sex: string?
+  /// Free-text gender identity.
+  2 identity: string?
+}
+
+/// vCard GEO.
+model Geo {
+  1 lat: f64
+  2 lng: f64
+}
+
+/// A typed, repeatable value (EMAIL, TEL, IMPP, URL, LANG). `types` carries the
+/// vCard TYPE parameter (home, work, cell, …); `pref` the PREF (1 = preferred).
+model ContactField {
+  1 value: string
+  2 types: [string]?
+  3 pref: i32?
+  4 label: string?
+}
+
+/// vCard ADR.
+model Address {
+  1 types: [string]?
+  2 pref: i32?
+  3 label: string?
+  4 po_box: string?
+  5 ext: string?
+  6 street: string?
+  7 locality: string?
+  8 region: string?
+  9 postal_code: string?
+  10 country: string?
+}
+
+/// vCard ORG (name plus organisational units).
+model ContactOrganization {
+  1 name: string
+  2 units: [string]?
+}
+
+/// A labelled key/value pair beyond the vCard surface (replaces X- extensions).
+model CustomField {
+  1 label: string
+  2 value: string
+}
+
+/// A vCard RELATED edge to another contact.
+model ContactRelation {
+  1 contact_id: uuid
+  2 types: [string]?
+  3 pref: i32?
+}
+
+// ── Contact ─────────────────────────────────────────────────────────────────--
+
+model Contact {
+  @visibility("read")
+  1 id: uuid
+
+  /// vCard UID — stable across imports/sync.
+  2 uid: string
+
+  /// vCard KIND: individual | group | org | location.
+  3 kind: string
+
+  /// vCard FN — the display name (required).
+  4 formatted_name: string
+
+  5 name: Name?
+  6 nicknames: [string]?
+  7 birthday: string?
+  8 anniversary: string?
+  9 gender: Gender?
+
+  10 emails: [ContactField]?
+  11 phones: [ContactField]?
+  12 impps: [ContactField]?
+  13 languages: [ContactField]?
+  14 addresses: [Address]?
+
+  15 organizations: [ContactOrganization]?
+  16 title: string?
+  17 role: string?
+
+  18 timezone: string?
+  19 geo: Geo?
+
+  20 categories: [string]?
+  21 notes: [string]?
+  22 urls: [ContactField]?
+  23 source: string?
+  24 prodid: string?
+
+  25 fburl: string?
+  26 caluri: string?
+  27 caladruri: string?
+
+  /// Media handler id for the encrypted PHOTO/LOGO/SOUND/KEY (null = none).
+  28 photo: uuid?
+  29 logo: uuid?
+  30 sound: uuid?
+  31 key: uuid?
+
+  32 custom_fields: [CustomField]?
+  33 favorite: bool
+  34 archived: bool
+
+  /// Trash flag — set via trashContact, not a direct input.
+  @visibility("read")
+  35 deleted: bool
+
+  /// vCard RELATED edges and KIND=group MEMBER ids, from the graph.
+  @visibility("read")
+  36 related: [ContactRelation]?
+  @visibility("read")
+  37 member_ids: [uuid]?
+
+  @visibility("read")
+  38 created_at: timestamp
+  @visibility("read")
+  39 updated_at: timestamp
+}
+
+/// A point-in-time snapshot from the append-only history. Mirrors Contact's data
+/// fields (graph relations are not versioned).
+model ContactVersion {
+  1 id: uuid
+  2 contact_id: uuid
+  3 uid: string
+  4 kind: string
+  5 formatted_name: string
+  6 name: Name?
+  7 nicknames: [string]?
+  8 birthday: string?
+  9 anniversary: string?
+  10 gender: Gender?
+  11 emails: [ContactField]?
+  12 phones: [ContactField]?
+  13 impps: [ContactField]?
+  14 languages: [ContactField]?
+  15 addresses: [Address]?
+  16 organizations: [ContactOrganization]?
+  17 title: string?
+  18 role: string?
+  19 timezone: string?
+  20 geo: Geo?
+  21 categories: [string]?
+  22 notes: [string]?
+  23 urls: [ContactField]?
+  24 source: string?
+  25 prodid: string?
+  26 fburl: string?
+  27 caluri: string?
+  28 caladruri: string?
+  29 photo: uuid?
+  30 logo: uuid?
+  31 sound: uuid?
+  32 key: uuid?
+  33 custom_fields: [CustomField]?
+  34 favorite: bool
+  35 archived: bool
+  36 deleted: bool
+  37 created_at: timestamp
+
+  /// Version ids this one derives from (edit lineage; 2 entries on a merge).
+  38 parent_ids: [uuid]?
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+/// Which set of contacts to return. ACTIVE excludes archived and trashed.
+enum ContactScope {
+  1 ACTIVE
+  2 ARCHIVED
+  3 TRASHED
+  4 ALL
+}
+
+/// Sortable contact columns (whitelisted; arbitrary fields aren't allowed).
+enum ContactSortField {
+  1 FORMATTED_NAME
+  2 CREATED_AT
+  3 UPDATED_AT
+  4 BIRTHDAY
+}
+
+// ── Inputs ──────────────────────────────────────────────────────────────────--
+// The create/update argument shape is derived from Contact (ContactInput) — its
+// @visibility("read") fields are excluded automatically, so no CreateContact /
+// UpdateContact models are needed. Value-object inputs (NameInput, GeoInput, …)
+// are derived the same way.
+
+// ── Filtering ─────────────────────────────────────────────────────────────────
+
+/// Match a single element of a repeatable field (email/phone): value
+/// substring/eq and an optional membership test on its types.
+@input
+model ContactFieldFilter {
+  1 value: StringFilter?
+  2 `type`: string?
+}
+
+/// Filter a repeatable field list (emails/phones) by any-element match or size.
+@input
+model FieldListFilter {
+  1 any: ContactFieldFilter?
+  2 isEmpty: bool?
+  3 size: IntFilter?
+}
+
+@input
+model ContactFilter {
+  1 formatted_name: StringFilter?
+  2 kind: StringFilter?
+  3 birthday: StringFilter?
+  4 anniversary: StringFilter?
+  5 title: StringFilter?
+  6 role: StringFilter?
+  7 timezone: StringFilter?
+  8 geo: GeoFilter?
+
+  9 emails: FieldListFilter?
+  10 phones: FieldListFilter?
+  11 impps: FieldListFilter?
+  12 languages: FieldListFilter?
+  13 urls: FieldListFilter?
+
+  14 categories: StringListFilter?
+  15 nicknames: StringListFilter?
+  16 notes: StringListFilter?
+
+  17 favorite: BoolFilter?
+  18 archived: BoolFilter?
+  19 deleted: BoolFilter?
+
+  20 created_at: DateFilter?
+  21 updated_at: DateFilter?
+
+  22 and: [ContactFilter]?
+  23 or: [ContactFilter]?
+  24 not: ContactFilter?
+}
+
+@input
+model ContactVersionFilter {
+  1 formatted_name: string?
+  2 before: string?
+}
+
+// ── Sorting ───────────────────────────────────────────────────────────────────
+
+/// One sort key. Pass a list to sort by several columns in order.
+/// (GraphQL's `direction = ASC` default becomes an optional field here.)
+@input
+model ContactSort {
+  1 field: ContactSortField
+  2 direction: SortDirection?
+}
+
+// ── Operations ────────────────────────────────────────────────────────────────
+
+@query op contacts(scope: ContactScope?, favorite: bool?, search: string?, filter: ContactFilter?, sort: [ContactSort]?, limit: i32?, offset: i32?): [Contact]
+
+/// Total contacts matching the same scope/favorite/search/filter (ignores paging).
+@query op contactCount(scope: ContactScope?, favorite: bool?, search: string?, filter: ContactFilter?): i32
+
+@query op contact(id: uuid): Contact?
+
+@query op contactHistory(id: uuid, filter: ContactVersionFilter?): [ContactVersion]
+
+@mutation op createContact(input: Contact): Contact
+
+@mutation op updateContact(id: uuid, parentVersionIds: [uuid], input: Contact): Contact
+
+/// Branch from an old version: copies its content into a new head version whose
+/// parent is that version, so the lineage forks instead of overwriting.
+@mutation op restoreContactVersion(id: uuid, versionId: uuid): Contact
+
+/// Soft-delete flags — each records a new version. Restore reverses trash/archive.
+@mutation op trashContact(id: uuid): Contact
+@mutation op restoreContact(id: uuid): Contact
+@mutation op archiveContact(id: uuid): Contact
+@mutation op unarchiveContact(id: uuid): Contact
+@mutation op setContactFavorite(id: uuid, favorite: bool): Contact
+
+/// Permanent removal — only meaningful from the Trash tab.
+@mutation op deleteContact(id: uuid): bool
+
+/// vCard RELATED edges (contact ↔ contact).
+@mutation op relateContacts(fromId: uuid, toId: uuid, types: [string]?, pref: i32?): bool
+@mutation op unrelateContacts(fromId: uuid, toId: uuid): bool
+
+/// vCard MEMBER edges for a KIND=group contact.
+@mutation op addGroupMember(groupId: uuid, memberId: uuid): bool
+@mutation op removeGroupMember(groupId: uuid, memberId: uuid): bool

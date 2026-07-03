@@ -1,0 +1,27 @@
+scalar UUID
+scalar DateTime
+scalar Date
+scalar Time
+scalar Duration
+scalar Decimal
+scalar Bytes
+scalar JSON
+
+enum Region {
+  northAmerica
+  europe
+  asiaPacific
+}
+
+type Money {
+  amount: Decimal!
+  currency: String!
+}
+
+type PostalAddress {
+  streetAddress: String!
+  addressLocality: String!
+  addressRegion: String
+  postalCode: String!
+  addressCountry: String!
+}

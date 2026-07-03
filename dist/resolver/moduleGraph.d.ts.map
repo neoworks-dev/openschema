@@ -1,0 +1,1 @@
+{"version":3,"file":"moduleGraph.d.ts","sourceRoot":"","sources":["../../src/resolver/moduleGraph.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAE,MAAM,EAAE,MAAM,YAAY,CAAC;AAEzC,uEAAuE;AACvE,MAAM,MAAM,cAAc,GAAG,CAAC,IAAI,EAAE,MAAM,KAAK,MAAM,GAAG,IAAI,CAAC;AAE7D;;;;GAIG;AACH,wBAAgB,WAAW,CAAC,SAAS,EAAE,MAAM,EAAE,cAAc,EAAE,cAAc,GAAG,MAAM,EAAE,CA2BvF"}

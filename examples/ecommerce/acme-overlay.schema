@@ -1,0 +1,22 @@
+// acme-overlay.schema — ACME Corp's PRIVATE extension of the shared Order.
+//
+// ACME needs a few fields nobody else does. Instead of forking the shared
+// schema, they import it and add a company-scoped overlay. The overlay has its
+// OWN ordinal space starting at 1, so it can never collide with the shared
+// Order's ordinals or with any other company's overlay.
+//
+// Generate ACME's view with:
+//   openschema gen acme-overlay.schema --target sql --company acme
+
+namespace myorg.acme
+
+import { Order } from "./orders"
+
+overlay acme on Order {
+  1 loyaltyTier: string
+
+  @minValue(0)
+  2 accountManagerId: u32
+
+  3 giftWrapNote: string?
+}

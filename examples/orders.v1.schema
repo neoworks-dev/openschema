@@ -1,0 +1,118 @@
+namespace schema.org
+
+/// A physical mailing address.
+model PostalAddress {
+  1 streetAddress:   string?
+  2 addressLocality: string?
+  3 addressRegion:   string?
+  4 postalCode:      string?
+  5 addressCountry:  string?
+}
+
+/// A geographical coordinate pair.
+model GeoCoordinates {
+  @minValue(-90) @maxValue(90)
+  1 latitude: f64
+
+  @minValue(-180) @maxValue(180)
+  2 longitude: f64
+}
+
+/// A country, represented by its ISO 3166-1 alpha-2 code.
+model Country {
+  1 name: string
+
+  @minLength(2) @maxLength(2) @format("iso3166-1-alpha2")
+  2 code: string?
+}
+
+/// A reachable contact point such as a phone line or customer service email.
+model ContactPoint {
+  1 contactType: string?
+
+  @format("e164")
+  2 telephone: string?
+
+  @format("email")
+  3 email: string?
+
+  4 availableLanguage: [string]?
+}
+
+/// An organization such as a company, club, university, or government body.
+model Organization {
+  1 name: string
+
+  @format("url")
+  2 url: string?
+
+  3 description: string?
+
+  @format("email")
+  4 email: string?
+
+  @format("e164")
+  5 telephone: string?
+
+  6 address: PostalAddress?
+}
+
+/// A person — alive, dead, undead, or fictional.
+model Person {
+  /// Full display name.
+  1 name:       string
+  2 givenName:  string?
+  3 familyName: string?
+
+  /// Primary email address.
+  @format("email")
+  4 email: string?
+
+  @format("e164")
+  5 telephone: string?
+
+  /// A URL that unambiguously identifies this person (Wikipedia, Wikidata, etc.).
+  @format("url")
+  6 url: string?
+
+  7 birthDate:   date?
+  8 nationality: Country?
+  9 worksFor:    [Organization]?
+  10 knows:      [Person]?
+
+  // ── Owner-internal moderation fields (base-schema private) ────────────────
+  @minValue(0) @maxValue(1)
+  100 private spamScore: f32?
+
+  101 private moderationFlag: bool?
+  102 private internalNote:   string?
+}
+
+/// The lifecycle state of an order.
+enum OrderStatus {
+  1 pending
+  2 confirmed
+  3 shipped
+
+  @deprecated
+  4 refunded
+}
+
+/// A customer order.
+@compatibility(backward)
+@table("orders")
+model Order {
+  @primaryKey @default(gen_uuid())
+  1 id: uuid
+
+  2 customerId: i32
+  3 status:     OrderStatus
+
+  @check(total >= 0)
+  4 total: decimal(12, 4)
+
+  @default(now())
+  5 placedAt: timestamp
+
+  6 region: string
+}

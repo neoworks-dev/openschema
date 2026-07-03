@@ -1,0 +1,83 @@
+// orders.schema — the Order aggregate plus its read/write API.
+// Imports the shared value types from common.schema so they stay consistent.
+
+namespace myorg.shop
+
+import { Money, PostalAddress, Region } from "./common"
+
+/// The lifecycle state of an order. Ordinals are the stable wire identity;
+/// renaming a variant keeps its ordinal and stays compatible.
+enum OrderStatus {
+  1 pending
+  2 confirmed
+  3 shipped
+  4 delivered
+
+  @deprecated
+  5 refunded
+}
+
+/// A single purchasable line within an order.
+model OrderLine {
+  1 sku: string
+
+  @minValue(1)
+  2 quantity: u32
+
+  3 unitPrice: Money
+}
+
+/// A customer order. Compatibility is enforced as "backward" in CI: new
+/// versions of this schema must still read data written by older versions.
+@compatibility(backward)
+@table("orders")
+model Order {
+  @primaryKey @default(gen_uuid())
+  1 id: uuid
+
+  @references(Customer.id)
+  2 customerId: uuid
+
+  3 status: OrderStatus
+  4 lines:  [OrderLine]
+  5 total:  Money
+  6 shipTo: PostalAddress
+  7 region: Region
+
+  @default(now())
+  8 placedAt: timestamp
+
+  9 note: string?
+
+  // Owner-internal fields. Excluded from public artifacts unless explicitly
+  // requested with --include-private.
+  100 private fraudScore:    f32?
+  101 private internalNotes: string?
+}
+
+/// The customer who placed an order.
+model Customer {
+  @primaryKey
+  1 id: uuid
+
+  2 name: string
+
+  @format("email")
+  3 email: string
+}
+
+// ── Service API ──────────────────────────────────────────────────────────────
+// One declaration drives both targets: @query/@mutation route the GraphQL
+// schema, while @get/@post and @route shape the OpenAPI document.
+
+@query @get @route("/orders/{id}")
+op getOrder(id: uuid): Order
+
+@query @get @route("/orders")
+op listOrders(region: Region): [Order]
+
+@mutation @post @route("/orders")
+op placeOrder(order: Order): Order
+
+@mutation @post @route("/orders/{id}/cancel")
+op cancelOrder(id: uuid): Order

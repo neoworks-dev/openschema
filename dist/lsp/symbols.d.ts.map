@@ -1,0 +1,1 @@
+{"version":3,"file":"symbols.d.ts","sourceRoot":"","sources":["../../src/lsp/symbols.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,uBAAuB,CAAC;AAC5D,OAAO,KAAK,EAAE,OAAO,EAAgC,MAAM,kBAAkB,CAAC;AAG9E,wBAAgB,eAAe,CAAC,IAAI,EAAE,MAAM,EAAE,OAAO,EAAE,OAAO,GAAG,cAAc,EAAE,CAOhF"}

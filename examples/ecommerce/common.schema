@@ -1,0 +1,32 @@
+// common.schema — shared value types reused across the whole organization.
+// Every team imports from here so a "Money" or an "Address" means the same
+// thing in the database, the TypeScript frontend, and the GraphQL API.
+
+namespace myorg.common
+
+/// A monetary amount in a given ISO 4217 currency.
+model Money {
+  @minValue(0)
+  1 amount: decimal(12, 2)
+
+  @minLength(3) @maxLength(3) @format("iso4217")
+  2 currency: string
+}
+
+/// A physical mailing address.
+model PostalAddress {
+  1 streetAddress:   string
+  2 addressLocality: string
+  3 addressRegion:   string?
+  4 postalCode:      string
+
+  @minLength(2) @maxLength(2) @format("iso3166-1-alpha2")
+  5 addressCountry: string
+}
+
+/// A coarse sales region.
+enum Region {
+  1 northAmerica
+  2 europe
+  3 asiaPacific
+}

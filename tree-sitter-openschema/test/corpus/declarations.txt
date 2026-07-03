@@ -1,0 +1,59 @@
+================================================================================
+Model with a nullable field
+================================================================================
+
+model User { 1 id: uuid  2 name: string? }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (model_declaration
+    name: (identifier)
+    (model_body
+      (field
+        ordinal: (integer)
+        name: (identifier)
+        type: (scalar_type))
+      (field
+        ordinal: (integer)
+        name: (identifier)
+        type: (nullable_type
+          (scalar_type))))))
+
+================================================================================
+Enum with variants
+================================================================================
+
+enum Color { 1 red  2 green }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enum_declaration
+    name: (identifier)
+    (enum_body
+      (enum_variant
+        ordinal: (integer)
+        name: (identifier))
+      (enum_variant
+        ordinal: (integer)
+        name: (identifier)))))
+
+================================================================================
+Generic type alias
+================================================================================
+
+type Page<T> = [T]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (type_alias
+    name: (identifier)
+    (type_parameters
+      (type_parameter
+        name: (identifier)))
+    type: (array_type
+      (named_type
+        name: (qualified_name
+          (identifier))))))

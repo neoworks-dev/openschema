@@ -1,0 +1,19 @@
+{
+  "name": "tree-sitter-openschema",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for the OpenSchema DSL",
+  "main": "bindings/node",
+  "keywords": ["tree-sitter", "parser", "openschema"],
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.openschema",
+      "file-types": ["schema", "openschema"],
+      "highlights": ["queries/highlights.scm"]
+    }
+  ]
+}

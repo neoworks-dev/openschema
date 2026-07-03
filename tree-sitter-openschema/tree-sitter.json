@@ -1,0 +1,23 @@
+{
+  "grammars": [
+    {
+      "name": "openschema",
+      "scope": "source.openschema",
+      "file-types": ["schema", "openschema"],
+      "highlights": ["queries/highlights.scm"],
+      "folds": ["queries/folds.scm"],
+      "injection-regex": "^openschema$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for the OpenSchema DSL",
+    "authors": [
+      { "name": "OpenSchema" }
+    ],
+    "links": {
+      "repository": "https://example.com/openschema"
+    }
+  }
+}

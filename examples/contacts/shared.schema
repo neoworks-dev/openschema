@@ -1,0 +1,79 @@
+// shared.schema — reusable filter/sort building blocks.
+//
+// RECONSTRUCTED: the original GraphQL kept these in _shared.graphql, which was
+// not provided. The shapes below are conventional per-field operator inputs;
+// replace them with your real definitions if they differ.
+//
+// Every filter here is @input (input-only): it emits as a GraphQL/OpenAPI input
+// and never as an output type or a SQL/SurrealDB table.
+
+namespace contacts.shared
+
+/// Sort order for a list query.
+enum SortDirection {
+  1 ASC
+  2 DESC
+}
+
+/// String field operators. All optional; combine as needed.
+@input
+model StringFilter {
+  1 eq: string?
+  2 ne: string?
+  3 contains: string?
+  4 startsWith: string?
+  5 endsWith: string?
+  6 in: [string]?
+  7 exists: bool?
+}
+
+/// Integer field operators.
+@input
+model IntFilter {
+  1 eq: i32?
+  2 ne: i32?
+  3 gt: i32?
+  4 gte: i32?
+  5 lt: i32?
+  6 lte: i32?
+  7 in: [i32]?
+}
+
+/// Boolean field operator.
+@input
+model BoolFilter {
+  1 eq: bool?
+}
+
+/// Date comparisons over ISO-8601 strings.
+@input
+model DateFilter {
+  1 eq: string?
+  2 before: string?
+  3 after: string?
+}
+
+/// Operators over a list-of-strings field (categories, nicknames, notes).
+@input
+model StringListFilter {
+  1 has: string?
+  2 hasAny: [string]?
+  3 hasAll: [string]?
+  4 isEmpty: bool?
+  5 size: IntFilter?
+}
+
+/// A geospatial radius search anchor. (Named `Near` so the GraphQL emitter
+/// renders it as `Near`, not `NearInputInput`.)
+@input
+model Near {
+  1 lat: f64
+  2 lng: f64
+  3 radiusMeters: f64
+}
+
+/// Geo field operator.
+@input
+model GeoFilter {
+  1 near: Near?
+}

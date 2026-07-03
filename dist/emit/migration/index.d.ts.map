@@ -1,0 +1,1 @@
+{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../src/emit/migration/index.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAE,gBAAgB,EAAE,MAAM,YAAY,CAAC;AAInD,YAAY,EAAE,gBAAgB,EAAE,oBAAoB,EAAE,MAAM,YAAY,CAAC;AAOzE,wBAAgB,mBAAmB,CAAC,MAAM,EAAE,MAAM,GAAG,gBAAgB,GAAG,IAAI,CAE3E;AAED,eAAO,MAAM,iBAAiB,UAAkC,CAAC"}
