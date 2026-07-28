@@ -1,0 +1,269 @@
+{
+  "lockfileVersion": 1,
+  "generator": "openschema 0.1.0",
+  "createdAt": "2026-07-28T10:23:01.342Z",
+  "updatedAt": "2026-07-28T10:23:01.342Z",
+  "baseline": true,
+  "digest": "sha256-db961eae51ea6e6f03bef531891864bb5c2ca66de9ee0ee9407708fcbbb7d1b8",
+  "spaces": {
+    "enum:myorg.common.Region": {
+      "kind": "enum",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "northAmerica",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "europe",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "asiaPacific",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "enum:myorg.shop.OrderStatus": {
+      "kind": "enum",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "pending",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "confirmed",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "shipped",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "delivered",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "refunded",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "model:myorg.common.Money": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "amount",
+          "type": "decimal(12,2)",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "currency",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "model:myorg.common.PostalAddress": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "streetAddress",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "addressLocality",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "addressRegion",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "postalCode",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "addressCountry",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "model:myorg.shop.Customer": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "name",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "email",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "model:myorg.shop.Order": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "customerId",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "status",
+          "type": "OrderStatus",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "lines",
+          "type": "[OrderLine]",
+          "encoding": "repeated:len-element",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "total",
+          "type": "Money",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "shipTo",
+          "type": "PostalAddress",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "region",
+          "type": "Region",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "8": {
+          "state": "active",
+          "name": "placedAt",
+          "type": "timestamp",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "9": {
+          "state": "active",
+          "name": "note",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "100": {
+          "state": "active",
+          "name": "fraudScore",
+          "type": "f32?",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "101": {
+          "state": "active",
+          "name": "internalNotes",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    },
+    "model:myorg.shop.OrderLine": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "sku",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "quantity",
+          "type": "u32",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T10:23:01.342Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "unitPrice",
+          "type": "Money",
+          "encoding": "singular:len",
+          "since": "2026-07-28T10:23:01.342Z"
+        }
+      }
+    }
+  }
+}

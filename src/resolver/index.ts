@@ -4,7 +4,7 @@
 
 import type {
   Program, Declaration, ModelDecl, EnumDecl, TypeAlias, OverlayDecl,
-  FieldDecl, TypeExpr, ArrayTypeExpr, OperationDecl, Decorator, Span, ImportDecl,
+  FieldDecl, TypeExpr, ArrayTypeExpr, OneofTypeExpr, OperationDecl, Decorator, Span, ImportDecl,
 } from "../parser/ast.js";
 import type {
   ResolvedSchema, ResolvedModel, ResolvedField, ResolvedOverlay,
@@ -14,6 +14,10 @@ import {
   aliasByLocalName, substituteTypeParams, unionAliases, isInputModel,
   resolveAliasInline, findDecorator, hasDecorator, modelByLocalName,
 } from "../emit/typeMapping.js";
+import { expandReserved, EMPTY_RESERVED, type ReservedSet } from "./reserved.js";
+
+export { expandReserved, MAX_ORDINAL } from "./reserved.js";
+export type { ReservedSet } from "./reserved.js";
 
 export { loadProject } from "./moduleGraph.js";
 export type { ResolvedSchema, ResolvedModel, ResolvedField, ResolvedOverlay,
@@ -28,6 +32,10 @@ class Diagnostics {
 
   warning(code: string, message: string, span: Diagnostic["span"]): void {
     this.add("warning", code, message, span);
+  }
+
+  addAll(items: Diagnostic[]): void {
+    for (const item of items) this.items.push(item);
   }
 
   private add(severity: DiagnosticSeverity, code: string, message: string, span: Diagnostic["span"]): void {
@@ -82,6 +90,9 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
     records.set(symbol.qualifiedName, flattenModel(symbol, scope, byQualified, diagnostics));
   }
 
+  // Pass 4b: enum and oneof tag spaces, from the raw declarations.
+  validateTagSpaces(modules, diagnostics);
+
   // Pass 5: overlays, per module.
   const overlays = new Map<string, Map<string, ResolvedOverlay>>();
   for (const module of modules) {
@@ -96,6 +107,7 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
 
   const schema: ResolvedSchema = {
     namespace,
+    requiresLedger: modules.some(m => hasDirective(m.program, "requireLedger")),
     symbols: byQualified,
     records,
     enums,
@@ -209,6 +221,15 @@ function collectOperations(program: Program): OperationDecl[] {
 }
 
 // ── Namespace ─────────────────────────────────────────────────────────────────
+
+/** A directive on the namespace declaration, e.g. `#requireLedger`. */
+function hasDirective(program: Program, name: string): boolean {
+  for (const decl of program.declarations) {
+    if (decl.kind !== "namespace") continue;
+    if (decl.directives.some(directive => directive.name === name)) return true;
+  }
+  return false;
+}
 
 function findNamespace(program: Program): string[] {
   for (const decl of program.declarations) {
@@ -362,7 +383,11 @@ function flattenModel(
   }
   appendFields(fields, record.members, symbol.qualifiedName, "own");
 
-  validateOrdinals(fields, symbol, diagnostics);
+  // A derived record inherits its bases' reservations: the flattened record is
+  // what gets encoded, so a base's retired ordinal is spent here too.
+  const reserved = collectModelReserved(symbol, baseChain, diagnostics);
+
+  validateOrdinals(fields, symbol, reserved, diagnostics);
   fields.sort((a, b) => a.ordinal - b.ordinal);
 
   return {
@@ -430,7 +455,29 @@ function appendFields(
   }
 }
 
-function validateOrdinals(fields: ResolvedField[], symbol: DeclSymbol, diagnostics: Diagnostics): void {
+/** Own reservations plus every base record's, merged into one set. */
+function collectModelReserved(
+  symbol: DeclSymbol,
+  baseChain: DeclSymbol[],
+  diagnostics: Diagnostics,
+): ReservedSet {
+  const decls = [...(symbol.decl as ModelDecl).reserved];
+  for (const base of baseChain) {
+    decls.push(...(base.decl as ModelDecl).reserved);
+  }
+  if (decls.length === 0) return EMPTY_RESERVED;
+
+  const { set, diagnostics: issues } = expandReserved(decls, `record '${symbol.localName}'`);
+  diagnostics.addAll(issues);
+  return set;
+}
+
+function validateOrdinals(
+  fields: ResolvedField[],
+  symbol: DeclSymbol,
+  reserved: ReservedSet,
+  diagnostics: Diagnostics,
+): void {
   const seen = new Set<number>();
   for (const field of fields) {
     if (field.ordinal < 0) {
@@ -441,7 +488,128 @@ function validateOrdinals(fields: ResolvedField[], symbol: DeclSymbol, diagnosti
       diagnostics.error("OS2001", `Duplicate ordinal ${field.ordinal} in '${symbol.localName}'`, field.span);
       continue;
     }
+    reportReservedClash(field.ordinal, field.name, reserved, `record '${symbol.localName}'`, field.span, diagnostics);
     seen.add(field.ordinal);
+  }
+}
+
+/** OS2005: a declared ordinal (or name) that the same space has reserved. */
+function reportReservedClash(
+  ordinal: number,
+  name: string,
+  reserved: ReservedSet,
+  scopeLabel: string,
+  span: Span,
+  diagnostics: Diagnostics,
+): void {
+  if (reserved.has(ordinal)) {
+    diagnostics.error("OS2005",
+      `Ordinal ${ordinal} is reserved in ${scopeLabel} and cannot be used by '${name}'`, span);
+    return;
+  }
+  if (reserved.hasName(name)) {
+    diagnostics.error("OS2005", `Name '${name}' is reserved in ${scopeLabel}`, span);
+  }
+}
+
+// ── Enum and oneof tag spaces (Pass 4b) ───────────────────────────────────────
+//
+// Both are wire tag spaces for the binary codec: an enum variant's ordinal IS
+// its encoded value, and a oneof variant's ordinal is its inner tag. Neither was
+// validated before, so a duplicate silently produced an ambiguous encoding that
+// decodes to a wrong-but-valid value without throwing.
+//
+// Walks raw declarations rather than ResolvedField.type, which pass 6 reassigns
+// to the alias-inlined form.
+
+function validateTagSpaces(modules: Module[], diagnostics: Diagnostics): void {
+  for (const module of modules) {
+    for (const decl of module.program.declarations) {
+      validateDeclTagSpaces(decl, diagnostics);
+    }
+  }
+}
+
+function validateDeclTagSpaces(decl: Declaration, diagnostics: Diagnostics): void {
+  if (decl.kind === "enum") {
+    validateEnumOrdinals(decl, diagnostics);
+    return;
+  }
+  if (decl.kind === "model") {
+    for (const member of decl.members) {
+      walkOneofs(member.type, `field '${member.name}' in '${decl.name}'`, diagnostics);
+    }
+    return;
+  }
+  if (decl.kind === "overlay") {
+    for (const field of decl.fields) {
+      walkOneofs(field.type, `overlay '${decl.company}' field '${field.name}'`, diagnostics);
+    }
+    return;
+  }
+  if (decl.kind === "type_alias") {
+    walkOneofs(decl.type, `type alias '${decl.name}'`, diagnostics);
+  }
+}
+
+function validateEnumOrdinals(decl: EnumDecl, diagnostics: Diagnostics): void {
+  const scopeLabel = `enum '${decl.name}'`;
+  const { set, diagnostics: issues } = expandReserved(decl.reserved, scopeLabel);
+  diagnostics.addAll(issues);
+
+  const seen = new Set<number>();
+  for (const variant of decl.variants) {
+    if (seen.has(variant.ordinal)) {
+      diagnostics.error("OS2003",
+        `Duplicate ordinal ${variant.ordinal} in ${scopeLabel}`, variant.span);
+      continue;
+    }
+    reportReservedClash(variant.ordinal, variant.name, set, scopeLabel, variant.span, diagnostics);
+    seen.add(variant.ordinal);
+  }
+}
+
+function walkOneofs(type: TypeExpr, scopeLabel: string, diagnostics: Diagnostics): void {
+  switch (type.kind) {
+    case "oneof":
+      validateOneofOrdinals(type, scopeLabel, diagnostics);
+      for (const variant of type.variants) walkOneofs(variant.type, scopeLabel, diagnostics);
+      return;
+    case "array":
+      walkOneofs(type.element, scopeLabel, diagnostics);
+      return;
+    case "nullable":
+      walkOneofs(type.inner, scopeLabel, diagnostics);
+      return;
+    case "map":
+      walkOneofs(type.key, scopeLabel, diagnostics);
+      walkOneofs(type.value, scopeLabel, diagnostics);
+      return;
+    case "union":
+      for (const variant of type.variants) walkOneofs(variant, scopeLabel, diagnostics);
+      return;
+    case "named":
+      for (const arg of type.typeArgs) walkOneofs(arg, scopeLabel, diagnostics);
+      return;
+    case "scalar":
+    case "decimal":
+      return;
+  }
+}
+
+function validateOneofOrdinals(
+  type: OneofTypeExpr,
+  scopeLabel: string,
+  diagnostics: Diagnostics,
+): void {
+  const seen = new Set<number>();
+  for (const variant of type.variants) {
+    if (seen.has(variant.ordinal)) {
+      diagnostics.error("OS2004",
+        `Duplicate ordinal ${variant.ordinal} in oneof at ${scopeLabel}`, variant.span);
+      continue;
+    }
+    seen.add(variant.ordinal);
   }
 }
 
@@ -491,10 +659,11 @@ function resolveOverlay(
   const fields: ResolvedField[] = [];
   appendFields(fields, decl.fields, `${baseSymbol.qualifiedName}@${decl.company}`, "own");
   validateOverlayOrdinals(fields, decl, diagnostics);
+  validateOverlayReserved(fields, decl, diagnostics);
   checkOverlayNameClashes(fields, baseSymbol.qualifiedName, records, decl, diagnostics);
   fields.sort((a, b) => a.ordinal - b.ordinal);
 
-  return { company: decl.company, baseName: baseSymbol.qualifiedName, fields };
+  return { company: decl.company, baseName: baseSymbol.qualifiedName, fields, reserved: decl.reserved };
 }
 
 function validateOverlayOrdinals(fields: ResolvedField[], decl: OverlayDecl, diagnostics: Diagnostics): void {
@@ -511,6 +680,24 @@ function validateOverlayOrdinals(fields: ResolvedField[], decl: OverlayDecl, dia
       continue;
     }
     seen.add(field.ordinal);
+  }
+}
+
+/** Overlay ordinals live in their own space, so their reservations do too. */
+function validateOverlayReserved(
+  fields: ResolvedField[],
+  decl: OverlayDecl,
+  diagnostics: Diagnostics,
+): void {
+  if (decl.reserved.length === 0) return;
+
+  const scopeLabel = `overlay '${decl.company}' on '${decl.base.join(".")}'`;
+  const { set, diagnostics: issues } = expandReserved(decl.reserved, scopeLabel);
+  diagnostics.addAll(issues);
+
+  for (const field of fields) {
+    if (field.ordinal < 0) continue;
+    reportReservedClash(field.ordinal, field.name, set, scopeLabel, field.span, diagnostics);
   }
 }
 

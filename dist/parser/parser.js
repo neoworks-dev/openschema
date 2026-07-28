@@ -57,8 +57,8 @@ export class Parser {
         const tok = this.peek();
         switch (tok.kind) {
             case "namespace" /* TokenKind.Namespace */:
-                this.rejectMetadata(meta, tok);
-                return this.parseNamespace();
+                this.rejectDecorators(meta, tok);
+                return this.parseNamespace(meta);
             case "import" /* TokenKind.Import */:
                 this.rejectMetadata(meta, tok);
                 return this.parseImport();
@@ -90,6 +90,12 @@ export class Parser {
         if (meta.decorators.length === 0 && meta.directives.length === 0)
             return;
         throw new ParseError(`Decorators and directives are not allowed on '${tok.value}'`, tok);
+    }
+    /** `namespace` carries directives (e.g. #requireLedger) but never decorators. */
+    rejectDecorators(meta, tok) {
+        if (meta.decorators.length === 0)
+            return;
+        throw new ParseError(`Decorators are not allowed on '${tok.value}'`, tok);
     }
     // @sql.type("JSONB")  @minValue(0)  @compatibility(backward)  @deprecated
     parseDecorator() {
@@ -168,12 +174,12 @@ export class Parser {
         }
         return { name, args, span };
     }
-    // namespace myorg.ecommerce
-    parseNamespace() {
+    // #requireLedger  namespace myorg.ecommerce
+    parseNamespace(meta) {
         const span = this.span();
         this.expect("namespace" /* TokenKind.Namespace */);
         const path = this.parseQualifiedIdent();
-        return { kind: "namespace", path, span };
+        return { kind: "namespace", path, directives: meta.directives, span };
     }
     // import { Foo, Bar } from "@myorg/common/v1"
     parseImport() {
@@ -215,16 +221,21 @@ export class Parser {
             : null;
         this.expect("{" /* TokenKind.LBrace */);
         const members = [];
+        const reserved = [];
         while (!this.at("}" /* TokenKind.RBrace */) && !this.at("EOF" /* TokenKind.EOF */)) {
             while (this.at("DocComment" /* TokenKind.DocComment */))
                 this.advance();
             if (this.at("}" /* TokenKind.RBrace */))
                 break;
+            if (this.atReservedDeclaration()) {
+                reserved.push(this.parseReserved());
+                continue;
+            }
             members.push(this.parseField());
         }
         this.expect("}" /* TokenKind.RBrace */);
         return {
-            kind: "model", name, typeParams, extends: base, members,
+            kind: "model", name, typeParams, extends: base, members, reserved,
             decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
         };
     }
@@ -298,11 +309,16 @@ export class Parser {
         const name = this.expectIdent("enum name");
         this.expect("{" /* TokenKind.LBrace */);
         const variants = [];
+        const reserved = [];
         while (!this.at("}" /* TokenKind.RBrace */) && !this.at("EOF" /* TokenKind.EOF */)) {
             while (this.at("DocComment" /* TokenKind.DocComment */))
                 this.advance();
             if (this.at("}" /* TokenKind.RBrace */))
                 break;
+            if (this.atReservedDeclaration()) {
+                reserved.push(this.parseReserved());
+                continue;
+            }
             const vspan = this.span();
             const decorators = this.parseDecorators();
             const ordinal = this.expectInt("enum variant ordinal");
@@ -311,7 +327,7 @@ export class Parser {
         }
         this.expect("}" /* TokenKind.RBrace */);
         return {
-            kind: "enum", name, variants,
+            kind: "enum", name, variants, reserved,
             decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
         };
     }
@@ -359,18 +375,75 @@ export class Parser {
         const base = this.parseQualifiedIdent();
         this.expect("{" /* TokenKind.LBrace */);
         const fields = [];
+        const reserved = [];
         while (!this.at("}" /* TokenKind.RBrace */) && !this.at("EOF" /* TokenKind.EOF */)) {
             while (this.at("DocComment" /* TokenKind.DocComment */))
                 this.advance();
             if (this.at("}" /* TokenKind.RBrace */))
                 break;
+            if (this.atReservedDeclaration()) {
+                reserved.push(this.parseReserved());
+                continue;
+            }
             fields.push(this.parseField());
         }
         this.expect("}" /* TokenKind.RBrace */);
         return {
-            kind: "overlay", company, base, fields,
+            kind: "overlay", company, base, fields, reserved,
             decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
         };
+    }
+    // ── reserved declarations ────────────────────────────────────────────────────
+    //
+    // `reserved` is NOT a lexer keyword. Promoting it would break every existing
+    // schema with a field named `reserved`, because expectIdent accepts only Ident.
+    // Contextual detection is unambiguous instead: a field is
+    // `[meta] [IntLit] [private] Ident ':' type`, so an Ident followed by an
+    // integer or string literal is a form no field can take.
+    atReservedDeclaration() {
+        const token = this.peek();
+        if (token.kind !== "Ident" /* TokenKind.Ident */)
+            return false;
+        if (token.value !== "reserved")
+            return false;
+        const next = this.peekAt(1).kind;
+        return next === "IntLit" /* TokenKind.IntLit */ || next === "StringLit" /* TokenKind.StringLit */;
+    }
+    // reserved 7;   reserved 7, 9..12;   reserved "oldName";
+    parseReserved() {
+        const span = this.span();
+        this.advance(); // the contextual `reserved`
+        const ranges = [];
+        const names = [];
+        while (true) {
+            if (this.at("StringLit" /* TokenKind.StringLit */)) {
+                names.push(this.expectString());
+            }
+            else {
+                ranges.push(this.parseReservedRange());
+            }
+            if (!this.at("," /* TokenKind.Comma */))
+                break;
+            this.advance();
+        }
+        this.expect(";" /* TokenKind.Semicolon */);
+        return { kind: "reserved", ranges, names, span };
+    }
+    parseReservedRange() {
+        const span = this.span();
+        const from = this.expectInt("reserved ordinal");
+        if (this.at("-" /* TokenKind.Minus */)) {
+            throw new ParseError("Reserved ranges use '..' rather than '-', e.g. `reserved 9..12;`", this.peek());
+        }
+        if (!this.at(".." /* TokenKind.DotDot */)) {
+            return { from, to: from, span };
+        }
+        this.advance(); // ..
+        const to = this.expectInt("reserved range end");
+        if (from > to) {
+            throw new ParseError(`Reserved range is inverted: ${from}..${to}`, this.peek());
+        }
+        return { from, to, span };
     }
     // Consume an identifier that must equal `word` (a contextual keyword like `on`).
     expectContextual(word) {

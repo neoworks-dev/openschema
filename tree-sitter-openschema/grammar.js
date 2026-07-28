@@ -68,7 +68,12 @@ module.exports = grammar({
 
     // ── Top-level declarations ─────────────────────────────────────────────────
 
-    namespace_declaration: $ => seq("namespace", field("path", $.qualified_name)),
+    // Directives such as #requireLedger are allowed here; decorators are not.
+    namespace_declaration: $ => seq(
+      repeat($.directive),
+      "namespace",
+      field("path", $.qualified_name),
+    ),
 
     import_declaration: $ => seq(
       "import",
@@ -88,7 +93,17 @@ module.exports = grammar({
 
     extends_clause: $ => seq("extends", field("base", $.qualified_name)),
 
-    model_body: $ => seq("{", repeat($.field), "}"),
+    model_body: $ => seq("{", repeat(choice($.field, $.reserved_declaration)), "}"),
+
+    // `reserved` is contextual, not a keyword — a field may still be named
+    // `reserved`, since a field always begins with its ordinal.
+    reserved_declaration: $ => seq(
+      "reserved",
+      commaSep1(choice($.reserved_range, $.string)),
+      ";",
+    ),
+
+    reserved_range: $ => seq($.integer, optional(seq("..", $.integer))),
 
     field: $ => seq(
       repeat($._annotation),
@@ -106,7 +121,7 @@ module.exports = grammar({
       $.enum_body,
     ),
 
-    enum_body: $ => seq("{", repeat($.enum_variant), "}"),
+    enum_body: $ => seq("{", repeat(choice($.enum_variant, $.reserved_declaration)), "}"),
 
     enum_variant: $ => seq(
       repeat($._annotation),

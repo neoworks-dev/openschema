@@ -98,6 +98,22 @@ with explanations and exits `1` — ready to fail a CI job.
 openschema check schema.published.schema schema.proposed.schema --mode backward || exit 1
 ```
 
+## What `diff` and `check` cannot see
+
+Both commands compare exactly two versions. That is enough for most rules, but two
+classes of breakage are invisible to a pairwise comparison:
+
+- **Ordinal reuse.** If v6 removes field 3 and v7 adds a different field 3, the
+  v6 → v7 diff never sees that ordinal 3 was ever used — v6 does not mention it.
+- **Encoding changes the type system calls safe.** `[T]` → `[T]?` is reported as
+  `R009`/safe, but for the [binary codec](./wire-format.md) it moves the field from
+  *repeated at tag N* to a *LEN wrapper at tag N*, and every existing row misparses.
+
+Both are caught by the [ordinal ledger](./ordinal-ledger.md) (`OS2007`, `OS2010`),
+which keeps cumulative history rather than comparing two versions. Run
+`openschema lock --check` alongside `openschema check` in CI; they cover different
+failures.
+
 ## The rules
 
 Each change kind has a stable rule ID, so you can reference it (and suppress it).
@@ -140,7 +156,8 @@ Each change kind has a stable rule ID, so you can reference it (and suppress it)
 
 `E004` is the dangerous one: renumbering a variant silently reinterprets every
 piece of data that used the old number. Keep variant ordinals stable, like field
-ordinals.
+ordinals. A *duplicate* variant ordinal within one version is rejected outright by
+the resolver (`OS2003`), as is a duplicate `oneof` variant ordinal (`OS2004`).
 
 ### Type aliases
 

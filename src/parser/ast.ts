@@ -207,6 +207,31 @@ export interface FieldDecl {
   span:        Span;
 }
 
+/**
+ * `reserved 7, 9..12;` / `reserved "oldName";` — ordinals (or names) that were
+ * once in use and may never be claimed again.
+ *
+ * Ordinals are the wire identity of a field in the binary codec, so reusing one
+ * makes previously encoded data decode into the wrong field. Because that data
+ * may be end-to-end encrypted, no server-side scan can ever detect the mistake —
+ * the compiler is the only place it can be caught.
+ *
+ * Deliberately a sibling of `ModelDecl.members` rather than a member kind, so
+ * every existing consumer of `members` (the differ, all emitters) is unaffected.
+ */
+export interface ReservedRange {
+  from: number;      // inclusive
+  to:   number;      // inclusive; equal to `from` for a single ordinal
+  span: Span;
+}
+
+export interface ReservedDecl {
+  kind:   "reserved";
+  ranges: ReservedRange[];
+  names:  string[];      // reserved field names; parsed now, enforced later
+  span:   Span;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Top-level declarations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,6 +242,7 @@ export interface ModelDecl {
   typeParams: TypeParam[];       // [] when not generic
   extends:    string[] | null;   // qualified name of base schema, or null
   members:    FieldDecl[];
+  reserved:   ReservedDecl[];
   decorators: Decorator[];
   directives: Directive[];
   doc:        string | null;
@@ -234,6 +260,7 @@ export interface EnumDecl {
   kind:       "enum";
   name:       string;
   variants:   EnumVariant[];
+  reserved:   ReservedDecl[];
   decorators: Decorator[];
   directives: Directive[];
   doc:        string | null;
@@ -259,9 +286,11 @@ export interface ImportDecl {
 }
 
 export interface NamespaceDecl {
-  kind: "namespace";
-  path: string[];
-  span: Span;
+  kind:       "namespace";
+  path:       string[];
+  /** `#requireLedger` and friends. Directives are allowed here; decorators are not. */
+  directives: Directive[];
+  span:       Span;
 }
 
 // ── Operations & interfaces (optional service layer, e.g. GraphQL) ────────────
@@ -309,6 +338,7 @@ export interface OverlayDecl {
   company:    string;
   base:       string[];     // qualified path of the base record
   fields:     FieldDecl[];
+  reserved:   ReservedDecl[];
   decorators: Decorator[];
   directives: Directive[];
   doc:        string | null;

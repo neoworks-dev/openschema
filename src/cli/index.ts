@@ -25,6 +25,11 @@ import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints } from "../registry/urls.js";
 import { readdirSync } from "fs";
 import type { ResolvedSchema } from "../resolver/types.js";
+import { collectSpaces } from "../ledger/spaces.js";
+import { reconcileLedger } from "../ledger/merge.js";
+import { defaultLockPath, isSuperset, loadLedger, serializeLedger } from "../ledger/io.js";
+import type { OrdinalLedger } from "../ledger/types.js";
+import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import type { Change, Severity } from "../engine/types.js";
 import type { CompatMode } from "../parser/ast.js";
 import { AST } from "../index.js";
@@ -40,6 +45,9 @@ interface GenOptions {
   out: string;
   company?: string;
   includePrivate?: boolean;
+  /** A path from --lock, `false` from --no-lock, or `true` when neither is given. */
+  lock?: string | boolean;
+  frozen?: boolean;
 }
 
 const readFileOrNull: ReadFileOrNull = (path: string) => {
@@ -83,6 +91,7 @@ function parseTargets(raw: string): string[] {
 
 function cmdGen(schemaPath: string, opts: GenOptions): void {
   const schema = resolveProject(schemaPath);
+  enforceLedger(schemaPath, schema, opts);
   const targets = parseTargets(opts.target);
 
   const emitters = targets.map((target) => {
@@ -95,12 +104,18 @@ function cmdGen(schemaPath: string, opts: GenOptions): void {
   });
 
   for (const emitter of emitters) {
-    const files = emitter.emit({
-      schema,
-      company: opts.company ?? null,
-      includePrivate: opts.includePrivate === true,
-      options: {},
-    });
+    let files;
+    try {
+      files = emitter.emit({
+        schema,
+        company: opts.company ?? null,
+        includePrivate: opts.includePrivate === true,
+        options: {},
+      });
+    } catch (error) {
+      reportEmitError(error);
+      process.exit(1);
+    }
 
     mkdirSync(opts.out, { recursive: true });
     for (const file of files) {
@@ -109,6 +124,127 @@ function cmdGen(schemaPath: string, opts: GenOptions): void {
       console.log(chalk.green(`✓ ${fullPath}`));
     }
   }
+}
+
+// ── Ordinal ledger ────────────────────────────────────────────────────────────
+
+interface LockOptions {
+  lock?: string;
+  check?: boolean;
+  base?: string;
+  json?: boolean;
+}
+
+const GENERATOR = `openschema ${VERSION}`;
+
+function lockPathFor(schemaPath: string, opts: { lock?: string | boolean }): string {
+  if (typeof opts.lock === "string") return opts.lock;
+  return defaultLockPath(schemaPath);
+}
+
+/** `#requireLedger` on the namespace travels with the schema, unlike a CLI flag. */
+function ledgerRequired(schema: ResolvedSchema, frozen: boolean): boolean {
+  if (frozen) return true;
+  return schema.requiresLedger === true;
+}
+
+function loadLedgerOrExit(path: string) {
+  const loaded = loadLedger(path);
+  if (loaded.integrityError !== null) {
+    console.error(chalk.red(`error: OS2009 ${loaded.integrityError}`));
+    process.exit(1);
+  }
+  return loaded.ledger;
+}
+
+/**
+ * `gen` validates the ledger but never writes it. Auto-repairing here would mean
+ * a deleted lockfile makes CI pass on exactly the failure the ledger exists to
+ * catch — the self-healing would be the disarm.
+ */
+function enforceLedger(schemaPath: string, schema: ResolvedSchema, opts: GenOptions): void {
+  if (opts.lock === false) return;
+
+  const path = lockPathFor(schemaPath, opts);
+  const current = loadLedgerOrExit(path);
+  const result = reconcileLedger(collectSpaces(schema), current, {
+    mode: "check",
+    required: ledgerRequired(schema, opts.frozen === true),
+    staleSeverity: "error",
+    now: () => new Date().toISOString(),
+    generator: GENERATOR,
+  });
+
+  printDiagnostics(result.diagnostics);
+  if (result.diagnostics.some(d => d.severity === "error")) process.exit(1);
+}
+
+function cmdLock(schemaPath: string, opts: LockOptions): void {
+  const schema = resolveProject(schemaPath);
+  const path = lockPathFor(schemaPath, opts);
+  const current = loadLedgerOrExit(path);
+
+  // Update mode is what CREATES the ledger, so a missing one is never an error
+  // there — otherwise #requireLedger would make the first lockfile impossible.
+  // Under --check a missing ledger is exactly what should fail CI.
+  const checking = opts.check === true;
+  const result = reconcileLedger(collectSpaces(schema), current, {
+    mode: checking ? "check" : "update",
+    required: checking,
+    staleSeverity: "error",
+    now: () => new Date().toISOString(),
+    generator: GENERATOR,
+  });
+
+  const blocking = result.diagnostics.filter(d => d.severity === "error");
+  const supersetProblem = checkBase(result.next, opts.base);
+
+  if (opts.json === true) {
+    console.log(JSON.stringify({
+      lockfile: path,
+      changed: result.changed,
+      diagnostics: result.diagnostics,
+      supersetViolations: supersetProblem,
+    }, null, 2));
+    process.exit(blocking.length > 0 || supersetProblem.length > 0 ? 1 : 0);
+  }
+
+  printDiagnostics(result.diagnostics);
+  if (supersetProblem.length > 0) {
+    console.error(chalk.red(
+      `error: OS2009 the ledger drops entries present in the base: ${supersetProblem.join(", ")}`));
+  }
+  if (blocking.length > 0 || supersetProblem.length > 0) process.exit(1);
+
+  if (opts.check === true) {
+    if (result.changed) process.exit(1);
+    console.log(chalk.green(`✓ ${path} is up to date`));
+    return;
+  }
+
+  if (!result.changed) {
+    console.log(chalk.green(`✓ ${path} is up to date`));
+    return;
+  }
+  writeFileSync(path, serializeLedger(result.next), "utf8");
+  console.log(chalk.green(`✓ ${path}`));
+}
+
+/** The real append-only gate: compare against the lockfile at the merge base. */
+function checkBase(candidate: OrdinalLedger, basePath: string | undefined): string[] {
+  if (basePath === undefined) return [];
+  const base = loadLedger(basePath);
+  if (base.ledger === null) return [];
+  return isSuperset(candidate, base.ledger).missing;
+}
+
+function reportEmitError(error: unknown): void {
+  if (error instanceof CodecUnsupportedError) {
+    const where = error.span === null ? "" : `${error.span.line}:${error.span.col} `;
+    console.error(chalk.red(`error ${error.code} ${where}${error.message}`));
+    return;
+  }
+  console.error(chalk.red(`error: ${(error as Error).message}`));
 }
 
 // ── add ───────────────────────────────────────────────────────────────────────
@@ -735,13 +871,27 @@ program
   .addOption(
     new Option(
       "-t, --target <targets>",
-      "output target(s), comma-separated (sql, ts, go, json-schema, graphql, openapi, surrealdb, internal)",
+      "output target(s), comma-separated (sql, ts, go, json-schema, graphql, openapi, surrealdb, internal, codec)",
     ).makeOptionMandatory(),
   )
   .option("-o, --out <dir>", "output directory", ".")
   .option("--company <id>", "include this company's overlay fields")
   .option("--include-private", "include base-record private fields")
+  .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
+  .option("--frozen", "fail if the ordinal ledger is missing or out of date")
+  .option("--no-lock", "skip ordinal-ledger validation entirely")
   .action((schema, opts) => cmdGen(schema, opts));
+
+// ── lock ──────────────────────────────────────────────────────────────────────
+
+program
+  .command("lock <schema>")
+  .description("Create or update the ordinal ledger, which prevents wire-tag reuse")
+  .option("--lock <path>", "lockfile path (default: <schema dir>/openschema.lock)")
+  .option("--check", "do not write; exit 1 if the ledger is missing or out of date")
+  .option("--base <path>", "assert the result still contains everything this lockfile records")
+  .option("--json", "machine-readable output")
+  .action((schema, opts) => cmdLock(schema, opts));
 
 program
   .command("migrate <old> <new>")

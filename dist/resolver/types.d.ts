@@ -1,4 +1,4 @@
-import type { Program, ModelDecl, EnumDecl, TypeAlias, TypeExpr, Decorator, Span, OperationDecl } from "../parser/ast.js";
+import type { Program, ModelDecl, EnumDecl, TypeAlias, TypeExpr, Decorator, Span, OperationDecl, ReservedDecl } from "../parser/ast.js";
 export type SymbolKind = "model" | "enum" | "type_alias";
 /** A parsed source unit in the module graph. */
 export interface Module {
@@ -41,6 +41,7 @@ export interface ResolvedOverlay {
     company: string;
     baseName: string;
     fields: ResolvedField[];
+    reserved: ReservedDecl[];
 }
 export type DiagnosticSeverity = "error" | "warning";
 export interface Diagnostic {
@@ -51,6 +52,8 @@ export interface Diagnostic {
 }
 export interface ResolvedSchema {
     namespace: string[];
+    /** `#requireLedger` on the namespace: a missing ordinal ledger is an error. */
+    requiresLedger: boolean;
     symbols: Map<string, DeclSymbol>;
     records: Map<string, ResolvedModel>;
     enums: Map<string, DeclSymbol>;

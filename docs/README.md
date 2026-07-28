@@ -48,6 +48,8 @@ Two design choices make this practical:
 | [Code Generation](./code-generation.md) | The `gen` command and every output target |
 | [Overlays](./overlays.md) | Sharing a schema across companies with private fields |
 | [Compatibility Checking](./compatibility.md) | `diff`, `check`, compatibility modes, suppressing rules |
+| [Wire Format](./wire-format.md) | The `codec` target's binary encoding |
+| [Ordinal Ledger](./ordinal-ledger.md) | `lock`, and why an ordinal can never be reused |
 | [CLI Reference](./cli.md) | Every command and flag |
 | [Use Cases](./use-cases.md) | End-to-end scenarios this tool is designed for |
 

@@ -3,7 +3,7 @@
 
 import type {
   Program, ModelDecl, EnumDecl, TypeAlias, FieldDecl, TypeExpr,
-  Decorator, Span, OperationDecl,
+  Decorator, Span, OperationDecl, ReservedDecl,
 } from "../parser/ast.js";
 
 export type SymbolKind = "model" | "enum" | "type_alias";
@@ -53,6 +53,7 @@ export interface ResolvedOverlay {
   company:    string;
   baseName:   string;             // qualifiedName of the base record
   fields:     ResolvedField[];    // overlay-local ordinals, ascending
+  reserved:   ReservedDecl[];     // reservations in this overlay's own space
 }
 
 export type DiagnosticSeverity = "error" | "warning";
@@ -66,6 +67,8 @@ export interface Diagnostic {
 
 export interface ResolvedSchema {
   namespace:   string[];
+  /** `#requireLedger` on the namespace: a missing ordinal ledger is an error. */
+  requiresLedger: boolean;
   symbols:     Map<string, DeclSymbol>;          // key = qualifiedName
   records:     Map<string, ResolvedModel>;      // key = qualifiedName
   enums:       Map<string, DeclSymbol>;

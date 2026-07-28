@@ -77,7 +77,7 @@ export class Parser {
     const meta = this.parseLeadingMetadata();
     const tok = this.peek();
     switch (tok.kind) {
-      case TokenKind.Namespace: this.rejectMetadata(meta, tok); return this.parseNamespace();
+      case TokenKind.Namespace: this.rejectDecorators(meta, tok); return this.parseNamespace(meta);
       case TokenKind.Import:    this.rejectMetadata(meta, tok); return this.parseImport();
       case TokenKind.Type:      return this.parseTypeAlias(meta);
       case TokenKind.Model:    return this.parseModel(meta);
@@ -115,6 +115,12 @@ export class Parser {
       `Decorators and directives are not allowed on '${tok.value}'`,
       tok
     );
+  }
+
+  /** `namespace` carries directives (e.g. #requireLedger) but never decorators. */
+  private rejectDecorators(meta: LeadingMetadata, tok: Token): void {
+    if (meta.decorators.length === 0) return;
+    throw new ParseError(`Decorators are not allowed on '${tok.value}'`, tok);
   }
 
   // @sql.type("JSONB")  @minValue(0)  @compatibility(backward)  @deprecated
@@ -198,12 +204,12 @@ export class Parser {
     return { name, args, span };
   }
 
-  // namespace myorg.ecommerce
-  private parseNamespace(): AST.NamespaceDecl {
+  // #requireLedger  namespace myorg.ecommerce
+  private parseNamespace(meta: LeadingMetadata): AST.NamespaceDecl {
     const span = this.span();
     this.expect(TokenKind.Namespace);
     const path = this.parseQualifiedIdent();
-    return { kind: "namespace", path, span };
+    return { kind: "namespace", path, directives: meta.directives, span };
   }
 
   // import { Foo, Bar } from "@myorg/common/v1"
@@ -249,15 +255,20 @@ export class Parser {
 
     this.expect(TokenKind.LBrace);
     const members: AST.FieldDecl[] = [];
+    const reserved: AST.ReservedDecl[] = [];
     while (!this.at(TokenKind.RBrace) && !this.at(TokenKind.EOF)) {
       while (this.at(TokenKind.DocComment)) this.advance();
       if (this.at(TokenKind.RBrace)) break;
+      if (this.atReservedDeclaration()) {
+        reserved.push(this.parseReserved());
+        continue;
+      }
       members.push(this.parseField());
     }
     this.expect(TokenKind.RBrace);
 
     return {
-      kind: "model", name, typeParams, extends: base, members,
+      kind: "model", name, typeParams, extends: base, members, reserved,
       decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
     };
 	}
@@ -338,9 +349,14 @@ export class Parser {
     const name = this.expectIdent("enum name");
     this.expect(TokenKind.LBrace);
     const variants: AST.EnumVariant[] = [];
+    const reserved: AST.ReservedDecl[] = [];
     while (!this.at(TokenKind.RBrace) && !this.at(TokenKind.EOF)) {
       while (this.at(TokenKind.DocComment)) this.advance();
       if (this.at(TokenKind.RBrace)) break;
+      if (this.atReservedDeclaration()) {
+        reserved.push(this.parseReserved());
+        continue;
+      }
       const vspan      = this.span();
       const decorators = this.parseDecorators();
       const ordinal    = this.expectInt("enum variant ordinal");
@@ -349,7 +365,7 @@ export class Parser {
     }
     this.expect(TokenKind.RBrace);
     return {
-      kind: "enum", name, variants,
+      kind: "enum", name, variants, reserved,
       decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
     };
   }
@@ -400,16 +416,80 @@ export class Parser {
     const base = this.parseQualifiedIdent();
     this.expect(TokenKind.LBrace);
     const fields: AST.FieldDecl[] = [];
+    const reserved: AST.ReservedDecl[] = [];
     while (!this.at(TokenKind.RBrace) && !this.at(TokenKind.EOF)) {
       while (this.at(TokenKind.DocComment)) this.advance();
       if (this.at(TokenKind.RBrace)) break;
+      if (this.atReservedDeclaration()) {
+        reserved.push(this.parseReserved());
+        continue;
+      }
       fields.push(this.parseField());
     }
     this.expect(TokenKind.RBrace);
     return {
-      kind: "overlay", company, base, fields,
+      kind: "overlay", company, base, fields, reserved,
       decorators: meta.decorators, directives: meta.directives, doc: meta.doc, span,
     };
+  }
+
+  // ── reserved declarations ────────────────────────────────────────────────────
+  //
+  // `reserved` is NOT a lexer keyword. Promoting it would break every existing
+  // schema with a field named `reserved`, because expectIdent accepts only Ident.
+  // Contextual detection is unambiguous instead: a field is
+  // `[meta] [IntLit] [private] Ident ':' type`, so an Ident followed by an
+  // integer or string literal is a form no field can take.
+
+  private atReservedDeclaration(): boolean {
+    const token = this.peek();
+    if (token.kind !== TokenKind.Ident) return false;
+    if (token.value !== "reserved") return false;
+    const next = this.peekAt(1).kind;
+    return next === TokenKind.IntLit || next === TokenKind.StringLit;
+  }
+
+  // reserved 7;   reserved 7, 9..12;   reserved "oldName";
+  private parseReserved(): AST.ReservedDecl {
+    const span = this.span();
+    this.advance(); // the contextual `reserved`
+
+    const ranges: AST.ReservedRange[] = [];
+    const names: string[] = [];
+    while (true) {
+      if (this.at(TokenKind.StringLit)) {
+        names.push(this.expectString());
+      } else {
+        ranges.push(this.parseReservedRange());
+      }
+      if (!this.at(TokenKind.Comma)) break;
+      this.advance();
+    }
+    this.expect(TokenKind.Semicolon);
+
+    return { kind: "reserved", ranges, names, span };
+  }
+
+  private parseReservedRange(): AST.ReservedRange {
+    const span = this.span();
+    const from = this.expectInt("reserved ordinal");
+
+    if (this.at(TokenKind.Minus)) {
+      throw new ParseError(
+        "Reserved ranges use '..' rather than '-', e.g. `reserved 9..12;`",
+        this.peek()
+      );
+    }
+    if (!this.at(TokenKind.DotDot)) {
+      return { from, to: from, span };
+    }
+
+    this.advance(); // ..
+    const to = this.expectInt("reserved range end");
+    if (from > to) {
+      throw new ParseError(`Reserved range is inverted: ${from}..${to}`, this.peek());
+    }
+    return { from, to, span };
   }
 
   // Consume an identifier that must equal `word` (a contextual keyword like `on`).

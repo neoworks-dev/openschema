@@ -12,6 +12,8 @@ export declare class Parser {
     private parseDeclaration;
     private parseLeadingMetadata;
     private rejectMetadata;
+    /** `namespace` carries directives (e.g. #requireLedger) but never decorators. */
+    private rejectDecorators;
     private parseDecorator;
     private parseDecoratorArg;
     private parseDecoratorValue;
@@ -30,6 +32,9 @@ export declare class Parser {
     private parseOperation;
     private parseParam;
     private parseOverlay;
+    private atReservedDeclaration;
+    private parseReserved;
+    private parseReservedRange;
     private expectContextual;
     private parseInterface;
     private expectNameSegment;

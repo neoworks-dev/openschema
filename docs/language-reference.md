@@ -157,15 +157,68 @@ Rules:
 
 - Ordinals must be **unique** within a model.
 - They may have **gaps** and need not be in order (`1`, `2`, `5` is fine).
-- Once a field is removed, **do not reuse its ordinal** for a different field —
-  the same discipline as Protobuf `reserved`. The compatibility checker assumes
-  ordinals are stable identities.
+- Once a field is removed, its ordinal is **spent** and may never be reused. This
+  is enforced, not merely advised — see `reserved` below and the
+  [ordinal ledger](./ordinal-ledger.md).
 
 Why this matters: tools that key on field *names* (JSON Schema, plain GraphQL)
 cannot tell a rename apart from "delete the old field, add a new one." With
 ordinals, OpenSchema can — so it never falsely flags a rename as a breaking
 change, and never misses a genuine removal. See
 [Compatibility Checking](./compatibility.md).
+
+Enum variants and `oneof` variants have their own independent ordinal spaces, and
+duplicates in either are errors (`OS2003`, `OS2004`). For the
+[binary codec](./wire-format.md) an enum variant's ordinal *is* its encoded value,
+so a duplicate would make old data decode to a wrong-but-valid result.
+
+### Reserved ordinals
+
+`reserved` marks ordinals (or names) that must never be claimed again:
+
+```openschema
+model Person {
+  1 name: string
+  4 email: string
+
+  reserved 2, 5..9;
+  reserved "phoneNumber";
+}
+```
+
+- Ranges use `..`, as array bounds do. `2, 5..9` reserves 2 and 5 through 9.
+- Every declaration ends with `;`.
+- Allowed in `model`, `enum`, and `overlay` bodies.
+- A record inherits its base records' reservations, because the flattened record is
+  what gets encoded. An overlay's reservations stay in the overlay's own space.
+- Declaring a field on a reserved ordinal or name is `OS2005`; an inverted,
+  overlapping, or out-of-range reservation is `OS2012`.
+
+`reserved` is a *contextual* keyword, so a field may still be named `reserved`:
+
+```openschema
+model Booking {
+  1 reserved: bool   // still a field
+  reserved 2;        // a reservation
+}
+```
+
+For an ordinal to stay spent even if the `reserved` line is later deleted, run
+`openschema lock` — the [ordinal ledger](./ordinal-ledger.md) absorbs source
+reservations and is the durable record.
+
+### `#requireLedger`
+
+A directive on the namespace makes a missing or out-of-date ordinal ledger an error
+for every command:
+
+```openschema
+#requireLedger
+namespace shop
+```
+
+Unlike a CLI flag, it travels with the schema, so disarming the check is a visible
+diff in the file under review.
 
 ---
 

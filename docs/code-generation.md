@@ -8,10 +8,14 @@ openschema gen <schema> --target <target> --out <dir> [options]
 
 | Flag | Meaning | Default |
 |------|---------|---------|
-| `--target`, `-t` | `sql`, `ts`, `go`, `json-schema`, `graphql`, or `openapi` (required) | — |
+| `--target`, `-t` | `sql`, `ts`, `go`, `json-schema`, `graphql`, `openapi`, `surrealdb`, `internal`, or `codec` (required) | — |
 | `--out`, `-o` | output directory (created if missing) | `.` |
 | `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
 | `--include-private` | include the schema's own `private` fields | off |
+
+The `codec` target generates a canonical binary encoder and decoder, and writes
+`schema.codec.ts` rather than `schema.ts`. It has its own rules and its own set of
+rejected constructs — see [Wire Format](./wire-format.md).
 
 The command parses the entry file, follows its `import`s, resolves the whole
 graph, reports any semantic errors (and stops on them), then writes the output.

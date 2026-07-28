@@ -44,6 +44,7 @@ export const KEYWORDS: VocabularyEntry[] = [
   { label: "overlay", detail: "keyword", documentation: "A company-scoped set of private fields on a base model." },
   { label: "extends", detail: "keyword", documentation: "Inherit fields from a base model." },
   { label: "private", detail: "keyword", documentation: "Exclude this field from public artifacts unless --include-private." },
+  { label: "reserved", detail: "keyword", documentation: "Mark ordinals or names that may never be used again: reserved 2, 5..9;" },
 ];
 
 export const DECORATORS: VocabularyEntry[] = [

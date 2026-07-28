@@ -1,5 +1,7 @@
 import type { Program } from "../parser/ast.js";
 import type { ResolvedSchema, Module } from "./types.js";
+export { expandReserved, MAX_ORDINAL } from "./reserved.js";
+export type { ReservedSet } from "./reserved.js";
 export { loadProject } from "./moduleGraph.js";
 export type { ResolvedSchema, ResolvedModel, ResolvedField, ResolvedOverlay, DeclSymbol, Diagnostic, Module } from "./types.js";
 /**
