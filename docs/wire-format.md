@@ -9,7 +9,7 @@ repaired, so every rule here exists to make a mistake a compile-time error rathe
 a silent one.
 
 ```sh
-openschema gen schema.schema --target codec --out ./generated
+openschema schema.schema --target codec --out ./generated
 ```
 
 Generates a single self-contained `schema.codec.ts` with no imports.

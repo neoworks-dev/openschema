@@ -203,13 +203,13 @@ model Booking {
 }
 ```
 
-For an ordinal to stay spent even if the `reserved` line is later deleted, run
-`openschema lock` — the [ordinal ledger](./ordinal-ledger.md) absorbs source
-reservations and is the durable record.
+An ordinal stays spent even if the `reserved` line is later deleted: the
+[ordinal ledger](./ordinal-ledger.md) absorbs source reservations on the next run
+and is the durable record.
 
 ### `#requireLedger`
 
-A directive on the namespace makes a missing or out-of-date ordinal ledger an error
+A directive on the namespace makes a missing ordinal ledger an error
 for every command:
 
 ```openschema
@@ -623,7 +623,7 @@ model Order {
   (`myorg.common.Money`) without importing it, as long as that file is part of
   the project being generated.
 
-When you run `openschema gen` on an entry file, the compiler automatically
+When you point `openschema` at an entry file, the compiler automatically
 follows its imports, loads the whole graph, and resolves names across all of
 them.
 

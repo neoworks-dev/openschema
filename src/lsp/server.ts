@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // src/lsp/server.ts
 // The OpenSchema language server. Speaks LSP over stdio and reuses the real
 // compiler (lexer/parser/resolver) for live diagnostics, plus hover,

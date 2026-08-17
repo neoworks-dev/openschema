@@ -7,17 +7,10 @@ import { LOCKFILE_VERSION, } from "./types.js";
 export function reconcileLedger(spaces, current, options) {
     const diagnostics = [];
     const timestamp = options.now();
-    if (current === null && options.required) {
-        diagnostics.push({
-            code: "OS2011", severity: "error", span: null,
-            message: "No ordinal ledger found. Run `openschema lock <schema>` to create one.",
-        });
-    }
-    if (current === null && !options.required) {
-        diagnostics.push({
-            code: "OS2011", severity: "warning", span: null,
-            message: "No ordinal ledger found — ordinal-reuse protection is disabled. Run `openschema lock <schema>`.",
-        });
+    if (current === null) {
+        const missing = describeMissingLedger(options);
+        if (missing !== null)
+            diagnostics.push(missing);
     }
     // Spaces absent from this run are copied through untouched. Without this, a
     // lockfile shared by two entry files would have every space belonging to the
@@ -39,13 +32,35 @@ export function reconcileLedger(spaces, current, options) {
     if (changed && options.mode === "check" && current !== null) {
         diagnostics.push({
             code: "OS2008", severity: options.staleSeverity, span: null,
-            message: "The ordinal ledger is out of date. Run `openschema lock <schema>`.",
+            message: "The ordinal ledger is out of date. Regenerate locally — the lockfile is " +
+                "maintained for you — and commit the result.",
         });
     }
     return {
         diagnostics,
         next: buildLedger(nextSpaces, current, timestamp, options),
         changed,
+    };
+}
+/**
+ * A missing ledger is only worth reporting when this run will not create one.
+ * In update mode the baseline *is* the fix, so there is nothing to say — unless
+ * the caller demanded a ledger already exist, in which case silently minting an
+ * empty one would be the very disarm the requirement guards against.
+ */
+function describeMissingLedger(options) {
+    if (options.required) {
+        return {
+            code: "OS2011", severity: "error", span: null,
+            message: "No ordinal ledger found. Run `openschema lock <schema>` and commit the lockfile — " +
+                "until it exists, a reused ordinal cannot be detected.",
+        };
+    }
+    if (options.mode === "update")
+        return null;
+    return {
+        code: "OS2011", severity: "warning", span: null,
+        message: "No ordinal ledger found — ordinal-reuse protection is disabled.",
     };
 }
 // ── Per-space reconciliation ──────────────────────────────────────────────────

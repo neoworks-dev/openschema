@@ -66,6 +66,7 @@ export type TypeExpr =
   | ArrayTypeExpr
   | MapTypeExpr
   | NullableTypeExpr
+  | NullTypeExpr
   | UnionTypeExpr
 	| OneofTypeExpr;
 
@@ -74,6 +75,17 @@ export interface ScalarTypeExpr {
   kind:   "scalar";
   scalar: ScalarKind;
   span:   Span;
+}
+
+/**
+ * The `null` type, only meaningful inside a union: `string | null` is a field
+ * that is present but may hold null. Distinct from `string?`, which is a field
+ * that may be absent. The codec target ignores the null arm — the wire format
+ * models presence, not null — so it is an API-surface distinction only.
+ */
+export interface NullTypeExpr {
+  kind: "null";
+  span: Span;
 }
 
 /** decimal(precision, scale) */

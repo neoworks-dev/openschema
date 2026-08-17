@@ -3,10 +3,14 @@
 A generated, git-committed lockfile recording every field ordinal a schema has ever
 used, so a retired wire tag can never be reclaimed.
 
+You do not maintain it. Generating maintains it for you:
+
 ```sh
-openschema lock schema.schema          # create or update
-openschema lock schema.schema --check  # CI: fail if missing or out of date
+openschema schema.schema -t codec -o ./generated   # writes openschema.lock alongside
 ```
+
+Commit the lockfile. There is a `lock` command for CI and for locking without
+generating, but day to day you never type it.
 
 ## Why the compiler has to enforce this
 
@@ -104,23 +108,36 @@ git show origin/main:schema/openschema.lock > /tmp/base.lock || true
 openschema lock schema/orders.schema --check --base /tmp/base.lock
 ```
 
-## `gen` never writes the lockfile
+## Who may write the lockfile
 
-Only `openschema lock` writes. `gen` reads and validates.
+Recording a new ordinal and retiring a removed one are mechanical edits with exactly
+one correct answer, so the compiler makes them itself. Making a human run a second
+command to apply them buys no safety — it only trains people to reach for `--no-lock`
+when the build stops for a bookkeeping reason.
 
-This is deliberate. `gen` is what runs in CI, so if a deleted lockfile made `gen`
-regenerate it, CI would pass on exactly the failure the ledger exists to catch — the
-self-healing would be the disarm. A warning would not help either; it would scroll
-past among the generated-file lines.
+What auto-maintenance never does is **launder a violation**. Reusing a spent ordinal
+(`OS2007`) and changing a live ordinal's encoding (`OS2010`) still abort the run, and
+the lockfile is written only after every emitter has succeeded — so a failed build
+never leaves a ledger recording ordinals that produced no output.
 
-| State | `gen` |
-|---|---|
-| current | proceeds silently |
-| out of date | `OS2008`, exit 1 |
-| ordinal reuse | `OS2007`, exit 1 |
-| missing | `OS2011` warning, proceeds — unless required |
-| `--frozen` | missing or stale is an error |
-| `--no-lock` | skips validation, explicitly and greppably |
+Two situations stay strictly read-only, because there the auto-repair *is* the disarm:
+
+- **CI** (detected via the `CI` environment variable) or `--frozen`. A deleted
+  lockfile would otherwise be quietly rebuilt into an empty baseline and the build
+  would go green on exactly the failure the ledger exists to catch.
+- **`#requireLedger`**, below. A missing lockfile is an error, never a fresh baseline.
+
+| State | Local | CI / `--frozen` |
+|---|---|---|
+| current | proceeds silently | proceeds silently |
+| out of date | updated, one dim line | `OS2008`, exit 1 |
+| missing | created, with a "commit it" notice | `OS2011`, exit 1 |
+| missing under `#requireLedger` | `OS2011`, exit 1 | `OS2011`, exit 1 |
+| ordinal reuse | `OS2007`, exit 1 | `OS2007`, exit 1 |
+| encoding change | `OS2010`, exit 1 | `OS2010`, exit 1 |
+
+`--write-lock` forces a write even when `CI` is set, for a bot that commits the
+result back. `--no-lock` skips the ledger entirely — explicitly, and greppably.
 
 ## `#requireLedger`
 
@@ -133,7 +150,8 @@ it is a visible diff in the file under review:
 namespace shop
 ```
 
-With it present, a missing or out-of-date ledger is an error for every command.
+With it present, a missing ledger is an error rather than a new baseline — locally as
+well as in CI. An existing ledger is still updated for you.
 
 ## Spaces not seen in a run are left alone
 
@@ -141,8 +159,8 @@ Only ordinal spaces observed in the current run may have ordinals retired. A spa
 absent from the run is copied through untouched.
 
 This matters whenever one lockfile serves several entry files. Without the rule,
-running `lock` on entry A would retire every live field belonging to entry B, and
-B's next run would report `OS2007` on all of them.
+generating from entry A would retire every live field belonging to entry B, and B's
+next run would report `OS2007` on all of them.
 
 A corollary: absence from the schema is never itself an error. Deleting a whole
 model leaves its ordinals permanently spent.
@@ -164,6 +182,6 @@ model leaves its ordinals permanently spent.
 ## Relationship to `reserved`
 
 A [`reserved`](./language-reference.md#reserved-ordinals) declaration in source is
-absorbed into the ledger as `state: "reserved"` the next time `lock` runs. Once
-absorbed the ordinal stays spent even if the source line is later deleted, so the
-ledger — not the source — is the durable record.
+absorbed into the ledger as `state: "reserved"` on the next run. Once absorbed the
+ordinal stays spent even if the source line is later deleted, so the ledger — not the
+source — is the durable record.

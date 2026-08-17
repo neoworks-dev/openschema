@@ -49,8 +49,8 @@ describe("generated types", () => {
     expect(emit("namespace t\nmodel M { 1 a: {string: i32} }")).toContain("a: Map<string, number>;");
   });
 
-  it("keeps a nullable array nullable", () => {
-    expect(emit("namespace t\nmodel M { 1 a: [i32]? }")).toContain("a: number[] | null;");
+  it("keeps an optional array optional", () => {
+    expect(emit("namespace t\nmodel M { 1 a: [i32]? }")).toContain("a?: number[];");
   });
 
   it("gives every message an optional unknown-field bag", () => {

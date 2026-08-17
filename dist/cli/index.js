@@ -4,9 +4,11 @@
 //
 // Commands
 // ────────
+//   <schema>                      Generate output for a target (the default command)
 //   parse  <file>                 Validate syntax; optionally dump tokens or AST
 //   diff   <old> <new>            Show all changes between two schema files
 //   check  <old> <new>            Assert compatibility under a given mode (CI-friendly)
+//   lock   <schema>               Ordinal-ledger CI gate
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
@@ -15,7 +17,7 @@ import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
 import { diff as engineDiff } from "../engine/index.js";
 import { resolveModules, loadProject } from "../resolver/index.js";
-import { getEmitter } from "../emit/index.js";
+import { getEmitter, listTargets } from "../emit/index.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
 import { fetchSchema, parseSchemaRef, publish, resolveRegistry } from "../registry/client.js";
@@ -52,62 +54,70 @@ function resolveProject(schemaPath) {
     printDiagnostics(schema.diagnostics); // warnings only at this point
     return schema;
 }
-function parseTargets(raw) {
-    const targets = raw
+function resolveTargets(raw) {
+    if (raw === undefined) {
+        console.error(chalk.red("error: --target is required"));
+        console.error(chalk.dim(`  available targets: ${listTargets().join(", ")}`));
+        process.exit(1);
+    }
+    const names = raw
         .split(",")
         .map((target) => target.trim())
         .filter((target) => target.length > 0);
-    if (targets.length === 0) {
+    if (names.length === 0) {
         console.error(chalk.red("error: no targets given"));
         process.exit(1);
     }
-    return targets;
-}
-function cmdGen(schemaPath, opts) {
-    const schema = resolveProject(schemaPath);
-    enforceLedger(schemaPath, schema, opts);
-    const targets = parseTargets(opts.target);
-    const emitters = targets.map((target) => {
-        const emitter = getEmitter(target);
+    return names.map((name) => {
+        const emitter = getEmitter(name);
         if (emitter === null) {
-            console.error(chalk.red(`error: no emitter for target '${target}'`));
+            console.error(chalk.red(`error: no emitter for target '${name}'`));
+            console.error(chalk.dim(`  available targets: ${listTargets().join(", ")}`));
             process.exit(1);
         }
         return emitter;
     });
+}
+function cmdGenerate(schemaPath, opts) {
+    const emitters = resolveTargets(opts.target);
+    const schema = resolveProject(schemaPath);
+    const pendingLock = syncLedger(schemaPath, schema, opts);
+    const files = emitAll(emitters, schema, opts);
+    // The lockfile lands only after every emitter has succeeded, so a rejected
+    // construct never leaves behind a ledger recording ordinals that produced no
+    // output.
+    if (pendingLock !== null)
+        writeLockfile(pendingLock);
+    mkdirSync(opts.out, { recursive: true });
+    for (const file of files) {
+        const fullPath = join(opts.out, file.path);
+        writeFileSync(fullPath, file.contents, "utf8");
+        console.log(chalk.green(`✓ ${fullPath}`));
+    }
+}
+function emitAll(emitters, schema, opts) {
+    const files = [];
     for (const emitter of emitters) {
-        let files;
         try {
-            files = emitter.emit({
+            files.push(...emitter.emit({
                 schema,
                 company: opts.company ?? null,
                 includePrivate: opts.includePrivate === true,
                 options: {},
-            });
+            }));
         }
         catch (error) {
             reportEmitError(error);
             process.exit(1);
         }
-        mkdirSync(opts.out, { recursive: true });
-        for (const file of files) {
-            const fullPath = join(opts.out, file.path);
-            writeFileSync(fullPath, file.contents, "utf8");
-            console.log(chalk.green(`✓ ${fullPath}`));
-        }
     }
+    return files;
 }
 const GENERATOR = `openschema ${VERSION}`;
 function lockPathFor(schemaPath, opts) {
     if (typeof opts.lock === "string")
         return opts.lock;
     return defaultLockPath(schemaPath);
-}
-/** `#requireLedger` on the namespace travels with the schema, unlike a CLI flag. */
-function ledgerRequired(schema, frozen) {
-    if (frozen)
-        return true;
-    return schema.requiresLedger === true;
 }
 function loadLedgerOrExit(path) {
     const loaded = loadLedger(path);
@@ -117,19 +127,44 @@ function loadLedgerOrExit(path) {
     }
     return loaded.ledger;
 }
+/** CI is the one place where a self-healing lockfile would silently disarm the ledger. */
+function runningInCI() {
+    const flag = process.env.CI;
+    if (flag === undefined)
+        return false;
+    return flag !== "" && flag !== "0" && flag !== "false";
+}
+function ledgerIsReadOnly(opts) {
+    if (opts.frozen === true)
+        return true;
+    if (opts.writeLock === true)
+        return false;
+    return runningInCI();
+}
 /**
- * `gen` validates the ledger but never writes it. Auto-repairing here would mean
- * a deleted lockfile makes CI pass on exactly the failure the ledger exists to
- * catch — the self-healing would be the disarm.
+ * Reconcile the ordinal ledger and hand back the lockfile the caller should write.
+ *
+ * Recording a new ordinal and retiring a removed one are mechanical edits with
+ * exactly one correct answer, so the compiler makes them itself rather than
+ * failing the build until a human runs a second command. What it will not do is
+ * launder a violation: reusing a spent ordinal (OS2007) or changing a live
+ * ordinal's encoding (OS2010) still aborts before anything is written.
+ *
+ * Two situations stay strictly read-only, because there the auto-repair *is* the
+ * disarm:
+ *   - CI (or --frozen): a deleted lockfile would otherwise be silently rebuilt
+ *     into an empty baseline and the build would go green.
+ *   - `#requireLedger`: a missing lockfile is an error, never a fresh baseline.
  */
-function enforceLedger(schemaPath, schema, opts) {
+function syncLedger(schemaPath, schema, opts) {
     if (opts.lock === false)
-        return;
+        return null;
     const path = lockPathFor(schemaPath, opts);
     const current = loadLedgerOrExit(path);
+    const readOnly = ledgerIsReadOnly(opts);
     const result = reconcileLedger(collectSpaces(schema), current, {
-        mode: "check",
-        required: ledgerRequired(schema, opts.frozen === true),
+        mode: readOnly ? "check" : "update",
+        required: readOnly || (current === null && schema.requiresLedger === true),
         staleSeverity: "error",
         now: () => new Date().toISOString(),
         generator: GENERATOR,
@@ -137,6 +172,20 @@ function enforceLedger(schemaPath, schema, opts) {
     printDiagnostics(result.diagnostics);
     if (result.diagnostics.some(d => d.severity === "error"))
         process.exit(1);
+    if (readOnly)
+        return null;
+    if (!result.changed)
+        return null;
+    return { path, contents: serializeLedger(result.next), baseline: current === null };
+}
+function writeLockfile(pending) {
+    writeFileSync(pending.path, pending.contents, "utf8");
+    if (!pending.baseline) {
+        console.log(chalk.dim(`  ordinal ledger updated: ${pending.path}`));
+        return;
+    }
+    console.log(chalk.yellow(`⚠ created ${pending.path} — commit it.`));
+    console.log(chalk.dim("  It records every ordinal ever used; without it, reuse cannot be detected."));
 }
 function cmdLock(schemaPath, opts) {
     const schema = resolveProject(schemaPath);
@@ -617,8 +666,45 @@ function cmdCheck(oldPath, newPath, opts) {
 const program = new Command();
 program
     .name("openschema")
-    .description("OpenSchema DSL — schema parser, differ, and compatibility checker")
-    .version(VERSION, "-v, --version");
+    .description("OpenSchema DSL — schema compiler, differ, and compatibility checker")
+    .version(VERSION, "-v, --version")
+    .addHelpText("after", [
+    "",
+    "Examples:",
+    "  openschema order.schema -t ts -o ./src/types",
+    "  openschema order.schema -t codec,sql -o ./generated",
+    "  openschema check published.schema order.schema --mode backward",
+    "",
+    "The ordinal lockfile beside the schema is maintained automatically;",
+    "commit it. In CI it is treated as read-only.",
+    "",
+].join("\n"));
+// ── generate (default) ────────────────────────────────────────────────────────
+//
+// Generating is what the tool is for, so it needs no verb: `openschema
+// order.schema -t ts`. `gen` stays as an alias so existing scripts keep working.
+//
+// The options live on the subcommand, never on the root program: a root option
+// of the same name shadows the subcommand's and silently swallows its value.
+program
+    .command("generate [schema]", { isDefault: true })
+    .alias("gen")
+    .description("Generate output for a target from a schema file (default command)")
+    .option("-t, --target <targets>", `output target(s), comma-separated (${listTargets().join(", ")})`)
+    .option("-o, --out <dir>", "output directory", ".")
+    .option("--company <id>", "include this company's overlay fields")
+    .option("--include-private", "include base-record private fields")
+    .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
+    .option("--frozen", "never write the ordinal ledger; fail if it is missing or stale")
+    .option("--write-lock", "write the ordinal ledger even when CI is set")
+    .option("--no-lock", "skip the ordinal ledger entirely")
+    .action((schemaPath, opts) => {
+    if (schemaPath === undefined) {
+        program.help();
+        return;
+    }
+    cmdGenerate(schemaPath, opts);
+});
 // ── parse ─────────────────────────────────────────────────────────────────────
 program
     .command("parse <file>")
@@ -648,22 +734,10 @@ program
     .option("-q, --quiet", "suppress output; communicate result via exit code only")
     .option("-v, --verbose", "show rationale and before/after for each change", true)
     .action((oldPath, newPath, opts) => cmdCheck(oldPath, newPath, opts));
-// ── gen ───────────────────────────────────────────────────────────────────────
-program
-    .command("gen <schema>")
-    .description("Generate output for a target from a schema file")
-    .addOption(new Option("-t, --target <targets>", "output target(s), comma-separated (sql, ts, go, json-schema, graphql, openapi, surrealdb, internal, codec)").makeOptionMandatory())
-    .option("-o, --out <dir>", "output directory", ".")
-    .option("--company <id>", "include this company's overlay fields")
-    .option("--include-private", "include base-record private fields")
-    .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
-    .option("--frozen", "fail if the ordinal ledger is missing or out of date")
-    .option("--no-lock", "skip ordinal-ledger validation entirely")
-    .action((schema, opts) => cmdGen(schema, opts));
 // ── lock ──────────────────────────────────────────────────────────────────────
 program
     .command("lock <schema>")
-    .description("Create or update the ordinal ledger, which prevents wire-tag reuse")
+    .description("Verify the ordinal ledger without generating (CI gate)")
     .option("--lock <path>", "lockfile path (default: <schema dir>/openschema.lock)")
     .option("--check", "do not write; exit 1 if the ledger is missing or out of date")
     .option("--base <path>", "assert the result still contains everything this lockfile records")

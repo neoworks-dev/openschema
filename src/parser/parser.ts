@@ -578,6 +578,11 @@ export class Parser {
       this.advance();
       return { kind: "scalar", scalar: scalarKind, span };
     }
+
+    if (tok.kind === TokenKind.Null) {
+      this.advance();
+      return { kind: "null", span };
+    }
   
     if (tok.kind === TokenKind.Decimal) {
       this.advance();

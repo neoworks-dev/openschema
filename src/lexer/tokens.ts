@@ -43,6 +43,7 @@ export const enum TokenKind {
   Time      = "time",
   Timestamp = "timestamp",
   Duration  = "duration",
+  Null      = "null",
 
   // ── Modifier keywords ─────────────────────────────────────
 	Extends  = "extends",

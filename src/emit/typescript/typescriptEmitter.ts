@@ -37,9 +37,13 @@ export const typescriptEmitter: Emitter = {
   },
 };
 
+// Variant names, not ordinals: this target describes a DTO surface that is only
+// ever serialized as JSON (postMessage, HTTP), so the name is the value that
+// travels. The codec target emits numeric enums instead, because there the
+// ordinal IS the wire encoding.
 function emitEnum(decl: EnumDecl): string {
-  const members = decl.variants.map(v => `  ${v.name} = ${v.ordinal},`).join("\n");
-  return `export enum ${decl.name} {\n${members}\n}`;
+  const members = decl.variants.map(variant => `  | ${JSON.stringify(variant.name)}`).join("\n");
+  return `export type ${decl.name} =\n${members};`;
 }
 
 function emitUnionAlias(name: string, alias: TypeAlias, schema: ResolvedSchema): string {
@@ -68,13 +72,14 @@ function typeParamList(record: ResolvedModel): string {
   return `<${decl.typeParams.map(p => p.name).join(", ")}>`;
 }
 
+// `T?` in the DSL means the field may be absent, which is `undefined` — an
+// optional property says exactly that. It does not mean the field may hold null.
 function fieldLine(field: ResolvedField, schema: ResolvedSchema): string {
   const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
   const optional = nullable ? "?" : "";
   const tsType = mapType(inner, schema);
-  const rendered = nullable ? `${tsType} | null` : tsType;
   const docPrefix = field.isPrivate ? "  /** @private */\n" : "";
-  return `${docPrefix}  ${field.name}${optional}: ${rendered};`;
+  return `${docPrefix}  ${field.name}${optional}: ${tsType};`;
 }
 
 function mapType(type: TypeExpr, schema: ResolvedSchema): string {
@@ -85,6 +90,7 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "array":    return `${arrayElement(type.element, schema)}[]`;
     case "map":      return `Record<${mapType(type.key, schema)}, ${mapType(type.value, schema)}>`;
     case "nullable": return `${mapType(type.inner, schema)} | null`;
+    case "null":     return "null";
     case "union":    return type.variants.map(v => mapType(v, schema)).join(" | ");
     case "oneof":    return mapOneof(type.variants, schema);
   }

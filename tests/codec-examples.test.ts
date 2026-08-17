@@ -94,14 +94,14 @@ model Contact {
   9 updatedAt: timestamp
 }`;
 
-  it("preserves optional containers, nulls, and nested messages", async () => {
+  it("preserves optional containers, absent fields, and nested messages", async () => {
     const codec = await loadCodec(SCHEMA);
     const value = {
       id: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
       kind: 1,
       formattedName: "Ada Lovelace",
-      nicknames: null,
-      addresses: [{ street: "1 Main St", locality: null, country: "DE" }],
+      nicknames: undefined,
+      addresses: [{ street: "1 Main St", locality: undefined, country: "DE" }],
       birthday: "1815-12-10",
       geo: new Map([["lat", 52.5], ["lng", 13.4]]),
       notes: [],
@@ -109,9 +109,9 @@ model Contact {
     };
 
     const back = codec.decodeContact(codec.encodeContact(value));
-    expect(back.nicknames).toBeNull();
+    expect(back.nicknames).toBeUndefined();
     expect(back.notes).toEqual([]);
-    expect(back.addresses[0].locality).toBeNull();
+    expect(back.addresses[0].locality).toBeUndefined();
     expect(back.addresses[0].country).toBe("DE");
     expect(back.birthday).toBe("1815-12-10");
     expect([...back.geo.entries()]).toEqual([["lat", 52.5], ["lng", 13.4]]);

@@ -71,6 +71,8 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "array":    return `[]${mapType(type.element, schema)}`;
     case "map":      return `map[${mapType(type.key, schema)}]${mapType(type.value, schema)}`;
     case "nullable": return `*${mapType(type.inner, schema)}`;
+    // Go has no null type; a `T | null` union already renders as interface{}.
+    case "null":     return "interface{}";
     case "union":    return "interface{}";
     case "oneof":    return "interface{}";
   }

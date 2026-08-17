@@ -58,11 +58,11 @@ function packedWriter(field, source, path) {
     return [
         `if (${source}.length > 0) {`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.lengthDelimited(subMessageBytes(packed => {`,
+        `  w.nested(packed => {`,
         `    for (const item of ${source}) {`,
         indent(writeValue("packed", field.value, "item", path), 6),
         `    }`,
-        `  }));`,
+        `  });`,
         `}`,
     ].join("\n");
 }
@@ -84,11 +84,11 @@ function wrapperRepeatedWriter(field, container, source, path) {
         ? [
             `    if (present.length > 0) {`,
             `      wrapper.key(1, WIRE_LEN);`,
-            `      wrapper.lengthDelimited(subMessageBytes(packed => {`,
+            `      wrapper.nested(packed => {`,
             `        for (const item of present) {`,
             indent(writeValue("packed", field.value, "item", path), 10),
             `        }`,
-            `      }));`,
+            `      });`,
             `    }`,
         ]
         : [
@@ -101,9 +101,9 @@ function wrapperRepeatedWriter(field, container, source, path) {
         `if (${source} !== null && ${source} !== undefined) {`,
         `  const present = ${source};`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.lengthDelimited(subMessageBytes(wrapper => {`,
+        `  w.nested(wrapper => {`,
         ...inner,
-        `  }));`,
+        `  });`,
         `}`,
     ].join("\n");
 }
@@ -113,12 +113,12 @@ function mapWriter(field, keyScalar, source, path, emitTarget) {
     return [
         `for (const entry of sortMapEntries([...${source}].map(([k, v]) => ({ key: k, value: v, keyBytes: ${keyBytes(keyScalar, "k")} })))) {`,
         `  ${target}.key(${tag}, WIRE_LEN);`,
-        `  ${target}.lengthDelimited(subMessageBytes(pair => {`,
+        `  ${target}.nested(pair => {`,
         `    pair.key(1, ${wireConstant(scalarWire(keyScalar))});`,
         indent(writeValue("pair", { kind: "scalar", scalar: keyScalar }, "entry.key", path), 4),
         `    pair.key(2, ${wireConstant(wireTypeOf(field.value))});`,
         indent(writeValue("pair", field.value, "entry.value", path), 4),
-        `  }));`,
+        `  });`,
         `}`,
     ].join("\n");
 }
@@ -127,9 +127,9 @@ function wrapperMapWriter(field, keyScalar, source, path) {
         `if (${source} !== null && ${source} !== undefined) {`,
         `  const present = ${source};`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.lengthDelimited(subMessageBytes(wrapper => {`,
+        `  w.nested(wrapper => {`,
         indent(mapWriter(field, keyScalar, "present", path, "wrapper"), 4),
-        `  }));`,
+        `  });`,
         `}`,
     ].join("\n");
 }
@@ -137,11 +137,11 @@ function wrapperMapWriter(field, keyScalar, source, path) {
 function writeValue(target, value, source, path) {
     switch (value.kind) {
         case "scalar": return `${target}.${scalarWriteCall(value.scalar, source, path)};`;
-        case "enum": return `${target}.varint(BigInt(${source}));`;
+        case "enum": return `${target}.varintNumber(${source});`;
         case "decimal":
             return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;
         case "message":
-            return `${target}.lengthDelimited(subMessageBytes(nested => write${value.name}(nested, ${source}, ${path})));`;
+            return `${target}.nested(nested => write${value.name}(nested, ${source}, ${path}));`;
         case "oneof":
             return oneofWriter(target, value, source, path);
     }
@@ -155,25 +155,25 @@ function oneofWriter(target, value, source, path) {
         `    }`,
     ].join("\n"));
     return [
-        `${target}.lengthDelimited(subMessageBytes(chosen => {`,
+        `${target}.nested(chosen => {`,
         `  const variant = ${source};`,
         ...arms,
         `    if (variant.kind === ${JSON.stringify(UNKNOWN_PROPERTY)}) {`,
         `      for (const carried of variant.${UNKNOWN_PROPERTY}) chosen.raw(carried.raw);`,
         `    }`,
-        `}));`,
+        `});`,
     ].join("\n");
 }
 function scalarWriteCall(scalar, source, path) {
     switch (scalar) {
-        case "bool": return `varint(${source} ? 1n : 0n)`;
+        case "bool": return `varintNumber(${source} ? 1 : 0)`;
         case "i8":
         case "i16":
-        case "i32": return `varint(requireInteger(${source}, ${path}))`;
+        case "i32": return `varintNumber(requireInteger(${source}, ${path}))`;
         case "i64": return `varint(${source})`;
         case "u8":
         case "u16":
-        case "u32":
+        case "u32": return `varintNumber(requireUnsignedNumber(${source}, ${path}))`;
         case "u64": return `varint(requireUnsigned(${source}, ${path}))`;
         case "f32":
         case "f64": return `double(requireFinite(${source}, ${path}))`;
@@ -181,9 +181,9 @@ function scalarWriteCall(scalar, source, path) {
         case "bytes": return `lengthDelimited(${source})`;
         case "uuid": return `lengthDelimited(uuidToBytes(${source}, ${path}))`;
         case "json": return `string(canonicalJson(${source}))`;
-        case "date": return `varint(dateToDays(${source}, ${path}))`;
-        case "time": return `varint(timeToNanos(${source}, ${path}))`;
-        case "timestamp": return `varint(timestampToMillis(${source}, ${path}))`;
+        case "date": return `varintNumber(dateToDays(${source}, ${path}))`;
+        case "time": return `varintNumber(timeToNanos(${source}, ${path}))`;
+        case "timestamp": return `varintNumber(timestampToMillis(${source}, ${path}))`;
         case "duration": return `varint(${source})`;
     }
 }

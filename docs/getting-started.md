@@ -84,7 +84,7 @@ Parse error at 4:14: Expected field name (identifier) (got ":" ":")
 Pick a target and an output directory:
 
 ```bash
-openschema gen product.schema --target ts --out ./generated
+openschema product.schema --target ts --out ./generated
 ```
 
 `./generated/schema.ts`:
@@ -100,13 +100,18 @@ export interface Product {
 }
 ```
 
+Alongside the output you will find a new `openschema.lock`. It is the
+[ordinal ledger](./ordinal-ledger.md): a record of every field number the schema has
+ever used, which is what makes a reused number a compile error instead of silent data
+corruption. It is maintained for you — commit it and forget about it.
+
 Try the other targets — the same source file drives all of them:
 
 ```bash
-openschema gen product.schema --target sql         --out ./generated
-openschema gen product.schema --target go          --out ./generated
-openschema gen product.schema --target json-schema --out ./generated
-openschema gen product.schema --target graphql     --out ./generated
+openschema product.schema --target sql         --out ./generated
+openschema product.schema --target go          --out ./generated
+openschema product.schema --target json-schema --out ./generated
+openschema product.schema --target graphql     --out ./generated
 ```
 
 See [Code Generation](./code-generation.md) for what each target produces and

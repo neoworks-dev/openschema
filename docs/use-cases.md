@@ -31,9 +31,9 @@ model Order {
 ```
 
 ```bash
-openschema gen order.schema --target sql --out ./db
-openschema gen order.schema --target ts  --out ./web/src/types
-openschema gen order.schema --target go  --out ./api/models
+openschema order.schema --target sql --out ./db
+openschema order.schema --target ts  --out ./web/src/types
+openschema order.schema --target go  --out ./api/models
 ```
 
 A nullable field is `string?` in one place; that single fact becomes a nullable
@@ -85,10 +85,10 @@ overlay acme on Order {
 
 ```bash
 # Platform CI builds the shared view:
-openschema gen orders.schema --target sql --out ./shared
+openschema orders.schema --target sql --out ./shared
 
 # ACME builds their own view, with their private columns:
-openschema gen acme-overlay.schema --target sql --out ./acme --company acme
+openschema acme-overlay.schema --target sql --out ./acme --company acme
 ```
 
 Both overlays can start at ordinal `1` and never collide, and the platform can
@@ -116,7 +116,7 @@ model Order {
 ```
 
 ```bash
-openschema gen api.schema --target graphql --out ./graphql
+openschema api.schema --target graphql --out ./graphql
 ```
 
 You get object types, the `Query`/`Mutation` roots, and — because `Order` is used
@@ -152,7 +152,7 @@ op createUser(user: User): User
 ```
 
 ```bash
-openschema gen api.schema --target openapi --out ./openapi
+openschema api.schema --target openapi --out ./openapi
 ```
 
 You get an OpenAPI 3 document: `/users/{id}` with `id` as a path parameter,
@@ -182,7 +182,7 @@ model SignupRequest {
 ```
 
 ```bash
-openschema gen signup.schema --target json-schema --out ./contracts
+openschema signup.schema --target json-schema --out ./contracts
 ```
 
 `@format`, `@minLength`, `@minValue`, etc. become the corresponding JSON Schema

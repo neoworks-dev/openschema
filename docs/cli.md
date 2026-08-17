@@ -1,6 +1,7 @@
 # CLI Reference
 
 ```
+openschema <schema> [options]        # generate — the default command
 openschema <command> [options]
 ```
 
@@ -11,6 +12,44 @@ Run with the built binary (`./openschema`) or via Bun
 |------|---------|
 | `-v`, `--version` | print the version |
 | `-h`, `--help` | print help (also works per command) |
+
+## `<schema>` — generate (default)
+
+Generate code for a target. Follows `import`s from the entry file automatically.
+See [Code Generation](./code-generation.md).
+
+Generating is what the tool is for, so it needs no verb. `openschema generate` and
+the older `openschema gen` are aliases for the same command.
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `-t`, `--target <targets>` | one or more targets, comma-separated (required) | — |
+| `-o`, `--out <dir>` | output directory (created if missing) | `.` |
+| `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
+| `--include-private` | include the schema's own `private` fields | off |
+| `--lock <path>` | ordinal lockfile | `<schema dir>/openschema.lock` |
+| `--frozen` | never write the ordinal ledger; fail if it is missing or stale | off |
+| `--write-lock` | write the ordinal ledger even when `CI` is set | off |
+| `--no-lock` | skip the ordinal ledger entirely | off |
+
+Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
+`surrealdb`, `neoworks-ddl`, `internal`, `codec`.
+
+```bash
+openschema order.schema -t sql -o ./generated
+openschema order.schema -t ts  -o ./src/types
+openschema order.schema -t codec,sql -o ./generated          # several at once
+openschema acme-overlay.schema -t sql -o ./acme --company acme
+openschema order.schema -t graphql --include-private -o ./internal-api
+```
+
+On a semantic error (an undefined type, a duplicate ordinal, an unresolved
+import), the diagnostics are printed with their codes and nothing is written.
+
+The [ordinal lockfile](./ordinal-ledger.md) beside the schema is created and kept
+up to date for you. In CI (detected via the `CI` environment variable) it is
+treated as read-only, so a stale or missing lockfile fails the build instead of
+being silently rebuilt.
 
 ## `parse <file>`
 
@@ -64,40 +103,11 @@ openschema check published.schema proposed.schema --mode backward
 openschema check published.schema proposed.schema --mode full --quiet || echo "incompatible"
 ```
 
-## `gen <schema>`
-
-Generate code for a target. Follows `import`s from the entry file automatically.
-See [Code Generation](./code-generation.md).
-
-| Flag | Meaning | Default |
-|------|---------|---------|
-| `-t`, `--target <target>` | `sql`, `ts`, `go`, `json-schema`, `graphql`, `openapi`, `surrealdb`, `internal`, `codec` (required) | — |
-| `-o`, `--out <dir>` | output directory (created if missing) | `.` |
-| `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
-| `--include-private` | include the schema's own `private` fields | off |
-| `--lock <path>` | ordinal lockfile | `<schema dir>/openschema.lock` |
-| `--frozen` | fail if the ordinal ledger is missing or out of date | off |
-| `--no-lock` | skip ordinal-ledger validation entirely | off |
-
-```bash
-openschema gen order.schema --target sql --out ./generated
-openschema gen order.schema --target ts  --out ./src/types
-openschema gen order.schema --target codec --out ./src/wire
-openschema gen acme-overlay.schema --target sql --out ./acme --company acme
-openschema gen order.schema --target graphql --include-private --out ./internal-api
-```
-
-On a semantic error (an undefined type, a duplicate ordinal, an unresolved
-import), `gen` prints the diagnostics with their codes and exits `1` without
-writing output.
-
-`gen` validates the [ordinal ledger](./ordinal-ledger.md) but never writes it — see
-that document for why.
-
 ## `lock <schema>`
 
-Create or update the [ordinal ledger](./ordinal-ledger.md), which prevents a
-retired wire tag from being reclaimed.
+Reconcile the [ordinal ledger](./ordinal-ledger.md) without generating anything.
+Generating already maintains the lockfile, so this command exists for CI and for
+the occasional case where you want the ledger updated without output.
 
 | Flag | Meaning | Default |
 |------|---------|---------|
@@ -107,8 +117,8 @@ retired wire tag from being reclaimed.
 | `--json` | machine-readable output | off |
 
 ```bash
-openschema lock order.schema           # create or update, then commit the lockfile
 openschema lock order.schema --check   # CI gate
+openschema lock order.schema           # update without generating
 ```
 
 ### Wiring the ledger into CI

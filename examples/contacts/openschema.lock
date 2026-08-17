@@ -1,0 +1,1374 @@
+{
+  "lockfileVersion": 1,
+  "generator": "openschema 0.1.0",
+  "createdAt": "2026-07-28T11:47:56.979Z",
+  "updatedAt": "2026-07-28T11:47:56.979Z",
+  "baseline": true,
+  "digest": "sha256-05b9a722662bc6efe2d1a40e4982a1953c8dd10a9a4c839a61672a300f2e6d97",
+  "spaces": {
+    "enum:contacts.ContactScope": {
+      "kind": "enum",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "ACTIVE",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "ARCHIVED",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "TRASHED",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "ALL",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "enum:contacts.ContactSortField": {
+      "kind": "enum",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "FORMATTED_NAME",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "CREATED_AT",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "UPDATED_AT",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "BIRTHDAY",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "enum:contacts.shared.SortDirection": {
+      "kind": "enum",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "ASC",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "DESC",
+          "type": null,
+          "encoding": null,
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.Address": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "types",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "pref",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "label",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "po_box",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "ext",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "street",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "locality",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "8": {
+          "state": "active",
+          "name": "region",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "9": {
+          "state": "active",
+          "name": "postal_code",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "10": {
+          "state": "active",
+          "name": "country",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.Contact": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "uid",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "kind",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "formatted_name",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "name",
+          "type": "Name?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "nicknames",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "birthday",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "8": {
+          "state": "active",
+          "name": "anniversary",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "9": {
+          "state": "active",
+          "name": "gender",
+          "type": "Gender?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "10": {
+          "state": "active",
+          "name": "emails",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "11": {
+          "state": "active",
+          "name": "phones",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "12": {
+          "state": "active",
+          "name": "impps",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "13": {
+          "state": "active",
+          "name": "languages",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "14": {
+          "state": "active",
+          "name": "addresses",
+          "type": "[Address]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "15": {
+          "state": "active",
+          "name": "organizations",
+          "type": "[ContactOrganization]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "16": {
+          "state": "active",
+          "name": "title",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "17": {
+          "state": "active",
+          "name": "role",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "18": {
+          "state": "active",
+          "name": "timezone",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "19": {
+          "state": "active",
+          "name": "geo",
+          "type": "Geo?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "20": {
+          "state": "active",
+          "name": "categories",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "21": {
+          "state": "active",
+          "name": "notes",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "22": {
+          "state": "active",
+          "name": "urls",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "23": {
+          "state": "active",
+          "name": "source",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "24": {
+          "state": "active",
+          "name": "prodid",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "25": {
+          "state": "active",
+          "name": "fburl",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "26": {
+          "state": "active",
+          "name": "caluri",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "27": {
+          "state": "active",
+          "name": "caladruri",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "28": {
+          "state": "active",
+          "name": "photo",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "29": {
+          "state": "active",
+          "name": "logo",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "30": {
+          "state": "active",
+          "name": "sound",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "31": {
+          "state": "active",
+          "name": "key",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "32": {
+          "state": "active",
+          "name": "custom_fields",
+          "type": "[CustomField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "33": {
+          "state": "active",
+          "name": "favorite",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "34": {
+          "state": "active",
+          "name": "archived",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "35": {
+          "state": "active",
+          "name": "deleted",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "36": {
+          "state": "active",
+          "name": "related",
+          "type": "[ContactRelation]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "37": {
+          "state": "active",
+          "name": "member_ids",
+          "type": "[uuid]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "38": {
+          "state": "active",
+          "name": "created_at",
+          "type": "timestamp",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "39": {
+          "state": "active",
+          "name": "updated_at",
+          "type": "timestamp",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactField": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "value",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "types",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "pref",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "label",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactFieldFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "value",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "type",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "formatted_name",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "kind",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "birthday",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "anniversary",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "title",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "role",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "timezone",
+          "type": "StringFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "8": {
+          "state": "active",
+          "name": "geo",
+          "type": "GeoFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "9": {
+          "state": "active",
+          "name": "emails",
+          "type": "FieldListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "10": {
+          "state": "active",
+          "name": "phones",
+          "type": "FieldListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "11": {
+          "state": "active",
+          "name": "impps",
+          "type": "FieldListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "12": {
+          "state": "active",
+          "name": "languages",
+          "type": "FieldListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "13": {
+          "state": "active",
+          "name": "urls",
+          "type": "FieldListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "14": {
+          "state": "active",
+          "name": "categories",
+          "type": "StringListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "15": {
+          "state": "active",
+          "name": "nicknames",
+          "type": "StringListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "16": {
+          "state": "active",
+          "name": "notes",
+          "type": "StringListFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "17": {
+          "state": "active",
+          "name": "favorite",
+          "type": "BoolFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "18": {
+          "state": "active",
+          "name": "archived",
+          "type": "BoolFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "19": {
+          "state": "active",
+          "name": "deleted",
+          "type": "BoolFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "20": {
+          "state": "active",
+          "name": "created_at",
+          "type": "DateFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "21": {
+          "state": "active",
+          "name": "updated_at",
+          "type": "DateFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "22": {
+          "state": "active",
+          "name": "and",
+          "type": "[ContactFilter]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "23": {
+          "state": "active",
+          "name": "or",
+          "type": "[ContactFilter]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "24": {
+          "state": "active",
+          "name": "not",
+          "type": "ContactFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactOrganization": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "name",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "units",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactRelation": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "contact_id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "types",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "pref",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactSort": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "field",
+          "type": "ContactSortField",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "direction",
+          "type": "SortDirection?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactVersion": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "contact_id",
+          "type": "uuid",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "uid",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "kind",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "formatted_name",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "name",
+          "type": "Name?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "nicknames",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "8": {
+          "state": "active",
+          "name": "birthday",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "9": {
+          "state": "active",
+          "name": "anniversary",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "10": {
+          "state": "active",
+          "name": "gender",
+          "type": "Gender?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "11": {
+          "state": "active",
+          "name": "emails",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "12": {
+          "state": "active",
+          "name": "phones",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "13": {
+          "state": "active",
+          "name": "impps",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "14": {
+          "state": "active",
+          "name": "languages",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "15": {
+          "state": "active",
+          "name": "addresses",
+          "type": "[Address]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "16": {
+          "state": "active",
+          "name": "organizations",
+          "type": "[ContactOrganization]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "17": {
+          "state": "active",
+          "name": "title",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "18": {
+          "state": "active",
+          "name": "role",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "19": {
+          "state": "active",
+          "name": "timezone",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "20": {
+          "state": "active",
+          "name": "geo",
+          "type": "Geo?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "21": {
+          "state": "active",
+          "name": "categories",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "22": {
+          "state": "active",
+          "name": "notes",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "23": {
+          "state": "active",
+          "name": "urls",
+          "type": "[ContactField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "24": {
+          "state": "active",
+          "name": "source",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "25": {
+          "state": "active",
+          "name": "prodid",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "26": {
+          "state": "active",
+          "name": "fburl",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "27": {
+          "state": "active",
+          "name": "caluri",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "28": {
+          "state": "active",
+          "name": "caladruri",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "29": {
+          "state": "active",
+          "name": "photo",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "30": {
+          "state": "active",
+          "name": "logo",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "31": {
+          "state": "active",
+          "name": "sound",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "32": {
+          "state": "active",
+          "name": "key",
+          "type": "uuid?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "33": {
+          "state": "active",
+          "name": "custom_fields",
+          "type": "[CustomField]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "34": {
+          "state": "active",
+          "name": "favorite",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "35": {
+          "state": "active",
+          "name": "archived",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "36": {
+          "state": "active",
+          "name": "deleted",
+          "type": "bool",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "37": {
+          "state": "active",
+          "name": "created_at",
+          "type": "timestamp",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "38": {
+          "state": "active",
+          "name": "parent_ids",
+          "type": "[uuid]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.ContactVersionFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "formatted_name",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "before",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.CustomField": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "label",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "value",
+          "type": "string",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.FieldListFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "any",
+          "type": "ContactFieldFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "isEmpty",
+          "type": "bool?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "size",
+          "type": "IntFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.Gender": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "sex",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "identity",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.Geo": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "lat",
+          "type": "f64",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "lng",
+          "type": "f64",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.Name": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "family",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "given",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "additional",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "prefixes",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "suffixes",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.BoolFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "eq",
+          "type": "bool?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.DateFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "eq",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "before",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "after",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.GeoFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "near",
+          "type": "Near?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.IntFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "eq",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "ne",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "gt",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "gte",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "lt",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "lte",
+          "type": "i32?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "in",
+          "type": "[i32]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.Near": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "lat",
+          "type": "f64",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "lng",
+          "type": "f64",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "radiusMeters",
+          "type": "f64",
+          "encoding": "singular:i64",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.StringFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "eq",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "ne",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "contains",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "startsWith",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "endsWith",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "6": {
+          "state": "active",
+          "name": "in",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "7": {
+          "state": "active",
+          "name": "exists",
+          "type": "bool?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    },
+    "model:contacts.shared.StringListFilter": {
+      "kind": "model",
+      "ordinals": {
+        "1": {
+          "state": "active",
+          "name": "has",
+          "type": "string?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "2": {
+          "state": "active",
+          "name": "hasAny",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "3": {
+          "state": "active",
+          "name": "hasAll",
+          "type": "[string]?",
+          "encoding": "wrapper:repeated",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "4": {
+          "state": "active",
+          "name": "isEmpty",
+          "type": "bool?",
+          "encoding": "singular:varint",
+          "since": "2026-07-28T11:47:56.979Z"
+        },
+        "5": {
+          "state": "active",
+          "name": "size",
+          "type": "IntFilter?",
+          "encoding": "singular:len",
+          "since": "2026-07-28T11:47:56.979Z"
+        }
+      }
+    }
+  }
+}

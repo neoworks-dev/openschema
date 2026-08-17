@@ -1,17 +1,21 @@
 # Code Generation
 
-The `gen` command turns a schema into source files for a chosen target.
+OpenSchema’s default command turns a schema into source files for a chosen target.
 
 ```bash
-openschema gen <schema> --target <target> --out <dir> [options]
+openschema <schema> --target <target> --out <dir> [options]
 ```
 
 | Flag | Meaning | Default |
 |------|---------|---------|
-| `--target`, `-t` | `sql`, `ts`, `go`, `json-schema`, `graphql`, `openapi`, `surrealdb`, `internal`, or `codec` (required) | — |
+| `--target`, `-t` | one or more targets, comma-separated (required) | — |
 | `--out`, `-o` | output directory (created if missing) | `.` |
 | `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
 | `--include-private` | include the schema's own `private` fields | off |
+
+Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
+`surrealdb`, `neoworks-ddl`, `internal`, `codec`. Pass several at once with a
+comma: `-t ts,zod,sql`.
 
 The `codec` target generates a canonical binary encoder and decoder, and writes
 `schema.codec.ts` rather than `schema.ts`. It has its own rules and its own set of
@@ -20,6 +24,10 @@ rejected constructs — see [Wire Format](./wire-format.md).
 The command parses the entry file, follows its `import`s, resolves the whole
 graph, reports any semantic errors (and stops on them), then writes the output.
 Each target writes a single `schema.<ext>` file.
+
+It also keeps `openschema.lock` — the [ordinal ledger](./ordinal-ledger.md) — up to
+date beside the entry file, and refuses to generate if the schema reuses a spent
+ordinal. See [`--frozen` and CI](./ordinal-ledger.md#who-may-write-the-lockfile).
 
 The examples below all use this source:
 
@@ -48,7 +56,7 @@ model Order {
 ## SQL (PostgreSQL)
 
 ```bash
-openschema gen order.schema --target sql --out ./out
+openschema order.schema --target sql --out ./out
 ```
 
 ```sql
@@ -91,7 +99,7 @@ Type mapping:
 ## TypeScript
 
 ```bash
-openschema gen order.schema --target ts --out ./out
+openschema order.schema --target ts --out ./out
 ```
 
 ```typescript
@@ -134,7 +142,7 @@ wire representation agree. Generic models emit as generic interfaces
 ## Go
 
 ```bash
-openschema gen order.schema --target go --out ./out
+openschema order.schema --target go --out ./out
 ```
 
 ```go
@@ -181,7 +189,7 @@ the default package is `schema`.
 ## JSON Schema
 
 ```bash
-openschema gen order.schema --target json-schema --out ./out
+openschema order.schema --target json-schema --out ./out
 ```
 
 ```json
@@ -218,7 +226,7 @@ openschema gen order.schema --target json-schema --out ./out
 ## GraphQL
 
 ```bash
-openschema gen order.schema --target graphql --out ./out
+openschema order.schema --target graphql --out ./out
 ```
 
 ```graphql
@@ -294,7 +302,7 @@ and are never suffixed.
 ## OpenAPI
 
 ```bash
-openschema gen api.schema --target openapi --out ./out
+openschema api.schema --target openapi --out ./out
 ```
 
 The OpenAPI generator turns [operations](./language-reference.md#operations-and-interfaces)
@@ -392,10 +400,10 @@ Key behaviors:
 
 ## Multi-file projects
 
-Point `gen` at the entry file; it follows imports automatically:
+Point the compiler at the entry file; it follows imports automatically:
 
 ```bash
-openschema gen orders.schema --target sql --out ./out
+openschema orders.schema --target sql --out ./out
 ```
 
 If `orders.schema` imports `Money` from `common.schema`, both the `orders` and
@@ -407,7 +415,7 @@ If `orders.schema` imports `Money` from `common.schema`, both the `orders` and
 When a [company overlay](./overlays.md) exists, generate that company's view:
 
 ```bash
-openschema gen acme-overlay.schema --target sql --out ./out --company acme
+openschema acme-overlay.schema --target sql --out ./out --company acme
 ```
 
 The overlay's fields are added to the base model's output, namespaced by

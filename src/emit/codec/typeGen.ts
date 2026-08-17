@@ -3,7 +3,7 @@
 
 import type { EnumDecl } from "../../parser/ast.js";
 import type { DeclSymbol } from "../../resolver/types.js";
-import { UNKNOWN_PROPERTY, type ModelPlan } from "./plan.js";
+import { UNKNOWN_PROPERTY, isOptional, type ModelPlan } from "./plan.js";
 
 export function emitEnum(symbol: DeclSymbol): string {
   const decl = symbol.decl as EnumDecl;
@@ -12,7 +12,10 @@ export function emitEnum(symbol: DeclSymbol): string {
 }
 
 export function emitInterface(plan: ModelPlan): string {
-  const lines = plan.fields.map(field => `  ${propertyName(field.name)}: ${field.tsType};`);
+  const lines = plan.fields.map(field => {
+    const optional = isOptional(field.container) ? "?" : "";
+    return `  ${propertyName(field.name)}${optional}: ${field.tsType};`;
+  });
   // Present only when the message carried fields this schema does not declare.
   lines.push(`  ${UNKNOWN_PROPERTY}?: UnknownField[];`);
   return [`export interface ${plan.name} {`, ...lines, "}"].join("\n");

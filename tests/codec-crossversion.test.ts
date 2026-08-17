@@ -56,11 +56,11 @@ describe("read, edit, write on an older client", () => {
 });
 
 describe("newer client reading older data", () => {
-  it("defaults new nullable fields to null and new repeated fields to []", async () => {
+  it("leaves new optional fields undefined and defaults new repeated fields to []", async () => {
     const v1 = await loadCodec("namespace t\nmodel N { 1 a: i32 }");
     const v2 = await loadCodec("namespace t\nmodel N { 1 a: i32  2 b: string?  3 c: [i32] }");
     const back = v2.decodeN(v1.encodeN({ a: 1 }));
-    expect(back.b).toBeNull();
+    expect(back.b).toBeUndefined();
     expect(back.c).toEqual([]);
   });
 

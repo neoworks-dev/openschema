@@ -39,8 +39,16 @@ describe("baseline", () => {
     expect(result.changed).toBe(true);
   });
 
-  it("warns that protection is disabled when no ledger exists", () => {
-    expect(codes(run(V1, null))).toEqual(["OS2011"]);
+  // Update mode is what creates the baseline, so a missing ledger is the normal
+  // first run, not a problem to report.
+  it("says nothing about a missing ledger when it is about to create one", () => {
+    expect(codes(run(V1, null))).toEqual([]);
+  });
+
+  it("warns that protection is disabled when checking without a ledger", () => {
+    const result = run(V1, null, { mode: "check" });
+    expect(codes(result)).toEqual(["OS2011"]);
+    expect(result.diagnostics[0].severity).toBe("warning");
   });
 
   it("errors instead when a ledger is required", () => {

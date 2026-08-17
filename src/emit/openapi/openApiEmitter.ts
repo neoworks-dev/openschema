@@ -139,6 +139,7 @@ function mapType(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): Js
     }
     case "map":      return { type: "object", additionalProperties: mapType(type.value, inputMode, schema) };
     case "nullable": return mapType(type.inner, inputMode, schema);
+    case "null":     return { type: "null" };
     case "union":    return { oneOf: type.variants.map(v => mapType(v, inputMode, schema)) };
     case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type, inputMode, schema)) };
   }

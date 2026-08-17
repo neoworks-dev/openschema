@@ -36,6 +36,7 @@ const KEYWORDS = new Map<string, TokenKind>([
   ["time",        TokenKind.Time],
   ["timestamp",   TokenKind.Timestamp],
   ["duration",    TokenKind.Duration],
+  ["null",        TokenKind.Null],
   ["private",     TokenKind.Private],
   ["extends",     TokenKind.Extends],
 ]);

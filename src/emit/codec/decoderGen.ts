@@ -77,17 +77,16 @@ function declareLocal(field: FieldPlan): string {
   const element = valueTsType(field.value);
   switch (field.container.kind) {
     case "singular":
-      if (field.container.nullable) return `let ${name}: ${element} | null = null;`;
       return `let ${name}: ${element} | undefined;`;
     case "repeatedPacked":
     case "repeatedLen":
       return `const ${name}: ${element}[] = [];`;
     case "wrapperRepeated":
-      return `let ${name}: ${element}[] | null = null;`;
+      return `let ${name}: ${element}[] | undefined;`;
     case "map":
       return `const ${name} = new Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}>();`;
     case "wrapperMap":
-      return `let ${name}: Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}> | null = null;`;
+      return `let ${name}: Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}> | undefined;`;
   }
 }
 
@@ -135,13 +134,13 @@ function caseBody(field: FieldPlan, path: string, oneofs: OneofNames): string {
 }
 
 function packedRead(field: FieldPlan, target: string, path: string): string {
-  const wire = wireTypeOf(field.value);
-  if (wire === WireType.I64) {
+  if (wireTypeOf(field.value) === WireType.I64) {
     return `readPackedDouble(r, wire, ${path}, ${target});`;
   }
+  const family = varintFamily(field.value);
   return [
-    `const raw: bigint[] = [];`,
-    `readPackedVarint(r, wire, ${path}, raw);`,
+    `const raw: ${RAW_TYPE[family]}[] = [];`,
+    `${PACKED_READER[family]}(r, wire, ${path}, raw);`,
     `for (const item of raw) ${target}.push(${fromVarint(field.value, "item", path)});`,
   ].join("\n");
 }
@@ -176,9 +175,10 @@ function packedWrapperRead(field: FieldPlan, path: string): string {
   if (wireTypeOf(field.value) === WireType.I64) {
     return `readPackedDouble(wrapper, innerWire, ${path}, items);`;
   }
+  const family = varintFamily(field.value);
   return [
-    `const raw: bigint[] = [];`,
-    `readPackedVarint(wrapper, innerWire, ${path}, raw);`,
+    `const raw: ${RAW_TYPE[family]}[] = [];`,
+    `${PACKED_READER[family]}(wrapper, innerWire, ${path}, raw);`,
     `for (const item of raw) items.push(${fromVarint(field.value, "item", path)});`,
   ].join("\n");
 }
@@ -248,7 +248,7 @@ function readValue(
 ): string {
   switch (value.kind) {
     case "scalar":  return scalarRead(value.scalar, reader, wire, path);
-    case "enum":    return `Number(readVarintField(${reader}, ${wire}, ${path})) as ${value.name}`;
+    case "enum":    return `readUnsignedField(${reader}, ${wire}, ${path}) as ${value.name}`;
     case "decimal": return `canonicalDecimal(readStringField(${reader}, ${wire}, ${path}), ${value.precision}, ${value.scale}, ${path})`;
     case "message": return `read${value.name}(${subMessage(reader, wire, path)}, ${path})`;
     case "oneof":   return `${oneofs.get(value)}(${subMessage(reader, wire, path)}, ${path})`;
@@ -259,49 +259,76 @@ function subMessage(reader: string, wire: string, path: string): string {
   return `(expectWire(${wire}, WIRE_LEN, ${path}), ${reader}.subMessage(${path}))`;
 }
 
-function scalarRead(scalar: ScalarKind, reader: string, wire: string, path: string): string {
-  const varint = `readVarintField(${reader}, ${wire}, ${path})`;
-  switch (scalar) {
-    case "bool":      return `${varint} !== 0n`;
-    case "i8":
-    case "i16":
-    case "i32":       return `signedNumber(${varint}, ${path})`;
-    case "i64":       return `toSigned(${varint})`;
+/**
+ * How wide a varint scalar actually has to be read. Only i64, u64 and duration
+ * genuinely need 64 bits; everything else fits in a double's integer range, and
+ * reading it as a number keeps BigInt out of the hot path entirely.
+ */
+type VarintFamily = "signed" | "unsigned" | "bigint";
+
+function varintFamily(value: ValueShape): VarintFamily {
+  if (value.kind === "enum") return "unsigned";
+  if (value.kind !== "scalar") return "bigint";
+  switch (value.scalar) {
+    case "bool":
     case "u8":
     case "u16":
-    case "u32":       return `unsignedNumber(${varint}, ${path})`;
-    case "u64":       return varint;
-    case "f32":
-    case "f64":       return `readDoubleField(${reader}, ${wire}, ${path})`;
-    case "string":    return `readStringField(${reader}, ${wire}, ${path})`;
-    case "bytes":     return `readBytesField(${reader}, ${wire}, ${path})`;
-    case "uuid":      return `bytesToUuid(readBytesField(${reader}, ${wire}, ${path}), ${path})`;
-    case "json":      return `parseJson(readStringField(${reader}, ${wire}, ${path}), ${path})`;
-    case "date":      return `daysToDate(toSigned(${varint}), ${path})`;
-    case "time":      return `nanosToTime(toSigned(${varint}), ${path})`;
-    case "timestamp": return `millisToTimestamp(toSigned(${varint}), ${path})`;
-    case "duration":  return `toSigned(${varint})`;
+    case "u32":       return "unsigned";
+    case "i8":
+    case "i16":
+    case "i32":
+    case "date":
+    case "time":
+    case "timestamp": return "signed";
+    default:          return "bigint";
   }
 }
 
-/** Convert a value already read from a packed varint body. */
+const FIELD_READER: Record<VarintFamily, string> = {
+  signed:   "readSignedField",
+  unsigned: "readUnsignedField",
+  bigint:   "readVarintField",
+};
+
+const PACKED_READER: Record<VarintFamily, string> = {
+  signed:   "readPackedSigned",
+  unsigned: "readPackedUnsigned",
+  bigint:   "readPackedVarint",
+};
+
+const RAW_TYPE: Record<VarintFamily, string> = {
+  signed:   "number",
+  unsigned: "number",
+  bigint:   "bigint",
+};
+
+function scalarRead(scalar: ScalarKind, reader: string, wire: string, path: string): string {
+  switch (scalar) {
+    case "f32":
+    case "f64":    return `readDoubleField(${reader}, ${wire}, ${path})`;
+    case "string": return `readStringField(${reader}, ${wire}, ${path})`;
+    case "bytes":  return `readBytesField(${reader}, ${wire}, ${path})`;
+    case "uuid":   return `bytesToUuid(readBytesField(${reader}, ${wire}, ${path}), ${path})`;
+    case "json":   return `parseJson(readStringField(${reader}, ${wire}, ${path}), ${path})`;
+    default: {
+      const value: ValueShape = { kind: "scalar", scalar };
+      const raw = `${FIELD_READER[varintFamily(value)]}(${reader}, ${wire}, ${path})`;
+      return fromVarint(value, raw, path);
+    }
+  }
+}
+
+/** Convert a varint that has already been read at its family's width. */
 function fromVarint(value: ValueShape, source: string, path: string): string {
-  if (value.kind === "enum") return `Number(${source}) as ${value.name}`;
+  if (value.kind === "enum") return `${source} as ${value.name}`;
   if (value.kind !== "scalar") return source;
   switch (value.scalar) {
-    case "bool":      return `${source} !== 0n`;
-    case "i8":
-    case "i16":
-    case "i32":       return `signedNumber(${source}, ${path})`;
-    case "i64":       return `toSigned(${source})`;
-    case "u8":
-    case "u16":
-    case "u32":       return `unsignedNumber(${source}, ${path})`;
-    case "u64":       return source;
-    case "date":      return `daysToDate(toSigned(${source}), ${path})`;
-    case "time":      return `nanosToTime(toSigned(${source}), ${path})`;
-    case "timestamp": return `millisToTimestamp(toSigned(${source}), ${path})`;
+    case "bool":      return `${source} !== 0`;
+    case "i64":
     case "duration":  return `toSigned(${source})`;
+    case "date":      return `daysToDate(${source}, ${path})`;
+    case "time":      return `nanosToTime(${source}, ${path})`;
+    case "timestamp": return `millisToTimestamp(${source}, ${path})`;
     default:          return source;
   }
 }

@@ -5,7 +5,7 @@
 // Exposes the compiler over stdio so an LLM agent can validate, generate,
 // diff, and inspect OpenSchema projects. Every tool is a thin wrapper over
 // the same public API the CLI uses (loadProject / resolveModules / getEmitter
-// / engine diff), so behaviour stays identical to `openschema gen|diff`.
+// / engine diff), so behaviour stays identical to the CLI.
 
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";

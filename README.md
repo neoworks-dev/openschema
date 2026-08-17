@@ -28,7 +28,7 @@ model Order {
 ```
 
 ```bash
-openschema gen order.schema --target sql --out ./generated
+openschema order.schema --target sql --out ./generated
 ```
 
 ```sql

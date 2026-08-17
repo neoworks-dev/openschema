@@ -111,7 +111,7 @@ Both can coexist on the same model.
 Generate the base schema plus one company's overlay with `--company`:
 
 ```bash
-openschema gen acme-overlay.schema --target sql --out ./out --company acme
+openschema acme-overlay.schema --target sql --out ./out --company acme
 ```
 
 The overlay fields are added to the base model's table, **namespaced by
@@ -148,8 +148,8 @@ multi-company project:
 Generate the shared view and ACME's view and compare:
 
 ```bash
-openschema gen examples/ecommerce/orders.schema       --target sql --out ./shared
-openschema gen examples/ecommerce/acme-overlay.schema --target sql --out ./acme --company acme
+openschema examples/ecommerce/orders.schema       --target sql --out ./shared
+openschema examples/ecommerce/acme-overlay.schema --target sql --out ./acme --company acme
 ```
 
 The overlay file imports `Order` (which itself imports `common`), so the whole

@@ -93,12 +93,12 @@ describe("presence", () => {
     expect(back.opt).toBe(0);
   });
 
-  it("omits a null optional and decodes it back to null", async () => {
+  it("omits an absent optional and decodes it back to undefined", async () => {
     const codec = await loadCodec(PRESENCE);
-    const withNull = codec.encodeP({ n: 1, s: "x", b: true, opt: null });
+    const withAbsent = codec.encodeP({ n: 1, s: "x", b: true, opt: undefined });
     const withZero = codec.encodeP({ n: 1, s: "x", b: true, opt: 0 });
-    expect(withNull.length).toBeLessThan(withZero.length);
-    expect(codec.decodeP(withNull).opt).toBeNull();
+    expect(withAbsent.length).toBeLessThan(withZero.length);
+    expect(codec.decodeP(withAbsent).opt).toBeUndefined();
   });
 
   it("throws naming the model, field, and tag when a required field is absent", async () => {
@@ -121,22 +121,22 @@ describe("containers", () => {
     expect(codec.decodeC(codec.encodeC({ ns: [] })).ns).toEqual([]);
   });
 
-  // The user-chosen semantics: a nullable array keeps null and [] distinct.
-  it("keeps null and [] distinct for a nullable array", async () => {
+  // The user-chosen semantics: an optional array keeps absent and [] distinct.
+  it("keeps absent and [] distinct for an optional array", async () => {
     const codec = await loadCodec("namespace t\nmodel C { 1 ns: [i32]? }");
-    expect(codec.decodeC(codec.encodeC({ ns: null })).ns).toBeNull();
+    expect(codec.decodeC(codec.encodeC({ ns: undefined })).ns).toBeUndefined();
     expect(codec.decodeC(codec.encodeC({ ns: [] })).ns).toEqual([]);
     expect(codec.decodeC(codec.encodeC({ ns: [7] })).ns).toEqual([7]);
   });
 
-  it("round-trips a map and a nullable map", async () => {
+  it("round-trips a map and an optional map", async () => {
     const codec = await loadCodec("namespace t\nmodel C { 1 m: {string: i32}  2 o: {string: string}? }");
     const back = codec.decodeC(codec.encodeC({
       m: new Map([["a", 1], ["b", 2]]),
-      o: null,
+      o: undefined,
     }));
     expect([...back.m.entries()]).toEqual([["a", 1], ["b", 2]]);
-    expect(back.o).toBeNull();
+    expect(back.o).toBeUndefined();
   });
 
   it("round-trips integer map keys", async () => {
@@ -157,16 +157,16 @@ describe("nested and recursive messages", () => {
   it("round-trips a self-recursive message", async () => {
     const codec = await loadCodec("namespace t\nmodel Node { 1 name: string  2 child: Node? }");
     const back = codec.decodeNode(codec.encodeNode({
-      name: "a", child: { name: "b", child: { name: "c", child: null } },
+      name: "a", child: { name: "b", child: { name: "c", child: undefined } },
     }));
     expect(back.child.child.name).toBe("c");
-    expect(back.child.child.child).toBeNull();
+    expect(back.child.child.child).toBeUndefined();
   });
 
   it("round-trips mutually recursive messages", async () => {
     const codec = await loadCodec("namespace t\nmodel A { 1 b: B? }\nmodel B { 1 a: A? }");
-    const back = codec.decodeA(codec.encodeA({ b: { a: { b: null } } }));
-    expect(back.b.a.b).toBeNull();
+    const back = codec.decodeA(codec.encodeA({ b: { a: { b: undefined } } }));
+    expect(back.b.a.b).toBeUndefined();
   });
 });
 

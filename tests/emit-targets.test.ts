@@ -10,18 +10,67 @@ function emit(target: string, src: string, company: string | null = null): strin
   return files[0].contents;
 }
 
+// `T?` (absent) and `T | null` (present, holding null) are separate things.
+// Targets whose type system has both keep them apart; the rest collapse them.
+describe("the null type", () => {
+  const SRC = `namespace t
+model R {
+  1 required: string
+  2 optional: string?
+  3 maybeNull: string | null
+  4 both: (string | null)?
+}`;
+
+  it("ts: keeps optional and nullable distinct", () => {
+    const out = emit("ts", SRC);
+    expect(out).toContain("required: string;");
+    expect(out).toContain("optional?: string;");
+    expect(out).toContain("maybeNull: string | null;");
+    expect(out).toContain("both?: string | null;");
+  });
+
+  // The wire format models presence, not null: an absent tag is the only way to
+  // say "no value", so the null arm carries no information and is dropped.
+  it("codec: ignores the null arm", () => {
+    const out = emit("codec", SRC);
+    expect(out).toContain("required: string;");
+    expect(out).toContain("optional?: string;");
+    expect(out).toContain("maybeNull: string;");
+    expect(out).toContain("both?: string;");
+  });
+
+  // GraphQL has one concept for both, so `T | null` is simply a nullable field.
+  it("graphql: renders a nullable field rather than JSON", () => {
+    const out = emit("graphql", SRC);
+    expect(out).toContain("required: String!");
+    expect(out).toContain("maybeNull: String");
+    expect(out).toContain("both: String");
+    expect(out).not.toContain("maybeNull: JSON");
+  });
+
+  it("json-schema: admits the null type", () => {
+    const out = emit("json-schema", SRC);
+    expect(out).toContain('"type": "null"');
+  });
+});
+
 describe("typescript emitter", () => {
+  // Enums emit as string unions of the variant names, not numeric enums — this
+  // target is a JSON-serialized DTO surface, so the name is what travels. The
+  // codec target keeps numeric enums, where the ordinal is the wire encoding.
   it("emits an interface and an enum", () => {
     const out = emit("ts", "enum S { 1 a  2 b }  model R { 1 x: i32  2 s: S }");
-    expect(out).toContain("export enum S {");
-    expect(out).toContain("a = 1,");
+    expect(out).toContain("export type S =");
+    expect(out).toContain('| "a"');
+    expect(out).toContain('| "b"');
     expect(out).toContain("export interface R {");
     expect(out).toContain("x: number;");
   });
 
-  it("makes nullable fields optional unions", () => {
+  // `T?` means absent, i.e. undefined — an optional property, not a null union.
+  it("makes nullable fields optional properties", () => {
     const out = emit("ts", "model R { 1 a: string?  2 b: [i32] }");
-    expect(out).toContain("a?: string | null;");
+    expect(out).toContain("a?: string;");
     expect(out).toContain("b: number[];");
   });
 
@@ -34,7 +83,7 @@ describe("typescript emitter", () => {
   it("maps the json scalar to unknown", () => {
     const out = emit("ts", "model R { 1 meta: json  2 opt: json? }");
     expect(out).toContain("meta: unknown;");
-    expect(out).toContain("opt?: unknown | null;");
+    expect(out).toContain("opt?: unknown;");
   });
 
   it("parenthesises array elements that are unions", () => {
@@ -411,7 +460,7 @@ describe("@link across targets", () => {
 
   it("ts: renders a @link field as the primary-key scalar", () => {
     const out = emit("ts", SRC);
-    expect(out).toContain("location?: string | null;");
+    expect(out).toContain("location?: string;");
     expect(out).not.toContain("location?: GeoPoint");
   });
 

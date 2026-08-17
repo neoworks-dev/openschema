@@ -45,11 +45,11 @@ Two design choices make this practical:
 | [Getting Started](./getting-started.md) | Install, write your first schema, generate code |
 | [Language Reference](./language-reference.md) | Every construct in the language, with examples |
 | [Decorators](./decorators.md) | The built-in decorator vocabulary |
-| [Code Generation](./code-generation.md) | The `gen` command and every output target |
+| [Code Generation](./code-generation.md) | The default command and every output target |
 | [Overlays](./overlays.md) | Sharing a schema across companies with private fields |
 | [Compatibility Checking](./compatibility.md) | `diff`, `check`, compatibility modes, suppressing rules |
 | [Wire Format](./wire-format.md) | The `codec` target's binary encoding |
-| [Ordinal Ledger](./ordinal-ledger.md) | `lock`, and why an ordinal can never be reused |
+| [Ordinal Ledger](./ordinal-ledger.md) | The auto-maintained lockfile, and why an ordinal can never be reused |
 | [CLI Reference](./cli.md) | Every command and flag |
 | [Use Cases](./use-cases.md) | End-to-end scenarios this tool is designed for |
 
@@ -78,7 +78,7 @@ model Order {
 Generate a PostgreSQL table:
 
 ```bash
-openschema gen order.schema --target sql --out ./generated
+openschema order.schema --target sql --out ./generated
 ```
 
 ```sql

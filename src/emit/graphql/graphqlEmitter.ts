@@ -182,8 +182,27 @@ function findRecordByLocalName(schema: ResolvedSchema, local: string): ResolvedM
 // ── Type rendering (nullability inversion) ────────────────────────────────────
 
 function renderType(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): string {
-  if (type.kind === "nullable") return renderInner(type.inner, inputMode, schema);
+  // `T | null` is GraphQL's plain nullable T: drop the `!`, keep the arm. An
+  // optional `T?` is already nullable, so `(T | null)?` collapses to the same.
+  if (type.kind === "nullable") {
+    const strippedInner = unionWithoutNull(type.inner);
+    if (strippedInner !== null) return renderInner(strippedInner, inputMode, schema);
+    return renderInner(type.inner, inputMode, schema);
+  }
+
+  const nullableInner = unionWithoutNull(type);
+  if (nullableInner !== null) return renderInner(nullableInner, inputMode, schema);
+
   return `${renderInner(type, inputMode, schema)}!`;
+}
+
+/** The sole remaining arm of a `T | null` union, or null when it is not one. */
+function unionWithoutNull(type: TypeExpr): TypeExpr | null {
+  if (type.kind !== "union") return null;
+  const arms = type.variants.filter(variant => variant.kind !== "null");
+  if (arms.length === type.variants.length) return null;
+  if (arms.length !== 1) return null;
+  return arms[0]!;
 }
 
 function renderInner(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): string {
@@ -196,6 +215,8 @@ function renderInner(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema)
     case "union":    return "JSON";
     case "oneof":    return "JSON";
     case "nullable": return renderInner(type.inner, inputMode, schema);
+    // Reached only for a bare `null`; `T | null` is handled in renderType.
+    case "null":     return "JSON";
   }
 }
 

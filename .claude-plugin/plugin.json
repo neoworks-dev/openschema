@@ -1,0 +1,19 @@
+{
+  "name": "openschema-lsp",
+  "description": "OpenSchema language server: live diagnostics (OS#### codes), hover, go-to-definition, and completion for .schema/.openschema files.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Moritz Utcke",
+    "email": "info@neoworks.dev"
+  },
+  "lspServers": {
+    "openschema": {
+      "command": "bun",
+      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/src/lsp/server.ts"],
+      "extensionToLanguage": {
+        ".schema": "openschema",
+        ".openschema": "openschema"
+      }
+    }
+  }
+}

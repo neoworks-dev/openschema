@@ -5,6 +5,19 @@
 // OpenSchema target produces one self-contained file. The trade-off is that this
 // source is not typechecked by the package's own tsc, so the test suite executes
 // the generated output and CI runs `tsc --noEmit` over it.
+//
+// Performance is a correctness-adjacent concern here: this code runs per row on
+// a user's device, inside the encrypt/decrypt path. Three rules keep it honest:
+//
+//   - BigInt only where the value genuinely needs 64 bits (i64, u64, duration).
+//     Field tags, lengths, and every scalar that fits in 2^53 use plain numbers.
+//   - One growing Uint8Array per encode. Nested messages are written in place
+//     and their length back-filled, rather than each building its own buffer.
+//   - No allocation per primitive: a DataView is kept alongside the buffer, and
+//     strings are written straight into it with TextEncoder.encodeInto.
+//
+// None of this changes a single emitted byte — codec-golden.test.ts pins the
+// wire format against hardcoded vectors.
 export const CODEC_RUNTIME = String.raw `
 // ── Wire primitives ───────────────────────────────────────────────────────────
 
@@ -18,6 +31,11 @@ export const MAX_ORDINAL = 536870911;
 
 /** Guards against a hostile buffer driving unbounded recursion. */
 const MAX_DEPTH = 100;
+
+/** Above this a double can no longer represent every integer exactly. */
+const MAX_SAFE = 9007199254740991;
+
+const TWO_TO_32 = 4294967296;
 
 export interface UnknownField {
   tag: number;
@@ -38,49 +56,165 @@ const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
 // ── Writer ────────────────────────────────────────────────────────────────────
 
+/** Bytes a varint of this non-negative value occupies. */
+function varintWidth(value: number): number {
+  if (value < 0x80) return 1;
+  if (value < 0x4000) return 2;
+  if (value < 0x200000) return 3;
+  if (value < 0x10000000) return 4;
+  return 5;
+}
+
+function writeVarintAt(bytes: Uint8Array, offset: number, value: number): void {
+  let position = offset;
+  let remaining = value;
+  while (remaining > 0x7f) {
+    bytes[position++] = (remaining & 0x7f) | 0x80;
+    remaining >>>= 7;
+  }
+  bytes[position] = remaining;
+}
+
 export class Writer {
-  private bytes: number[] = [];
+  private bytes: Uint8Array;
+  private view: DataView;
+  private length = 0;
+
+  constructor(capacity: number = 256) {
+    this.bytes = new Uint8Array(capacity);
+    this.view = new DataView(this.bytes.buffer);
+  }
+
+  private reserve(extra: number): void {
+    const needed = this.length + extra;
+    if (needed <= this.bytes.length) return;
+
+    let capacity = this.bytes.length * 2;
+    while (capacity < needed) capacity *= 2;
+    const grown = new Uint8Array(capacity);
+    grown.set(this.bytes.subarray(0, this.length));
+    this.bytes = grown;
+    this.view = new DataView(grown.buffer);
+  }
 
   raw(source: Uint8Array): void {
-    for (let i = 0; i < source.length; i++) this.bytes.push(source[i]);
+    this.reserve(source.length);
+    this.bytes.set(source, this.length);
+    this.length += source.length;
   }
 
   key(tag: number, wire: number): void {
     // Multiply rather than shift: tag << 3 overflows int32 above 2^28.
-    this.varint(BigInt(tag) * 8n + BigInt(wire));
+    this.varintNumber(tag * 8 + wire);
+  }
+
+  /**
+   * The common path. Anything that fits in a double's integer range comes
+   * through here; only i64/u64/duration need the BigInt variant below.
+   */
+  varintNumber(value: number): void {
+    // Negatives are sign-extended to 64 bits, which is past the number range.
+    if (value < 0) { this.varint(BigInt(value)); return; }
+
+    this.reserve(10);
+    const bytes = this.bytes;
+    let position = this.length;
+    let remaining = value;
+
+    if (remaining <= 0x7fffffff) {
+      while (remaining > 0x7f) {
+        bytes[position++] = (remaining & 0x7f) | 0x80;
+        remaining >>>= 7;
+      }
+    } else {
+      // Bitwise operators coerce to int32, so anything wider has to use
+      // arithmetic. Exact for every integer below 2^53.
+      while (remaining > 0x7f) {
+        bytes[position++] = (remaining % 128) | 0x80;
+        remaining = Math.floor(remaining / 128);
+      }
+    }
+
+    bytes[position++] = remaining;
+    this.length = position;
   }
 
   /** Plain two's-complement varint. Negative values always occupy 10 bytes. */
   varint(value: bigint): void {
-    let remaining = BigInt.asUintN(64, value);
-    while (true) {
-      const septet = Number(remaining & 0x7fn);
-      remaining >>= 7n;
-      if (remaining === 0n) {
-        this.bytes.push(septet);
-        return;
-      }
-      this.bytes.push(septet | 0x80);
+    if (value >= 0n && value <= 9007199254740991n) {
+      this.varintNumber(Number(value));
+      return;
     }
+
+    this.reserve(10);
+    const bytes = this.bytes;
+    let position = this.length;
+    let remaining = BigInt.asUintN(64, value);
+
+    while (remaining > 0x7fn) {
+      bytes[position++] = Number(remaining & 0x7fn) | 0x80;
+      remaining >>= 7n;
+    }
+    bytes[position++] = Number(remaining);
+    this.length = position;
   }
 
   double(value: number): void {
-    const buffer = new ArrayBuffer(8);
-    new DataView(buffer).setFloat64(0, value, true);
-    this.raw(new Uint8Array(buffer));
+    this.reserve(8);
+    this.view.setFloat64(this.length, value, true);
+    this.length += 8;
   }
 
   lengthDelimited(body: Uint8Array): void {
-    this.varint(BigInt(body.length));
+    this.varintNumber(body.length);
     this.raw(body);
   }
 
   string(value: string): void {
-    this.lengthDelimited(textEncoder.encode(value));
+    const lengthOffset = this.beginLengthDelimited();
+    // A UTF-16 code unit never expands past 3 UTF-8 bytes: astral characters
+    // arrive as two units and cost four, so 3x the length always fits.
+    this.reserve(value.length * 3);
+    const written = textEncoder.encodeInto(value, this.bytes.subarray(this.length)).written;
+    this.length += written;
+    this.endLengthDelimited(lengthOffset);
+  }
+
+  /**
+   * Write a nested message body in place, then back-fill its length prefix.
+   * The alternative — a fresh Writer per nesting level, copied back byte by
+   * byte — is what made encoding slower than JSON.stringify.
+   */
+  nested(write: (writer: Writer) => void): void {
+    const lengthOffset = this.beginLengthDelimited();
+    write(this);
+    this.endLengthDelimited(lengthOffset);
+  }
+
+  /** Reserves one byte for the length, which covers bodies under 128 bytes. */
+  private beginLengthDelimited(): number {
+    this.reserve(1);
+    const offset = this.length;
+    this.length += 1;
+    return offset;
+  }
+
+  private endLengthDelimited(lengthOffset: number): void {
+    const bodyStart = lengthOffset + 1;
+    const bodyLength = this.length - bodyStart;
+    const width = varintWidth(bodyLength);
+
+    if (width > 1) {
+      // reserve() may replace the backing array, so re-read it afterwards.
+      this.reserve(width - 1);
+      this.bytes.copyWithin(bodyStart + width - 1, bodyStart, this.length);
+      this.length += width - 1;
+    }
+    writeVarintAt(this.bytes, lengthOffset, bodyLength);
   }
 
   finish(): Uint8Array {
-    return Uint8Array.from(this.bytes);
+    return this.bytes.slice(0, this.length);
   }
 }
 
@@ -94,6 +228,10 @@ export function subMessageBytes(write: (writer: Writer) => void): Uint8Array {
 // ── Reader ────────────────────────────────────────────────────────────────────
 
 export class Reader {
+  /** The last varint read, split into two 32-bit halves. */
+  private lo = 0;
+  private hi = 0;
+
   constructor(
     private readonly buffer: Uint8Array,
     private position: number,
@@ -116,25 +254,87 @@ export class Reader {
     }
   }
 
-  varint(): bigint {
-    let result = 0n;
-    let shift = 0n;
-    for (let consumed = 0; consumed < 10; consumed++) {
-      this.require(1);
-      const byte = this.buffer[this.position++];
-      result |= BigInt(byte & 0x7f) << shift;
-      if ((byte & 0x80) === 0) return BigInt.asUintN(64, result);
-      shift += 7n;
+  /**
+   * Decode one varint into lo/hi without allocating. Bytes 1-4 fill the low 28
+   * bits, byte 5 straddles the halves, bytes 6-10 fill the high word.
+   */
+  private readVarint64(): void {
+    const buffer = this.buffer;
+    const end = this.end;
+    let position = this.position;
+    let lo = 0;
+    let hi = 0;
+    let byte = 0;
+
+    for (let shift = 0; shift < 28; shift += 7) {
+      if (position >= end) throw this.truncated();
+      byte = buffer[position++];
+      lo |= (byte & 0x7f) << shift;
+      if (byte < 0x80) { this.commitVarint(position, lo, 0); return; }
+    }
+
+    if (position >= end) throw this.truncated();
+    byte = buffer[position++];
+    lo |= (byte & 0x0f) << 28;
+    hi = (byte & 0x7f) >> 4;
+    if (byte < 0x80) { this.commitVarint(position, lo, hi); return; }
+
+    for (let shift = 3; shift < 32; shift += 7) {
+      if (position >= end) throw this.truncated();
+      byte = buffer[position++];
+      hi |= (byte & 0x7f) << shift;
+      if (byte < 0x80) { this.commitVarint(position, lo, hi); return; }
     }
     throw new CodecError("OVERLONG_VARINT", this.path, "varint exceeds 10 bytes");
   }
 
+  private commitVarint(position: number, lo: number, hi: number): void {
+    this.position = position;
+    this.lo = lo >>> 0;
+    this.hi = hi >>> 0;
+  }
+
+  private truncated(): CodecError {
+    return new CodecError("TRUNCATED", this.path, "buffer ended mid-value");
+  }
+
+  /** The raw 64-bit value, unsigned. Only for i64/u64/duration. */
+  varint(): bigint {
+    this.readVarint64();
+    if (this.hi === 0) return BigInt(this.lo);
+    return (BigInt(this.hi) << 32n) | BigInt(this.lo);
+  }
+
+  varintUnsigned(path: string): number {
+    this.readVarint64();
+    return unsignedFromHalves(this.lo, this.hi, path);
+  }
+
+  varintSigned(path: string): number {
+    this.readVarint64();
+    return signedFromHalves(this.lo, this.hi, path);
+  }
+
+  skipVarint(): void {
+    this.readVarint64();
+  }
+
   key(): number {
-    const raw = this.varint();
-    if (raw > 0xffffffffn) {
+    this.readVarint64();
+    if (this.hi !== 0) {
       throw new CodecError("BAD_TAG", this.path, "wire key exceeds 32 bits");
     }
-    return Number(raw);
+    return this.lo;
+  }
+
+  /** A length prefix: non-negative and inside the remaining buffer. */
+  private length(): number {
+    this.readVarint64();
+    const value = unsignedFromHalves(this.lo, this.hi, this.path);
+    if (this.position + value > this.end) {
+      throw new CodecError("TRUNCATED", this.path, "length-delimited field runs past the buffer");
+    }
+    return value;
   }
 
   double(): number {
@@ -152,86 +352,104 @@ export class Reader {
   }
 
   lengthDelimited(): Uint8Array {
-    const length = Number(this.varint());
-    if (length < 0 || this.position + length > this.end) {
-      throw new CodecError("TRUNCATED", this.path, "length-delimited field runs past the buffer");
-    }
+    const length = this.length();
     const slice = this.buffer.subarray(this.position, this.position + length);
     this.position += length;
     return slice;
   }
 
-  /** A bounded Reader over the next LEN field, one level deeper. */
+  /**
+   * A bounded Reader over the next LEN field, one level deeper. Bounds are
+   * carried as offsets into the same buffer, so no slice is materialised.
+   */
   subMessage(path: string): Reader {
     if (this.depth + 1 > MAX_DEPTH) {
       throw new CodecError("DEPTH", path, "message nesting exceeds " + MAX_DEPTH);
     }
-    const body = this.lengthDelimited();
-    return new Reader(body, 0, body.length, this.depth + 1, path);
+    const length = this.length();
+    const start = this.position;
+    this.position += length;
+    return new Reader(this.buffer, start, start + length, this.depth + 1, path);
   }
 
   /** A bounded Reader over a packed repeated body. */
   packed(path: string): Reader {
-    const body = this.lengthDelimited();
-    return new Reader(body, 0, body.length, this.depth, path);
+    const length = this.length();
+    const start = this.position;
+    this.position += length;
+    return new Reader(this.buffer, start, start + length, this.depth, path);
   }
 
   string(): string {
+    const length = this.length();
+    const start = this.position;
+    this.position += length;
     try {
-      return textDecoder.decode(this.lengthDelimited());
+      return textDecoder.decode(this.buffer.subarray(start, start + length));
     } catch {
       throw new CodecError("BAD_UTF8", this.path, "field is not valid UTF-8");
     }
   }
 
   bytes(): Uint8Array {
-    return Uint8Array.from(this.lengthDelimited());
+    return this.lengthDelimited().slice();
   }
 
   /** Consume one field, returning key + body verbatim for unknown-field capture. */
   captureRaw(key: number, wire: number): Uint8Array {
     const start = this.position;
     this.skipBody(wire);
-    const body = this.buffer.subarray(start, this.position);
+    const bodyLength = this.position - start;
 
-    const keyWriter = new Writer();
-    keyWriter.varint(BigInt(key));
-    const keyBytes = keyWriter.finish();
-
-    const raw = new Uint8Array(keyBytes.length + body.length);
-    raw.set(keyBytes, 0);
-    raw.set(body, keyBytes.length);
+    const keyWidth = varintWidth(key);
+    const raw = new Uint8Array(keyWidth + bodyLength);
+    writeVarintAt(raw, 0, key);
+    raw.set(this.buffer.subarray(start, this.position), keyWidth);
     return raw;
   }
 
   skipBody(wire: number): void {
-    if (wire === WIRE_VARINT) { this.varint(); return; }
+    if (wire === WIRE_VARINT) { this.skipVarint(); return; }
     if (wire === WIRE_I64) { this.require(8); this.position += 8; return; }
     if (wire === WIRE_I32) { this.require(4); this.position += 4; return; }
-    if (wire === WIRE_LEN) { this.lengthDelimited(); return; }
+    // Bound first: 'this.position += this.length()' would read position before
+    // length() advances it past the prefix, discarding that advance.
+    if (wire === WIRE_LEN) {
+      const bodyLength = this.length();
+      this.position += bodyLength;
+      return;
+    }
     throw new CodecError("BAD_WIRE_TYPE", this.path, "unsupported wire type " + wire);
   }
 }
 
 // ── Scalar conversions ────────────────────────────────────────────────────────
 
+function unsignedFromHalves(lo: number, hi: number, path: string): number {
+  // hi * 2^32 must stay below 2^53, so hi itself has to fit in 21 bits.
+  if (hi > 0x1fffff) {
+    throw new CodecError("PRECISION", path, "integer exceeds the safe range for a JS number");
+  }
+  return hi * TWO_TO_32 + lo;
+}
+
+function signedFromHalves(lo: number, hi: number, path: string): number {
+  if ((hi & 0x80000000) === 0) return unsignedFromHalves(lo, hi, path);
+
+  // Two's complement: negate the 64-bit pattern and report the magnitude.
+  let negatedLo = (~lo + 1) >>> 0;
+  let negatedHi = ~hi >>> 0;
+  if (negatedLo === 0) negatedHi = (negatedHi + 1) >>> 0;
+
+  const magnitude = negatedHi * TWO_TO_32 + negatedLo;
+  if (magnitude > MAX_SAFE) {
+    throw new CodecError("PRECISION", path, "integer exceeds the safe range for a JS number");
+  }
+  return -magnitude;
+}
+
 export function toSigned(raw: bigint): bigint {
   return BigInt.asIntN(64, raw);
-}
-
-export function signedNumber(raw: bigint, path: string): number {
-  const value = BigInt.asIntN(64, raw);
-  if (value > 9007199254740991n || value < -9007199254740991n) {
-    throw new CodecError("PRECISION", path, "integer exceeds the safe range for a JS number");
-  }
-  return Number(value);
-}
-
-export function unsignedNumber(raw: bigint, path: string): number {
-  if (raw > 9007199254740991n) {
-    throw new CodecError("PRECISION", path, "integer exceeds the safe range for a JS number");
-  }
-  return Number(raw);
 }
 
 export function requireUnsigned(value: number | bigint, path: string): bigint {
@@ -240,10 +458,17 @@ export function requireUnsigned(value: number | bigint, path: string): bigint {
   return asBigInt;
 }
 
-export function requireInteger(value: number, path: string): bigint {
+export function requireUnsignedNumber(value: number, path: string): number {
   if (!Number.isFinite(value)) throw new CodecError("RANGE", path, "value is not finite");
   if (!Number.isInteger(value)) throw new CodecError("RANGE", path, "value is not an integer");
-  return BigInt(value);
+  if (value < 0) throw new CodecError("RANGE", path, "unsigned field cannot be negative");
+  return value;
+}
+
+export function requireInteger(value: number, path: string): number {
+  if (!Number.isFinite(value)) throw new CodecError("RANGE", path, "value is not finite");
+  if (!Number.isInteger(value)) throw new CodecError("RANGE", path, "value is not an integer");
+  return value;
 }
 
 export function requireFinite(value: number, path: string): number {
@@ -255,13 +480,44 @@ export function requireFinite(value: number, path: string): number {
 
 const HEX = "0123456789abcdef";
 
+/** 512 two-character strings, so formatting a uuid is 16 lookups and a join. */
+const HEX_PAIRS: string[] = (() => {
+  const pairs = new Array<string>(256);
+  for (let i = 0; i < 256; i++) pairs[i] = HEX[i >> 4] + HEX[i & 15];
+  return pairs;
+})();
+
+/** -1 for any character that is not a hex digit. */
+const HEX_VALUES: Int8Array = (() => {
+  const values = new Int8Array(128).fill(-1);
+  for (let i = 0; i < 16; i++) {
+    values[HEX.charCodeAt(i)] = i;
+    values["0123456789ABCDEF".charCodeAt(i)] = i;
+  }
+  return values;
+})();
+
 export function uuidToBytes(value: string, path: string): Uint8Array {
-  const hex = value.replace(/-/g, "").toLowerCase();
-  if (hex.length !== 32 || /[^0-9a-f]/.test(hex)) {
+  const out = new Uint8Array(16);
+  let written = 0;
+  let high = -1;
+
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code === 45) continue;   // '-'
+
+    const digit = code < 128 ? HEX_VALUES[code] : -1;
+    if (digit < 0 || written === 16) {
+      throw new CodecError("BAD_UUID", path, "not a uuid: " + value);
+    }
+    if (high < 0) { high = digit; continue; }
+    out[written++] = (high << 4) | digit;
+    high = -1;
+  }
+
+  if (written !== 16 || high >= 0) {
     throw new CodecError("BAD_UUID", path, "not a uuid: " + value);
   }
-  const out = new Uint8Array(16);
-  for (let i = 0; i < 16; i++) out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   return out;
 }
 
@@ -269,79 +525,77 @@ export function bytesToUuid(bytes: Uint8Array, path: string): string {
   if (bytes.length !== 16) {
     throw new CodecError("BAD_UUID", path, "uuid must be 16 bytes, got " + bytes.length);
   }
-  let hex = "";
-  for (let i = 0; i < 16; i++) {
-    hex += HEX[bytes[i] >> 4] + HEX[bytes[i] & 15];
-  }
-  return hex.substring(0, 8) + "-" + hex.substring(8, 12) + "-" + hex.substring(12, 16) +
-    "-" + hex.substring(16, 20) + "-" + hex.substring(20, 32);
+  return HEX_PAIRS[bytes[0]] + HEX_PAIRS[bytes[1]] + HEX_PAIRS[bytes[2]] + HEX_PAIRS[bytes[3]] + "-" +
+    HEX_PAIRS[bytes[4]] + HEX_PAIRS[bytes[5]] + "-" +
+    HEX_PAIRS[bytes[6]] + HEX_PAIRS[bytes[7]] + "-" +
+    HEX_PAIRS[bytes[8]] + HEX_PAIRS[bytes[9]] + "-" +
+    HEX_PAIRS[bytes[10]] + HEX_PAIRS[bytes[11]] + HEX_PAIRS[bytes[12]] +
+    HEX_PAIRS[bytes[13]] + HEX_PAIRS[bytes[14]] + HEX_PAIRS[bytes[15]];
 }
 
 // ── date / time / timestamp ───────────────────────────────────────────────────
 
 const MS_PER_DAY = 86400000;
+const NS_PER_SECOND = 1000000000;
 
-export function dateToDays(value: string, path: string): bigint {
+export function dateToDays(value: string, path: string): number {
   if (!/^-?\d{4,}-\d{2}-\d{2}$/.test(value)) {
     throw new CodecError("BAD_DATE", path, "expected YYYY-MM-DD, got " + value);
   }
   const ms = Date.parse(value + "T00:00:00.000Z");
   if (Number.isNaN(ms)) throw new CodecError("BAD_DATE", path, "invalid date " + value);
-  return BigInt(Math.floor(ms / MS_PER_DAY));
+  return Math.floor(ms / MS_PER_DAY);
 }
 
-export function daysToDate(days: bigint, path: string): string {
-  const ms = Number(days) * MS_PER_DAY;
-  const date = new Date(ms);
+export function daysToDate(days: number, path: string): string {
+  const date = new Date(days * MS_PER_DAY);
   if (Number.isNaN(date.getTime())) throw new CodecError("BAD_DATE", path, "date out of range");
   return date.toISOString().substring(0, 10);
 }
 
-export function timestampToMillis(value: string, path: string): bigint {
+export function timestampToMillis(value: string, path: string): number {
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) throw new CodecError("BAD_TIMESTAMP", path, "invalid timestamp " + value);
-  return BigInt(ms);
+  return ms;
 }
 
-export function millisToTimestamp(ms: bigint, path: string): string {
-  const date = new Date(Number(ms));
+export function millisToTimestamp(ms: number, path: string): string {
+  const date = new Date(ms);
   if (Number.isNaN(date.getTime())) throw new CodecError("BAD_TIMESTAMP", path, "timestamp out of range");
   return date.toISOString();
 }
 
-const NS_PER_SECOND = 1000000000n;
-
-export function timeToNanos(value: string, path: string): bigint {
+export function timeToNanos(value: string, path: string): number {
   const match = /^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?$/.exec(value);
   if (match === null) throw new CodecError("BAD_TIME", path, "expected HH:MM:SS[.fraction], got " + value);
 
-  const hours = BigInt(match[1]);
-  const minutes = BigInt(match[2]);
-  const seconds = BigInt(match[3]);
-  if (hours > 23n || minutes > 59n || seconds > 59n) {
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  if (hours > 23 || minutes > 59 || seconds > 59) {
     throw new CodecError("BAD_TIME", path, "time component out of range: " + value);
   }
-  const fraction = BigInt((match[4] ?? "").padEnd(9, "0"));
-  return ((hours * 3600n + minutes * 60n + seconds) * NS_PER_SECOND) + fraction;
+  const fraction = Number((match[4] === undefined ? "" : match[4]).padEnd(9, "0"));
+  return (hours * 3600 + minutes * 60 + seconds) * NS_PER_SECOND + fraction;
 }
 
-export function nanosToTime(nanos: bigint, path: string): string {
-  if (nanos < 0n || nanos >= 86400n * NS_PER_SECOND) {
+export function nanosToTime(nanos: number, path: string): string {
+  if (nanos < 0 || nanos >= 86400 * NS_PER_SECOND) {
     throw new CodecError("BAD_TIME", path, "time of day out of range");
   }
-  const totalSeconds = nanos / NS_PER_SECOND;
-  const fraction = nanos % NS_PER_SECOND;
-  const hours = totalSeconds / 3600n;
-  const minutes = (totalSeconds % 3600n) / 60n;
-  const seconds = totalSeconds % 60n;
+  const totalSeconds = Math.floor(nanos / NS_PER_SECOND);
+  const fraction = nanos - totalSeconds * NS_PER_SECOND;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
   const base = pad2(hours) + ":" + pad2(minutes) + ":" + pad2(seconds);
-  if (fraction === 0n) return base;
-  return base + "." + fraction.toString().padStart(9, "0");
+  if (fraction === 0) return base;
+  return base + "." + String(fraction).padStart(9, "0");
 }
 
-function pad2(value: bigint): string {
-  return value.toString().padStart(2, "0");
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 // ── decimal ───────────────────────────────────────────────────────────────────
@@ -356,7 +610,7 @@ export function canonicalDecimal(value: string, precision: number, scale: number
 
   const negative = match[1] === "-";
   const integerPart = match[2].replace(/^0+(?=\d)/, "");
-  const rawFraction = match[3] ?? "";
+  const rawFraction = match[3] === undefined ? "" : match[3];
 
   if (rawFraction.length > scale) {
     throw new CodecError("BAD_DECIMAL", path,
@@ -431,7 +685,7 @@ export function stringKeyBytes(value: string): Uint8Array {
 }
 
 export function varintKeyBytes(value: bigint): Uint8Array {
-  const writer = new Writer();
+  const writer = new Writer(16);
   writer.varint(value);
   return writer.finish();
 }
@@ -494,7 +748,7 @@ export function captureUnknown(
     return into;
   }
   const raw = reader.captureRaw(key, wire);
-  const list = into ?? [];
+  const list = into === undefined ? [] : into;
   list.push({ tag, wire, raw });
   return list;
 }
@@ -510,9 +764,20 @@ export function expectWire(actual: number, expected: number, path: string): void
 
 // ── Field readers ─────────────────────────────────────────────────────────────
 
+/** For i64, u64 and duration, where 64 bits are genuinely needed. */
 export function readVarintField(reader: Reader, wire: number, path: string): bigint {
   expectWire(wire, WIRE_VARINT, path);
   return reader.varint();
+}
+
+export function readSignedField(reader: Reader, wire: number, path: string): number {
+  expectWire(wire, WIRE_VARINT, path);
+  return reader.varintSigned(path);
+}
+
+export function readUnsignedField(reader: Reader, wire: number, path: string): number {
+  expectWire(wire, WIRE_VARINT, path);
+  return reader.varintUnsigned(path);
 }
 
 /**
@@ -535,7 +800,8 @@ export function readBytesField(reader: Reader, wire: number, path: string): Uint
   return reader.bytes();
 }
 
-/** Accepts both the packed encoding and the unpacked one a writer may emit. */
+// Each accepts both the packed encoding and the unpacked one a writer may emit.
+
 export function readPackedVarint(reader: Reader, wire: number, path: string, into: bigint[]): void {
   if (wire === WIRE_LEN) {
     const body = reader.packed(path);
@@ -543,6 +809,24 @@ export function readPackedVarint(reader: Reader, wire: number, path: string, int
     return;
   }
   into.push(readVarintField(reader, wire, path));
+}
+
+export function readPackedSigned(reader: Reader, wire: number, path: string, into: number[]): void {
+  if (wire === WIRE_LEN) {
+    const body = reader.packed(path);
+    while (body.hasMore()) into.push(body.varintSigned(path));
+    return;
+  }
+  into.push(readSignedField(reader, wire, path));
+}
+
+export function readPackedUnsigned(reader: Reader, wire: number, path: string, into: number[]): void {
+  if (wire === WIRE_LEN) {
+    const body = reader.packed(path);
+    while (body.hasMore()) into.push(body.varintUnsigned(path));
+    return;
+  }
+  into.push(readUnsignedField(reader, wire, path));
 }
 
 export function readPackedDouble(reader: Reader, wire: number, path: string, into: number[]): void {
