@@ -1,16 +1,11 @@
 // src/registry/client.ts
-// Minimal read client for the OpenSchema public registry. The registry is a
-// neoworks client database of org-scoped, publicly-readable tables, served by the
-// generic neoworks data plane — so reads are plain anonymous GraphQL queries
-// against /graphql/db/openschema/registry. No registry-specific API surface.
+// Minimal read client for the OpenSchema public registry, served by the neoworks
+// api under /api/v1/schemas. Reads need no token.
 
 import { resolveEndpoints } from "./urls.js";
 
 /** Default neoworks API base (production). Override via the base-domain env or --registry. */
 export const DEFAULT_REGISTRY = "https://api.neoworks.dev";
-
-const CLIENT_ID = "openschema";
-const DB_NAME = "registry";
 
 export interface SchemaRef {
   scope: string;
@@ -32,7 +27,7 @@ export interface ResolvedSchema {
   files: RegistryFile[];
 }
 
-/** Resolve the registry (data plane) base URL from an explicit flag, env, or the base domain. */
+/** Resolve the registry (api) base URL from an explicit flag, env, or the base domain. */
 export function resolveRegistry(explicit?: string): string {
   const base = explicit || resolveEndpoints().api;
   return base.replace(/\/+$/, "");
@@ -68,65 +63,34 @@ export function parseSchemaRef(input: string): SchemaRef {
   return { scope, name, version };
 }
 
-function dataPlaneUrl(registry: string): string {
-  return `${registry}/graphql/db/${CLIENT_ID}/${DB_NAME}`;
-}
-
-async function query<T>(registry: string, gql: string, variables: Record<string, unknown>): Promise<T> {
-  const response = await fetch(dataPlaneUrl(registry), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: gql, variables }),
-  });
+async function getJson<T>(url: string, notFoundMessage: string): Promise<T> {
+  const response = await fetch(url);
+  if (response.status === 404) {
+    throw new Error(notFoundMessage);
+  }
   if (!response.ok) {
     throw new Error(`registry request failed (${response.status} ${response.statusText})`);
   }
-  const body = (await response.json()) as { data?: T; errors?: { message: string }[] };
-  if (body.errors && body.errors.length > 0) {
-    throw new Error(body.errors.map((e) => e.message).join("; "));
-  }
-  if (!body.data) {
-    throw new Error("registry returned no data");
-  }
-  return body.data;
+  return (await response.json()) as T;
 }
 
-/** Fetch a schema version's source files via the data plane's public reads. */
+/** Fetch a schema version's source files from the registry. */
 export async function fetchSchema(registry: string, ref: SchemaRef): Promise<ResolvedSchema> {
-  const schemaData = await query<{ schemas: { id: string; latest_version: string }[] }>(
-    registry,
-    `query($scope: String, $name: String) {
-      schemas(filter: { scope: $scope, name: $name }, limit: 1) { id latest_version }
-    }`,
-    { scope: ref.scope, name: ref.name },
-  );
-  const schema = schemaData.schemas?.[0];
-  if (!schema) {
-    throw new Error(`schema @${ref.scope}/${ref.name} not found in the registry`);
+  const schemaUrl = `${registry}/api/v1/schemas/${encodeURIComponent(ref.scope)}/${encodeURIComponent(ref.name)}`;
+  let version = ref.version;
+  if (version === "latest" || version === "") {
+    const detail = await getJson<{ schema: { latestVersion: string } }>(
+      schemaUrl,
+      `schema @${ref.scope}/${ref.name} not found in the registry`,
+    );
+    version = detail.schema.latestVersion;
   }
 
-  const version = ref.version === "latest" || ref.version === "" ? schema.latest_version : ref.version;
-
-  const versionData = await query<{ schema_versions: { id: string }[] }>(
-    registry,
-    `query($sid: String, $ver: String) {
-      schema_versions(filter: { schema_id: $sid, version: $ver }, limit: 1) { id }
-    }`,
-    { sid: schema.id, ver: version },
+  const versionRow = await getJson<{ files: RegistryFile[] }>(
+    `${schemaUrl}/versions/${encodeURIComponent(version)}`,
+    `version ${version} of @${ref.scope}/${ref.name} not found`,
   );
-  const versionRow = versionData.schema_versions?.[0];
-  if (!versionRow) {
-    throw new Error(`version ${version} of @${ref.scope}/${ref.name} not found`);
-  }
-
-  const fileData = await query<{ schema_files: RegistryFile[] }>(
-    registry,
-    `query($vid: String) {
-      schema_files(filter: { version_id: $vid }, limit: 200) { path contents ordinal }
-    }`,
-    { vid: versionRow.id },
-  );
-  const files = (fileData.schema_files ?? []).sort((a, b) => a.ordinal - b.ordinal);
+  const files = [...versionRow.files].sort((a, b) => a.ordinal - b.ordinal);
 
   return { scope: ref.scope, name: ref.name, version, files };
 }

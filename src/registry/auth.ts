@@ -2,8 +2,8 @@
 // CLI authentication for publishing. The openschema client is public, so the CLI
 // uses a loopback authorization-code + PKCE flow (no client secret on the user's
 // machine). Tokens are cached under ~/.config/openschema/credentials.json. The
-// token authenticates the user to the openschema site's /publish endpoint; the
-// site (the org's server) is what actually writes to the registry.
+// token (scope schemas:publish) authenticates the user to the openschema site's
+// /publish endpoint, which forwards it to the api; the user becomes the owner.
 
 import { spawn } from "child_process";
 import { createHash, randomBytes } from "crypto";
@@ -113,7 +113,7 @@ export async function login(): Promise<string> {
     `${oauth}/oauth/authorize?response_type=code&client_id=${CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
     `&code_challenge=${challenge}&code_challenge_method=S256` +
-    `&scope=${encodeURIComponent("openid profile email")}&state=${state}`;
+    `&scope=${encodeURIComponent("openid profile email schemas:publish")}&state=${state}`;
 
   const codePromise = awaitAuthCode(state);
   console.log("\n  Open this URL to sign in:\n");
