@@ -58,10 +58,52 @@ each value: every element of a list and every value of a map.
 | `@minValue(n)` `@maxValue(n)` | integer and float scalars | inclusive bound |
 | `@minLength(n)` `@maxLength(n)` | `string` (code points), `bytes` (bytes) | inclusive bound |
 | `@pattern(re)` | `string` | ECMAScript regular expression, matched against the whole value |
-| `@format(name)` | `string` | named format; the runtime decides which names it knows |
+| `@format(name)` | `string` | named format; the runtime decides which names it knows ([libneoworks](#formats-libneoworks-checks)) |
 
 A validation decorator on a type it cannot apply to is an error (`OSD009`), not
 ignored.
+
+### Formats libneoworks checks
+
+`date-time`, `date`, `time` (RFC 3339), `uuid`, `email`, `uri` and `url`
+(a scheme, a colon, no spaces), `e164`, `hex-color` (`#rgb` or
+`#rrggbb`), `slug`, `iso4217`, `iso3166-1-alpha2`, `iso3166-1-alpha3`, `ipv4`
+and `hostname`. A format it does not know passes, so a newer schema never
+blocks an older client. `@pattern` uses ECMAScript syntax without the `u` flag
+(no `\p{…}` classes).
+
+## JSON mapping
+
+A descriptor-driven runtime takes and returns a model as a JSON object keyed by
+field name. Each value maps as follows:
+
+| Type | JSON |
+|---|---|
+| `bool` | boolean |
+| `i8`…`i32`, `u8`…`u32` | number, an integer in range |
+| `i64`, `u64`, `duration` | decimal string, e.g. `"-42"`, so no precision is lost |
+| `f32`, `f64` | finite number |
+| `decimal(p, s)` | decimal string with at most `s` fraction digits and `p` digits |
+| `string` | string |
+| `bytes` | base64url without padding |
+| `uuid` | lowercase hyphenated uuid string |
+| `date` | `YYYY-MM-DD` |
+| `time` | RFC 3339 partial time, e.g. `08:30:00` |
+| `timestamp` | RFC 3339 with any offset on input; written as UTC with milliseconds, e.g. `2026-10-05T08:00:00.000Z` |
+| `json` | any JSON value; stored as canonical JSON text |
+| enum | variant name; an unknown variant read from newer data is its ordinal number, and is written back unchanged |
+| model | object |
+| oneof | object with exactly one key, the variant name |
+| `[T]` | array |
+| `{K: V}` | object; non-string keys are written as their JSON text, e.g. `"42"` |
+
+An optional field that is absent is left out of the object. On update, a field
+that is given replaces the stored value, `null` clears it and a field that is
+not given keeps its value. For a required field of type `json`, `null` is the
+JSON value null, not absence. Fields and facets this runtime's schema does not
+know are kept as they are, so an older client never drops data a newer one
+wrote. A rejected value is reported with its path and the reason, e.g.
+`Event.attendees[2].email` / `is not a valid email`.
 
 ## Neoworks node decorators
 
