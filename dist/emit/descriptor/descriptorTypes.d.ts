@@ -38,7 +38,8 @@ export interface ValueConstraints {
     pattern?: string;
     format?: string;
 }
-export type NodeKind = "root" | "container" | "item";
+/** Roots carry no content, so only containers and items have a node model. */
+export type NodeKind = "container" | "item";
 /** A model stored as the content of a Neoworks node of one kind. */
 export interface NodeDescriptor {
     kind: NodeKind;
@@ -46,6 +47,8 @@ export interface NodeDescriptor {
     facets: FacetDescriptor[];
     /** Ordinals of string fields the client indexes for search. */
     searchable: number[];
+    /** Ordinal of the string field that names the node, from @neoworks.title. */
+    title: number | null;
     timeRange: TimeRangeDescriptor | null;
 }
 /** A separately encrypted group of a node model's fields. */
