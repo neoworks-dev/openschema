@@ -25,7 +25,7 @@ import { buildMigrationPlan } from "../engine/migration.js";
 import { fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints } from "../registry/urls.js";
-import { readdirSync } from "fs";
+import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
@@ -361,54 +361,45 @@ async function cmdLogin(): Promise<void> {
 }
 
 interface PublishOptions {
-  scope: string;
-  name: string;
-  version: string;
-  description?: string;
-  license?: string;
-  repository?: string;
   site?: string;
 }
 
-// Collect the .schema source files under a directory as publish payload files.
-function collectSchemaFiles(dir: string): { path: string; contents: string }[] {
-  const entries = readdirSync(dir).filter((entry) => entry.endsWith(".schema"));
-  if (entries.length === 0) {
-    console.error(chalk.red(`error: no .schema files found in ${dir}`));
-    process.exit(1);
-  }
-  return entries.map((entry) => ({ path: entry, contents: readFileSync(join(dir, entry), "utf8") }));
-}
-
 async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
-  if (!opts.scope || !opts.name || !opts.version) {
-    console.error(chalk.red("error: --scope, --name and --version are required"));
+  const prepared = preparePublish(dir, GENERATOR);
+  if (prepared.payload === null) {
+    for (const problem of prepared.problems) console.error(chalk.red(`error: ${problem}`));
+    console.error(chalk.dim("  nothing was published"));
     process.exit(1);
   }
+  const payload = prepared.payload;
 
-  const files = collectSchemaFiles(dir);
-  const payload: PublishPayload = {
-    scope: opts.scope,
-    name: opts.name,
-    version: opts.version,
-    description: opts.description,
-    license: opts.license,
-    repository: opts.repository,
-    targets: [],
-    files,
-  };
-
-  const site = opts.site || resolveEndpoints().site;
   try {
     const token = await getAccessToken();
-    await publish(site, token, payload);
-  } catch (e) {
-    console.error(chalk.red(`error: ${e instanceof Error ? e.message : String(e)}`));
+    await publish(publishSite(opts), token, payload);
+  } catch (error) {
+    console.error(chalk.red(`error: ${describeError(error)}`));
     process.exit(1);
   }
-  console.log(
-    chalk.green(`\n  ✓ published @${opts.scope}/${opts.name}@${opts.version} (${files.length} file${files.length === 1 ? "" : "s"})\n`),
-  );
+  console.log(chalk.green(
+    `\n  ✓ published @${payload.scope}/${payload.name}@${payload.version} (${describeUpload(payload)})\n`,
+  ));
+}
+
+function publishSite(opts: PublishOptions): string {
+  if (opts.site) return opts.site;
+  return resolveEndpoints().site;
+}
+
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function describeUpload(payload: PublishPayload): string {
+  let files = `${payload.files.length} files`;
+  if (payload.files.length === 1) files = "1 file";
+  if (payload.descriptor === undefined) return files;
+  return `${files}, with descriptor`;
 }
 
 // ── migrate ───────────────────────────────────────────────────────────────────
@@ -1022,13 +1013,7 @@ program
 
 program
   .command("publish [dir]")
-  .description("Publish a schema to the registry (submitted to the org's server)")
-  .option("--scope <scope>", "publisher scope (e.g. neoworks)")
-  .option("--name <name>", "schema name")
-  .option("--version <version>", "semantic version (e.g. 1.0.0)")
-  .option("--description <text>", "short description")
-  .option("--license <id>", "license identifier (e.g. MIT)")
-  .option("--repository <url>", "source repository URL")
+  .description("Publish the schema described by [dir]/openschema.yaml to the registry (submitted to the org's server)")
   .option("--site <url>", "openschema site base (default: production)")
   .action((dir, opts) => cmdPublish(dir ?? ".", opts));
 

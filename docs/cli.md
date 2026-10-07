@@ -136,6 +136,50 @@ is recomputed on every write:
 The two checks cover different failures. `check` compares two versions pairwise and
 cannot see an ordinal retired several versions ago; `lock --check` can.
 
+## `publish [dir]`
+
+Publishes the schema described by `[dir]/openschema.yaml` (default: the current
+directory). Sign in first with `openschema login`. The manifest is the only source of
+the schema's identity and metadata; there are no flags for them.
+
+```yaml
+# openschema.yaml
+scope: acme
+name: recipes
+version: 1.0.0
+title: Recipes
+description: Recipes and the folders they are kept in.
+entry: recipes.schema
+license: MIT                                  # optional
+repository: https://github.com/acme/recipes   # optional
+```
+
+| Field | Rule |
+|---|---|
+| `scope`, `name` | lowercase letters, digits, `.`, `_`, `-`; the schema's path is `@scope/name` |
+| `version` | semantic version; a published version can never change |
+| `title` | required, at most 80 characters; the human-readable name |
+| `description` | required, at most 500 characters |
+| `entry` | the `.schema` file to compile, in the manifest's directory |
+| `license` | optional |
+| `repository` | optional http(s) URL |
+
+Unknown keys are an error. Before anything is uploaded, `publish` checks that:
+
+- the manifest is valid and `entry` exists,
+- the schema compiles without errors,
+- `openschema.lock` exists and already records the schema (`OS2011`, `OS2008`); publish
+  never writes the ledger,
+- for a schema with `@neoworks.node` models, the descriptor builds. It is uploaded
+  with the version (see [Descriptor target and Neoworks nodes](./descriptor.md)).
+
+Every `.schema` file in the directory is uploaded. With any problem, nothing is
+published.
+
+| Flag | Meaning |
+|---|---|
+| `--site <url>` | openschema site base (default: production) |
+
 ## Exit codes
 
 | Code | Meaning |
