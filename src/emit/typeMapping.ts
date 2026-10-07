@@ -83,8 +83,7 @@ export function hasDecorator(decorators: Decorator[], name: string): boolean {
   return findDecorator(decorators, name) !== null;
 }
 
-/** Every decorator with the given dotted name (a name may repeat, e.g. multiple
- *  @neoworks.index declarations on one model). */
+/** Every decorator with the given dotted name; a name may repeat on one element. */
 export function allDecorators(decorators: Decorator[], name: string): Decorator[] {
   return decorators.filter(decorator => decorator.name === name);
 }
@@ -107,8 +106,8 @@ export function firstStringArg(decorators: Decorator[], name: string): string | 
   return decoratorValueToString(decorator.args[0].value);
 }
 
-/** A named argument of a decorator, as a plain string. E.g. the "text_en" in
- *  @neoworks.fulltext(analyzer: "text_en"). Returns null when absent. */
+/** A named argument of a decorator, as a plain string, e.g. `start` in
+ *  @neoworks.timeRange(start: "from", end: "to"). Returns null when absent. */
 export function namedStringArg(decorators: Decorator[], name: string, argName: string): string | null {
   const decorator = findDecorator(decorators, name);
   if (decorator === null) return null;

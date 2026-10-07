@@ -33,7 +33,7 @@ the older `openschema gen` are aliases for the same command.
 | `--no-lock` | skip the ordinal ledger entirely | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `internal`, `codec`.
+`surrealdb`, `codec`.
 
 ```bash
 openschema order.schema -t sql -o ./generated

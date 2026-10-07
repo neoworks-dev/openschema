@@ -13,7 +13,6 @@ export type {
 } from "./resolver/types.js";
 export { getEmitter, listTargets } from "./emit/index.js";
 export type { Emitter, EmitContext, OutputFile } from "./emit/types.js";
-export type { InternalSchema, InternalTable, InternalField, InternalIndex } from "./emit/internal/internalEmitter.js";
 
 import { Lexer } from "./lexer/lexer.js";
 import { Parser } from "./parser/parser.js";

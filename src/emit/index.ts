@@ -10,11 +10,9 @@ import { graphqlEmitter } from "./graphql/graphqlEmitter.js";
 import { openApiEmitter } from "./openapi/openApiEmitter.js";
 import { surrealEmitter } from "./surrealdb/surrealEmitter.js";
 import { zodEmitter } from "./zod/zodEmitter.js";
-import { internalEmitter } from "./internal/internalEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
 
 export type { Emitter, EmitContext, OutputFile } from "./types.js";
-export type { InternalSchema, InternalTable, InternalField, InternalIndex } from "./internal/internalEmitter.js";
 
 const EMITTERS: Record<string, Emitter> = {
   [sqlEmitter.target]: sqlEmitter,
@@ -25,7 +23,6 @@ const EMITTERS: Record<string, Emitter> = {
   [openApiEmitter.target]: openApiEmitter,
   [surrealEmitter.target]: surrealEmitter,
   [zodEmitter.target]: zodEmitter,
-  [internalEmitter.target]: internalEmitter,
   [codecEmitter.target]: codecEmitter,
 };
 
