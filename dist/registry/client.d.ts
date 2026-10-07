@@ -31,7 +31,8 @@ export interface PublishPayload {
     scope: string;
     name: string;
     version: string;
-    description?: string;
+    title: string;
+    description: string;
     license?: string;
     repository?: string;
     readme?: string;
@@ -40,6 +41,8 @@ export interface PublishPayload {
         path: string;
         contents: string;
     }[];
+    /** The descriptor target's output, when the schema defines Neoworks nodes. */
+    descriptor?: string;
 }
 /**
  * Submit a schema to the openschema site's /publish endpoint. The site (the org's
