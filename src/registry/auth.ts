@@ -14,9 +14,9 @@ import { dirname, join } from "path";
 import { resolveEndpoints } from "./urls.js";
 
 const CLIENT_ID = "openschema";
-// Must match the loopback redirect seeded on the openschema client (migration 043).
-const LOOPBACK_PORT = 8976;
-const REDIRECT_URI = `http://127.0.0.1:${LOOPBACK_PORT}/callback`;
+// Must match the loopback redirect seeded on the openschema client (007_seed_clients.surql).
+const LOOPBACK_PORT = 8765;
+export const REDIRECT_URI = `http://127.0.0.1:${LOOPBACK_PORT}/callback`;
 
 interface Credentials {
   access_token: string;
