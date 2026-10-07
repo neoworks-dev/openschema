@@ -7,6 +7,8 @@ export interface ObservedOrdinal {
     name: string;
     type: string | null;
     encoding: EncodingSignature | null;
+    /** The @neoworks.facet name; null for the default facet and for non-field ordinals. */
+    facet: string | null;
     span: Span;
 }
 export interface ObservedSpace {

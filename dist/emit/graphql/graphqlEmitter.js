@@ -160,9 +160,29 @@ function findRecordByLocalName(schema, local) {
 }
 // ── Type rendering (nullability inversion) ────────────────────────────────────
 function renderType(type, inputMode, schema) {
-    if (type.kind === "nullable")
+    // `T | null` is GraphQL's plain nullable T: drop the `!`, keep the arm. An
+    // optional `T?` is already nullable, so `(T | null)?` collapses to the same.
+    if (type.kind === "nullable") {
+        const strippedInner = unionWithoutNull(type.inner);
+        if (strippedInner !== null)
+            return renderInner(strippedInner, inputMode, schema);
         return renderInner(type.inner, inputMode, schema);
+    }
+    const nullableInner = unionWithoutNull(type);
+    if (nullableInner !== null)
+        return renderInner(nullableInner, inputMode, schema);
     return `${renderInner(type, inputMode, schema)}!`;
+}
+/** The sole remaining arm of a `T | null` union, or null when it is not one. */
+function unionWithoutNull(type) {
+    if (type.kind !== "union")
+        return null;
+    const arms = type.variants.filter(variant => variant.kind !== "null");
+    if (arms.length === type.variants.length)
+        return null;
+    if (arms.length !== 1)
+        return null;
+    return arms[0];
 }
 function renderInner(type, inputMode, schema) {
     switch (type.kind) {
@@ -174,6 +194,8 @@ function renderInner(type, inputMode, schema) {
         case "union": return "JSON";
         case "oneof": return "JSON";
         case "nullable": return renderInner(type.inner, inputMode, schema);
+        // Reached only for a bare `null`; `T | null` is handled in renderType.
+        case "null": return "JSON";
     }
 }
 // A named union alias is a real GraphQL `union` in output position, but unions

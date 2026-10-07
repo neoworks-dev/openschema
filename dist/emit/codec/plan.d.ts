@@ -58,6 +58,12 @@ export interface ModelPlan {
     fields: FieldPlan[];
 }
 export declare function planModel(model: ResolvedModel, fields: ResolvedField[], schema: ResolvedSchema): ModelPlan;
+/**
+ * Absence is `undefined`, spelled as an optional property — the wire format has
+ * no null, only present and absent. Non-nullable repeated and map fields stay
+ * required because the decoder always assigns them an empty collection.
+ */
+export declare function isOptional(container: Container): boolean;
 export declare function renderTsType(container: Container, value: ValueShape): string;
 export declare function valueTsType(value: ValueShape): string;
 /** The wire type a singular value of this shape occupies. */

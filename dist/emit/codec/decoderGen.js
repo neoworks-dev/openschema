@@ -63,18 +63,16 @@ function declareLocal(field) {
     const element = valueTsType(field.value);
     switch (field.container.kind) {
         case "singular":
-            if (field.container.nullable)
-                return `let ${name}: ${element} | null = null;`;
             return `let ${name}: ${element} | undefined;`;
         case "repeatedPacked":
         case "repeatedLen":
             return `const ${name}: ${element}[] = [];`;
         case "wrapperRepeated":
-            return `let ${name}: ${element}[] | null = null;`;
+            return `let ${name}: ${element}[] | undefined;`;
         case "map":
             return `const ${name} = new Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}>();`;
         case "wrapperMap":
-            return `let ${name}: Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}> | null = null;`;
+            return `let ${name}: Map<${SCALAR_CODEC_TS[field.container.key]}, ${element}> | undefined;`;
     }
 }
 function requiredChecks(plan) {

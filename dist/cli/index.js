@@ -28,6 +28,7 @@ import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, isSuperset, loadLedger, serializeLedger } from "../ledger/io.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
+import { DescriptorError } from "../emit/descriptor/errors.js";
 // ── Version ───────────────────────────────────────────────────────────────────
 const VERSION = "0.1.0";
 const readFileOrNull = (path) => {
@@ -242,12 +243,16 @@ function checkBase(candidate, basePath) {
     return isSuperset(candidate, base.ledger).missing;
 }
 function reportEmitError(error) {
-    if (error instanceof CodecUnsupportedError) {
-        const where = error.span === null ? "" : `${error.span.line}:${error.span.col} `;
-        console.error(chalk.red(`error ${error.code} ${where}${error.message}`));
+    if (error instanceof CodecUnsupportedError || error instanceof DescriptorError) {
+        console.error(chalk.red(`error ${error.code} ${spanPrefix(error.span)}${error.message}`));
         return;
     }
     console.error(chalk.red(`error: ${error.message}`));
+}
+function spanPrefix(span) {
+    if (span === null)
+        return "";
+    return `${span.line}:${span.col} `;
 }
 async function cmdAdd(ref, opts) {
     const registry = resolveRegistry(opts.registry);
@@ -594,6 +599,8 @@ function describeType(t) {
             return `{${describeType(t.key)}: ${describeType(t.value)}}`;
         case "nullable":
             return `${describeType(t.inner)}?`;
+        case "null":
+            return "null";
         case "union":
             return t.variants.map(describeType).join(" | ");
         case "oneof":

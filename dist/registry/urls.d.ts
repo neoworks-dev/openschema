@@ -1,5 +1,5 @@
 export interface Endpoints {
-    /** neoworks API base (hosts the data plane at /graphql/db/...). */
+    /** neoworks API base (hosts the registry at /api/v1/schemas). */
     api: string;
     /** OAuth server (authorize + token). */
     oauth: string;

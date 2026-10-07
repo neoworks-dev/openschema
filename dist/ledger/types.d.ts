@@ -12,6 +12,8 @@ export interface OrdinalEntry {
     type: string | null;
     /** How the field is laid out on the wire. Drives OS2010. */
     encoding: EncodingSignature | null;
+    /** The @neoworks.facet the field is encrypted in; absent for the default facet. Drives OS2013. */
+    facet?: string;
     since: string;
     retiredAt?: string;
 }

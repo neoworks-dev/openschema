@@ -107,6 +107,7 @@ function describeType(t) {
         case "array": return `[${describeType(t.element)}]`;
         case "map": return `{${describeType(t.key)}:${describeType(t.value)}}`;
         case "nullable": return `${describeType(t.inner)}?`;
+        case "null": return "null";
         case "union": return t.variants.map(describeType).join(" | ");
         case "oneof": return `oneof{${t.variants.map(v => v.name).join(",")}}`;
     }

@@ -17,7 +17,7 @@ export interface ResolvedSchema {
     version: string;
     files: RegistryFile[];
 }
-/** Resolve the registry (data plane) base URL from an explicit flag, env, or the base domain. */
+/** Resolve the registry (api) base URL from an explicit flag, env, or the base domain. */
 export declare function resolveRegistry(explicit?: string): string;
 /**
  * Parse a schema reference like "@neoworks/commerce", "neoworks/commerce", or
@@ -25,7 +25,7 @@ export declare function resolveRegistry(explicit?: string): string;
  * optional; the version defaults to "latest".
  */
 export declare function parseSchemaRef(input: string): SchemaRef;
-/** Fetch a schema version's source files via the data plane's public reads. */
+/** Fetch a schema version's source files from the registry. */
 export declare function fetchSchema(registry: string, ref: SchemaRef): Promise<ResolvedSchema>;
 export interface PublishPayload {
     scope: string;

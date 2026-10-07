@@ -7,7 +7,6 @@ export { resolve, resolveModules, loadProject } from "./resolver/index.js";
 export type { ResolvedSchema, ResolvedModel, ResolvedField, ResolvedOverlay, DeclSymbol, Diagnostic, Module, } from "./resolver/types.js";
 export { getEmitter, listTargets } from "./emit/index.js";
 export type { Emitter, EmitContext, OutputFile } from "./emit/types.js";
-export type { InternalSchema, InternalTable, InternalField, InternalIndex } from "./emit/internal/internalEmitter.js";
 import type { Program } from "./parser/ast.js";
 /**
  * Parse an OpenSchema source string into a Program AST.

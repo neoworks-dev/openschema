@@ -41,7 +41,7 @@ function rejectUnknownCollision(model, field) {
 // ── Containers ────────────────────────────────────────────────────────────────
 function planShape(model, field, type, schema) {
     const { inner, nullable } = unwrapNullable(type);
-    const resolved = resolveAliasInline(inner, schema);
+    const resolved = stripNull(resolveAliasInline(inner, schema));
     if (resolved.kind === "array") {
         return planArray(model, field, resolved.element, nullable, schema);
     }
@@ -52,6 +52,22 @@ function planShape(model, field, type, schema) {
         container: { kind: "singular", nullable },
         value: planValue(model, field, resolved, schema),
     };
+}
+/**
+ * `T | null` encodes exactly as `T`. The wire format models presence, not null:
+ * an absent tag is the only way to say "no value", so the null arm carries no
+ * information here and is dropped. It stays meaningful in the API-surface
+ * targets (ts, zod, json-schema, openapi).
+ */
+function stripNull(type) {
+    if (type.kind !== "union")
+        return type;
+    const arms = type.variants.filter(variant => variant.kind !== "null");
+    if (arms.length === type.variants.length)
+        return type;
+    if (arms.length === 1)
+        return arms[0];
+    return { ...type, variants: arms };
 }
 function planArray(model, field, element, nullable, schema) {
     if (unwrapNullable(resolveAliasInline(element, schema)).nullable) {
@@ -115,15 +131,25 @@ function accessorFor(name) {
 function isRequired(container) {
     return container.kind === "singular" && !container.nullable;
 }
+/**
+ * Absence is `undefined`, spelled as an optional property — the wire format has
+ * no null, only present and absent. Non-nullable repeated and map fields stay
+ * required because the decoder always assigns them an empty collection.
+ */
+export function isOptional(container) {
+    if (container.kind === "singular")
+        return container.nullable;
+    return container.kind === "wrapperRepeated" || container.kind === "wrapperMap";
+}
 export function renderTsType(container, value) {
     const element = valueTsType(value);
     switch (container.kind) {
-        case "singular": return container.nullable ? `${element} | null` : element;
+        case "singular": return element;
         case "repeatedPacked":
-        case "repeatedLen": return `${arrayElement(element)}[]`;
-        case "wrapperRepeated": return `${arrayElement(element)}[] | null`;
-        case "map": return `Map<${SCALAR_CODEC_TS[container.key]}, ${element}>`;
-        case "wrapperMap": return `Map<${SCALAR_CODEC_TS[container.key]}, ${element}> | null`;
+        case "repeatedLen":
+        case "wrapperRepeated": return `${arrayElement(element)}[]`;
+        case "map":
+        case "wrapperMap": return `Map<${SCALAR_CODEC_TS[container.key]}, ${element}>`;
     }
 }
 function arrayElement(rendered) {

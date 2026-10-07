@@ -12,6 +12,7 @@
 import { expandReserved } from "../resolver/reserved.js";
 import { describeType } from "../engine/type-compat.js";
 import { encodingSignatureOf } from "../emit/codec/wireFormat.js";
+import { firstStringArg } from "../emit/typeMapping.js";
 export function modelSpaceId(qualifiedName) {
     return `model:${qualifiedName}`;
 }
@@ -44,6 +45,7 @@ function collectModelSpaces(schema, into) {
             name: field.name,
             type: describeType(field.type),
             encoding: encodingSignatureOf(field.type, schema),
+            facet: firstStringArg(field.decorators, "neoworks.facet"),
             span: field.span,
         }));
         into.push({
@@ -66,6 +68,7 @@ function collectOverlaySpaces(schema, into) {
                 name: field.name,
                 type: describeType(field.type),
                 encoding: encodingSignatureOf(field.type, schema),
+                facet: null,
                 span: field.span,
             }));
             into.push({
@@ -92,6 +95,7 @@ function collectEnumSpaces(schema, into) {
                 name: variant.name,
                 type: null,
                 encoding: null,
+                facet: null,
                 span: variant.span,
             })),
             reserved: reservedOrdinals(decl.reserved, symbol.localName),
@@ -133,6 +137,7 @@ function walkOneofs(type, owner, fieldOrdinal, into) {
                     name: variant.name,
                     type: describeType(variant.type),
                     encoding: null,
+                    facet: null,
                     span: variant.span,
                 })),
                 reserved: [],

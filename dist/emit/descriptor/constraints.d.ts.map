@@ -1,0 +1,1 @@
+{"version":3,"file":"constraints.d.ts","sourceRoot":"","sources":["../../../src/emit/descriptor/constraints.ts"],"names":[],"mappings":"AAMA,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,yBAAyB,CAAC;AAC7D,OAAO,KAAK,EAAE,UAAU,EAAE,MAAM,kBAAkB,CAAC;AACnD,OAAO,KAAK,EAAE,gBAAgB,EAAE,MAAM,sBAAsB,CAAC;AAyB7D,wBAAgB,mBAAmB,CAAC,KAAK,EAAE,MAAM,EAAE,KAAK,EAAE,aAAa,EAAE,KAAK,EAAE,UAAU,GAAG,gBAAgB,CAQ5G"}

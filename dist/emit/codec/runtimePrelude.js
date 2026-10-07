@@ -13,8 +13,10 @@
 //     Field tags, lengths, and every scalar that fits in 2^53 use plain numbers.
 //   - One growing Uint8Array per encode. Nested messages are written in place
 //     and their length back-filled, rather than each building its own buffer.
-//   - No allocation per primitive: a DataView is kept alongside the buffer, and
-//     strings are written straight into it with TextEncoder.encodeInto.
+//   - No allocation per primitive: floats go through one shared scratch view,
+//     short strings are encoded and decoded by hand (TextEncoder/TextDecoder
+//     cost a native call and a subarray per string), and the common date and
+//     timestamp shapes are converted without touching Date.
 //
 // None of this changes a single emitted byte — codec-golden.test.ts pins the
 // wire format against hardcoded vectors.
@@ -54,6 +56,58 @@ export class CodecError extends Error {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
+// ── Manual UTF-8 ──────────────────────────────────────────────────────────────
+//
+// For short strings the native TextEncoder/TextDecoder round-trip (a subarray
+// allocation plus a C++ boundary crossing per call) dominates the codec's
+// profile. These produce byte-for-byte what TextEncoder produces, including
+// U+FFFD for an unpaired surrogate.
+
+function isSurrogatePair(value: string, index: number): boolean {
+  const code = value.charCodeAt(index);
+  if ((code & 0xfc00) !== 0xd800) return false;
+  return (value.charCodeAt(index + 1) & 0xfc00) === 0xdc00;
+}
+
+function utf8Length(value: string): number {
+  let length = 0;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) { length += 1; continue; }
+    if (code < 0x800) { length += 2; continue; }
+    if (isSurrogatePair(value, index)) { length += 4; index++; continue; }
+    length += 3;
+  }
+  return length;
+}
+
+/** The caller has already reserved utf8Length(value) bytes at offset. */
+function writeUtf8(bytes: Uint8Array, offset: number, value: string): void {
+  let position = offset;
+  for (let index = 0; index < value.length; index++) {
+    let code = value.charCodeAt(index);
+    if (code < 0x80) { bytes[position++] = code; continue; }
+    if (code < 0x800) {
+      bytes[position++] = 0xc0 | (code >> 6);
+      bytes[position++] = 0x80 | (code & 0x3f);
+      continue;
+    }
+    if (isSurrogatePair(value, index)) {
+      code = 0x10000 + ((code & 0x3ff) << 10) + (value.charCodeAt(++index) & 0x3ff);
+      bytes[position++] = 0xf0 | (code >> 18);
+      bytes[position++] = 0x80 | ((code >> 12) & 0x3f);
+      bytes[position++] = 0x80 | ((code >> 6) & 0x3f);
+      bytes[position++] = 0x80 | (code & 0x3f);
+      continue;
+    }
+    // An unpaired surrogate encodes as U+FFFD, exactly as TextEncoder does.
+    if ((code & 0xf800) === 0xd800) code = 0xfffd;
+    bytes[position++] = 0xe0 | (code >> 12);
+    bytes[position++] = 0x80 | ((code >> 6) & 0x3f);
+    bytes[position++] = 0x80 | (code & 0x3f);
+  }
+}
+
 // ── Writer ────────────────────────────────────────────────────────────────────
 
 /** Bytes a varint of this non-negative value occupies. */
@@ -75,14 +129,30 @@ function writeVarintAt(bytes: Uint8Array, offset: number, value: number): void {
   bytes[position] = remaining;
 }
 
+/**
+ * The buffer of the last finished Writer, kept for the next one. Encoding is
+ * synchronous and single-threaded, so at most one top-level Writer is live at
+ * a time; a nested Writer (map keys) simply misses the pool while the outer
+ * one holds it. Steady state: zero buffer allocations and zero grows per row.
+ */
+let pooledBuffer: Uint8Array | null = null;
+
+/** Rows larger than this are rare enough that retaining the buffer is waste. */
+const MAX_POOLED_CAPACITY = 65536;
+
 export class Writer {
   private bytes: Uint8Array;
-  private view: DataView;
+  /** Created on first float write — most messages never need one. */
+  private view: DataView | null = null;
   private length = 0;
 
   constructor(capacity: number = 256) {
+    if (pooledBuffer !== null && pooledBuffer.length >= capacity) {
+      this.bytes = pooledBuffer;
+      pooledBuffer = null;
+      return;
+    }
     this.bytes = new Uint8Array(capacity);
-    this.view = new DataView(this.bytes.buffer);
   }
 
   private reserve(extra: number): void {
@@ -94,13 +164,22 @@ export class Writer {
     const grown = new Uint8Array(capacity);
     grown.set(this.bytes.subarray(0, this.length));
     this.bytes = grown;
-    this.view = new DataView(grown.buffer);
+    this.view = null;
   }
 
   raw(source: Uint8Array): void {
-    this.reserve(source.length);
-    this.bytes.set(source, this.length);
-    this.length += source.length;
+    const count = source.length;
+    this.reserve(count);
+    if (count <= 32) {
+      // Typical sources are uuids and short bodies; a loop beats the native
+      // set() call at this size.
+      const bytes = this.bytes;
+      let position = this.length;
+      for (let index = 0; index < count; index++) bytes[position++] = source[index];
+    } else {
+      this.bytes.set(source, this.length);
+    }
+    this.length += count;
   }
 
   key(tag: number, wire: number): void {
@@ -161,6 +240,7 @@ export class Writer {
 
   double(value: number): void {
     this.reserve(8);
+    if (this.view === null) this.view = new DataView(this.bytes.buffer);
     this.view.setFloat64(this.length, value, true);
     this.length += 8;
   }
@@ -171,6 +251,19 @@ export class Writer {
   }
 
   string(value: string): void {
+    // Short strings are the overwhelming case, and for them the native
+    // TextEncoder round-trip (a subarray allocation plus a C++ call) costs more
+    // than encoding by hand. Long strings still go through encodeInto.
+    if (value.length >= 64) { this.longString(value); return; }
+
+    const byteLength = utf8Length(value);
+    this.varintNumber(byteLength);
+    this.reserve(byteLength);
+    writeUtf8(this.bytes, this.length, value);
+    this.length += byteLength;
+  }
+
+  private longString(value: string): void {
     const lengthOffset = this.beginLengthDelimited();
     // A UTF-16 code unit never expands past 3 UTF-8 bytes: astral characters
     // arrive as two units and cost four, so 3x the length always fits.
@@ -184,10 +277,22 @@ export class Writer {
    * Write a nested message body in place, then back-fill its length prefix.
    * The alternative — a fresh Writer per nesting level, copied back byte by
    * byte — is what made encoding slower than JSON.stringify.
+   *
+   * Generated code calls beginNested/endNested directly rather than passing a
+   * closure here: a closure per present message field was the single largest
+   * cost in the encode profile.
    */
   nested(write: (writer: Writer) => void): void {
     const lengthOffset = this.beginLengthDelimited();
     write(this);
+    this.endLengthDelimited(lengthOffset);
+  }
+
+  beginNested(): number {
+    return this.beginLengthDelimited();
+  }
+
+  endNested(lengthOffset: number): void {
     this.endLengthDelimited(lengthOffset);
   }
 
@@ -214,7 +319,11 @@ export class Writer {
   }
 
   finish(): Uint8Array {
-    return this.bytes.slice(0, this.length);
+    const result = this.bytes.slice(0, this.length);
+    const worthKeeping = this.bytes.length <= MAX_POOLED_CAPACITY &&
+      (pooledBuffer === null || pooledBuffer.length < this.bytes.length);
+    if (worthKeeping) pooledBuffer = this.bytes;
+    return result;
   }
 }
 
@@ -226,6 +335,33 @@ export function subMessageBytes(write: (writer: Writer) => void): Uint8Array {
 }
 
 // ── Reader ────────────────────────────────────────────────────────────────────
+
+/** Shared float conversion area — cheaper than a DataView per read. */
+const scratchBytes = new Uint8Array(8);
+const scratchView = new DataView(scratchBytes.buffer);
+
+function copyToScratch(buffer: Uint8Array, position: number, count: number): void {
+  for (let index = 0; index < count; index++) {
+    scratchBytes[index] = buffer[position + index];
+  }
+}
+
+/**
+ * null when any byte is non-ASCII; the caller falls back to TextDecoder.
+ * Rope concatenation measures faster here than fromCharCode.apply and than
+ * TextDecoder itself for the short fields that dominate real rows.
+ */
+function asciiString(buffer: Uint8Array, start: number, length: number): string | null {
+  const end = start + length;
+  for (let index = start; index < end; index++) {
+    if (buffer[index] > 0x7f) return null;
+  }
+  let out = "";
+  for (let index = start; index < end; index++) {
+    out += String.fromCharCode(buffer[index]);
+  }
+  return out;
+}
 
 export class Reader {
   /** The last varint read, split into two 32-bit halves. */
@@ -339,16 +475,16 @@ export class Reader {
 
   double(): number {
     this.require(8);
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.position, 8);
+    copyToScratch(this.buffer, this.position, 8);
     this.position += 8;
-    return view.getFloat64(0, true);
+    return scratchView.getFloat64(0, true);
   }
 
   float32(): number {
     this.require(4);
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.position, 4);
+    copyToScratch(this.buffer, this.position, 4);
     this.position += 4;
-    return view.getFloat32(0, true);
+    return scratchView.getFloat32(0, true);
   }
 
   lengthDelimited(): Uint8Array {
@@ -384,6 +520,11 @@ export class Reader {
     const length = this.length();
     const start = this.position;
     this.position += length;
+
+    if (length <= 64) {
+      const ascii = asciiString(this.buffer, start, length);
+      if (ascii !== null) return ascii;
+    }
     try {
       return textDecoder.decode(this.buffer.subarray(start, start + length));
     } catch {
@@ -538,7 +679,80 @@ export function bytesToUuid(bytes: Uint8Array, path: string): string {
 const MS_PER_DAY = 86400000;
 const NS_PER_SECOND = 1000000000;
 
+// Date and Date.parse dominate the encode/decode profile when every row
+// carries timestamps, so the common shapes — YYYY-MM-DD and the exact
+// toISOString form — are converted by hand. Anything else falls back to Date,
+// with identical results.
+
+/** Epoch days for 0000-01-01 and 9999-12-31, the four-digit-year window. */
+const MIN_FOUR_DIGIT_DAY = -719528;
+const MAX_FOUR_DIGIT_DAY = 2932896;
+const MIN_FOUR_DIGIT_MS = MIN_FOUR_DIGIT_DAY * MS_PER_DAY;
+const MAX_FOUR_DIGIT_MS = (MAX_FOUR_DIGIT_DAY + 1) * MS_PER_DAY - 1;
+
+/** -1 unless both characters are digits. */
+function twoDigits(value: string, index: number): number {
+  const high = value.charCodeAt(index) - 48;
+  const low = value.charCodeAt(index + 1) - 48;
+  if (high < 0 || high > 9 || low < 0 || low > 9) return -1;
+  return high * 10 + low;
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leap ? 29 : 28;
+  }
+  if (month === 4 || month === 6 || month === 9 || month === 11) return 30;
+  return 31;
+}
+
+/** Howard Hinnant's days_from_civil; exact for every proleptic Gregorian date. */
+function daysFromCivil(year: number, month: number, day: number): number {
+  const shiftedYear = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shiftedYear / 400);
+  const yearOfEra = shiftedYear - era * 400;
+  const monthIndex = month > 2 ? month - 3 : month + 9;
+  const dayOfYear = Math.floor((153 * monthIndex + 2) / 5) + day - 1;
+  const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/** The inverse, packed as year * 10000 + month * 100 + day to avoid an allocation. */
+function civilFromDays(days: number): number {
+  const shifted = days + 719468;
+  const era = Math.floor(shifted / 146097);
+  const dayOfEra = shifted - era * 146097;
+  const yearOfEra = Math.floor(
+    (dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) / 365,
+  );
+  const dayOfYear = dayOfEra - (yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+  const monthIndex = Math.floor((5 * dayOfYear + 2) / 153);
+  const day = dayOfYear - Math.floor((153 * monthIndex + 2) / 5) + 1;
+  const month = monthIndex < 10 ? monthIndex + 3 : monthIndex - 9;
+  const year = yearOfEra + era * 400 + (month <= 2 ? 1 : 0);
+  return year * 10000 + month * 100 + day;
+}
+
+/** Epoch days for a plain YYYY-MM-DD, or NaN when the shape or range is off. */
+function parseIsoDate(value: string): number {
+  const yearHigh = twoDigits(value, 0);
+  const yearLow = twoDigits(value, 2);
+  const month = twoDigits(value, 5);
+  const day = twoDigits(value, 8);
+  if (yearHigh < 0 || yearLow < 0 || month < 0 || day < 0) return NaN;
+  if (value.charCodeAt(4) !== 45 || value.charCodeAt(7) !== 45) return NaN;
+
+  const year = yearHigh * 100 + yearLow;
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) return NaN;
+  return daysFromCivil(year, month, day);
+}
+
 export function dateToDays(value: string, path: string): number {
+  if (value.length === 10) {
+    const days = parseIsoDate(value);
+    if (!Number.isNaN(days)) return days;
+  }
   if (!/^-?\d{4,}-\d{2}-\d{2}$/.test(value)) {
     throw new CodecError("BAD_DATE", path, "expected YYYY-MM-DD, got " + value);
   }
@@ -547,22 +761,95 @@ export function dateToDays(value: string, path: string): number {
   return Math.floor(ms / MS_PER_DAY);
 }
 
+/** "00".."99", so zero-padding is a lookup instead of a padStart call. */
+const TWO_DIGIT_STRINGS: string[] = (() => {
+  const strings = new Array<string>(100);
+  for (let value = 0; value < 100; value++) {
+    strings[value] = String(Math.floor(value / 10)) + String(value % 10);
+  }
+  return strings;
+})();
+
+function formatIsoDate(packed: number): string {
+  const year = Math.floor(packed / 10000);
+  const month = Math.floor(packed / 100) % 100;
+  const day = packed % 100;
+  return TWO_DIGIT_STRINGS[Math.floor(year / 100)] + TWO_DIGIT_STRINGS[year % 100] + "-" +
+    TWO_DIGIT_STRINGS[month] + "-" + TWO_DIGIT_STRINGS[day];
+}
+
+// Rows cluster by day (created/updated stamps share dates), so the last
+// formatted day is worth one comparison.
+let lastFormattedDays = NaN;
+let lastFormattedDate = "";
+
+function formatDateFromDays(days: number): string {
+  if (days === lastFormattedDays) return lastFormattedDate;
+  const formatted = formatIsoDate(civilFromDays(days));
+  lastFormattedDays = days;
+  lastFormattedDate = formatted;
+  return formatted;
+}
+
 export function daysToDate(days: number, path: string): string {
+  if (Number.isInteger(days) && days >= MIN_FOUR_DIGIT_DAY && days <= MAX_FOUR_DIGIT_DAY) {
+    return formatDateFromDays(days);
+  }
   const date = new Date(days * MS_PER_DAY);
   if (Number.isNaN(date.getTime())) throw new CodecError("BAD_DATE", path, "date out of range");
   return date.toISOString().substring(0, 10);
 }
 
+/** Epoch ms for the exact toISOString shape YYYY-MM-DDTHH:MM:SS.sssZ, else NaN. */
+function parseIsoUtcTimestamp(value: string): number {
+  if (value.length !== 24) return NaN;
+  if (value.charCodeAt(10) !== 84 || value.charCodeAt(13) !== 58 || value.charCodeAt(16) !== 58 ||
+      value.charCodeAt(19) !== 46 || value.charCodeAt(23) !== 90) return NaN;
+
+  const days = parseIsoDate(value);
+  const hours = twoDigits(value, 11);
+  const minutes = twoDigits(value, 14);
+  const seconds = twoDigits(value, 17);
+  const millisHigh = twoDigits(value, 20);
+  const millisLow = value.charCodeAt(22) - 48;
+  if (Number.isNaN(days) || hours < 0 || minutes < 0 || seconds < 0 || millisHigh < 0) return NaN;
+  if (millisLow < 0 || millisLow > 9) return NaN;
+  if (hours > 23 || minutes > 59 || seconds > 59) return NaN;
+
+  const secondOfDay = hours * 3600 + minutes * 60 + seconds;
+  return days * MS_PER_DAY + secondOfDay * 1000 + millisHigh * 10 + millisLow;
+}
+
 export function timestampToMillis(value: string, path: string): number {
+  const fast = parseIsoUtcTimestamp(value);
+  if (!Number.isNaN(fast)) return fast;
+
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) throw new CodecError("BAD_TIMESTAMP", path, "invalid timestamp " + value);
   return ms;
 }
 
 export function millisToTimestamp(ms: number, path: string): string {
+  if (Number.isInteger(ms) && ms >= MIN_FOUR_DIGIT_MS && ms <= MAX_FOUR_DIGIT_MS) {
+    return formatIsoUtcTimestamp(ms);
+  }
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) throw new CodecError("BAD_TIMESTAMP", path, "timestamp out of range");
   return date.toISOString();
+}
+
+function formatIsoUtcTimestamp(ms: number): string {
+  const days = Math.floor(ms / MS_PER_DAY);
+  const msOfDay = ms - days * MS_PER_DAY;
+  const secondOfDay = Math.floor(msOfDay / 1000);
+  const millis = msOfDay - secondOfDay * 1000;
+  const hours = Math.floor(secondOfDay / 3600);
+  const minutes = Math.floor((secondOfDay % 3600) / 60);
+  const seconds = secondOfDay % 60;
+
+  return formatDateFromDays(days) + "T" +
+    TWO_DIGIT_STRINGS[hours] + ":" + TWO_DIGIT_STRINGS[minutes] + ":" + TWO_DIGIT_STRINGS[seconds] + "." +
+    TWO_DIGIT_STRINGS[Math.floor(millis / 10)] + String(millis % 10) + "Z";
 }
 
 export function timeToNanos(value: string, path: string): number {

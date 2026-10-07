@@ -58,11 +58,11 @@ function packedWriter(field, source, path) {
     return [
         `if (${source}.length > 0) {`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.nested(packed => {`,
-        `    for (const item of ${source}) {`,
-        indent(writeValue("packed", field.value, "item", path), 6),
-        `    }`,
-        `  });`,
+        `  const packedOffset = w.beginNested();`,
+        `  for (const item of ${source}) {`,
+        indent(writeValue("w", field.value, "item", path), 4),
+        `  }`,
+        `  w.endNested(packedOffset);`,
         `}`,
     ].join("\n");
 }
@@ -82,43 +82,42 @@ function lenElementWriter(field, source, path) {
 function wrapperRepeatedWriter(field, container, source, path) {
     const inner = container.packed
         ? [
-            `    if (present.length > 0) {`,
-            `      wrapper.key(1, WIRE_LEN);`,
-            `      wrapper.nested(packed => {`,
-            `        for (const item of present) {`,
-            indent(writeValue("packed", field.value, "item", path), 10),
-            `        }`,
-            `      });`,
+            `  if (present.length > 0) {`,
+            `    w.key(1, WIRE_LEN);`,
+            `    const packedOffset = w.beginNested();`,
+            `    for (const item of present) {`,
+            indent(writeValue("w", field.value, "item", path), 6),
             `    }`,
+            `    w.endNested(packedOffset);`,
+            `  }`,
         ]
         : [
-            `    for (const item of present) {`,
-            `      wrapper.key(1, ${wireConstant(wireTypeOf(field.value))});`,
-            indent(writeValue("wrapper", field.value, "item", path), 6),
-            `    }`,
+            `  for (const item of present) {`,
+            `    w.key(1, ${wireConstant(wireTypeOf(field.value))});`,
+            indent(writeValue("w", field.value, "item", path), 4),
+            `  }`,
         ];
     return [
         `if (${source} !== null && ${source} !== undefined) {`,
         `  const present = ${source};`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.nested(wrapper => {`,
+        `  const wrapperOffset = w.beginNested();`,
         ...inner,
-        `  });`,
+        `  w.endNested(wrapperOffset);`,
         `}`,
     ].join("\n");
 }
 function mapWriter(field, keyScalar, source, path, emitTarget) {
-    const target = emitTarget ?? "w";
     const tag = emitTarget === null ? field.ordinal : 1;
     return [
         `for (const entry of sortMapEntries([...${source}].map(([k, v]) => ({ key: k, value: v, keyBytes: ${keyBytes(keyScalar, "k")} })))) {`,
-        `  ${target}.key(${tag}, WIRE_LEN);`,
-        `  ${target}.nested(pair => {`,
-        `    pair.key(1, ${wireConstant(scalarWire(keyScalar))});`,
-        indent(writeValue("pair", { kind: "scalar", scalar: keyScalar }, "entry.key", path), 4),
-        `    pair.key(2, ${wireConstant(wireTypeOf(field.value))});`,
-        indent(writeValue("pair", field.value, "entry.value", path), 4),
-        `  });`,
+        `  w.key(${tag}, WIRE_LEN);`,
+        `  const pairOffset = w.beginNested();`,
+        `  w.key(1, ${wireConstant(scalarWire(keyScalar))});`,
+        indent(writeValue("w", { kind: "scalar", scalar: keyScalar }, "entry.key", path), 2),
+        `  w.key(2, ${wireConstant(wireTypeOf(field.value))});`,
+        indent(writeValue("w", field.value, "entry.value", path), 2),
+        `  w.endNested(pairOffset);`,
         `}`,
     ].join("\n");
 }
@@ -127,9 +126,9 @@ function wrapperMapWriter(field, keyScalar, source, path) {
         `if (${source} !== null && ${source} !== undefined) {`,
         `  const present = ${source};`,
         `  ${key(field.ordinal, WireType.Len)}`,
-        `  w.nested(wrapper => {`,
-        indent(mapWriter(field, keyScalar, "present", path, "wrapper"), 4),
-        `  });`,
+        `  const wrapperOffset = w.beginNested();`,
+        indent(mapWriter(field, keyScalar, "present", path, "w"), 2),
+        `  w.endNested(wrapperOffset);`,
         `}`,
     ].join("\n");
 }
@@ -141,27 +140,37 @@ function writeValue(target, value, source, path) {
         case "decimal":
             return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;
         case "message":
-            return `${target}.nested(nested => write${value.name}(nested, ${source}, ${path}));`;
+            // A block, not a closure: a closure per present message field was the
+            // single largest cost in the encode profile.
+            return [
+                `{`,
+                `  const nestedOffset = ${target}.beginNested();`,
+                `  write${value.name}(${target}, ${source}, ${path});`,
+                `  ${target}.endNested(nestedOffset);`,
+                `}`,
+            ].join("\n");
         case "oneof":
             return oneofWriter(target, value, source, path);
     }
 }
 function oneofWriter(target, value, source, path) {
-    const arms = value.variants.map(variant => [
-        `    if (variant.kind === ${JSON.stringify(variant.name)}) {`,
-        `      chosen.key(${variant.ordinal}, ${wireConstant(wireTypeOf(variant.value))});`,
-        indent(writeValue("chosen", variant.value, `variant${propertyAccess(variant.name)}`, path), 6),
-        `      return;`,
-        `    }`,
+    // An else-if chain rather than early returns: this runs inline in the write
+    // function, where a return would abandon the rest of the message.
+    const arms = value.variants.map((variant, index) => [
+        `  ${index === 0 ? "if" : "} else if"} (variant.kind === ${JSON.stringify(variant.name)}) {`,
+        `    ${target}.key(${variant.ordinal}, ${wireConstant(wireTypeOf(variant.value))});`,
+        indent(writeValue(target, variant.value, `variant${propertyAccess(variant.name)}`, path), 4),
     ].join("\n"));
     return [
-        `${target}.nested(chosen => {`,
+        `{`,
+        `  const chosenOffset = ${target}.beginNested();`,
         `  const variant = ${source};`,
         ...arms,
-        `    if (variant.kind === ${JSON.stringify(UNKNOWN_PROPERTY)}) {`,
-        `      for (const carried of variant.${UNKNOWN_PROPERTY}) chosen.raw(carried.raw);`,
-        `    }`,
-        `});`,
+        `  ${arms.length === 0 ? "if" : "} else if"} (variant.kind === ${JSON.stringify(UNKNOWN_PROPERTY)}) {`,
+        `    for (const carried of variant.${UNKNOWN_PROPERTY}) ${target}.raw(carried.raw);`,
+        `  }`,
+        `  ${target}.endNested(chosenOffset);`,
+        `}`,
     ].join("\n");
 }
 function scalarWriteCall(scalar, source, path) {

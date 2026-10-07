@@ -156,6 +156,7 @@ function mapType(type, schema) {
         }
         case "map": return `z.record(${mapType(type.key, schema)}, ${mapType(type.value, schema)})`;
         case "nullable": return `${mapType(type.inner, schema)}.nullish()`;
+        case "null": return "z.null()";
         case "union": return `z.union([${type.variants.map(v => mapType(v, schema)).join(", ")}])`;
         case "oneof": return mapOneof(type.variants, schema);
     }

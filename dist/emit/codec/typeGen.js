@@ -1,13 +1,16 @@
 // src/emit/codec/typeGen.ts
 // Interfaces, enums, and the per-model tag sets the decoder consults.
-import { UNKNOWN_PROPERTY } from "./plan.js";
+import { UNKNOWN_PROPERTY, isOptional } from "./plan.js";
 export function emitEnum(symbol) {
     const decl = symbol.decl;
     const members = decl.variants.map(variant => `  ${variant.name} = ${variant.ordinal},`);
     return [`export enum ${symbol.localName} {`, ...members, "}"].join("\n");
 }
 export function emitInterface(plan) {
-    const lines = plan.fields.map(field => `  ${propertyName(field.name)}: ${field.tsType};`);
+    const lines = plan.fields.map(field => {
+        const optional = isOptional(field.container) ? "?" : "";
+        return `  ${propertyName(field.name)}${optional}: ${field.tsType};`;
+    });
     // Present only when the message carried fields this schema does not declare.
     lines.push(`  ${UNKNOWN_PROPERTY}?: UnknownField[];`);
     return [`export interface ${plan.name} {`, ...lines, "}"].join("\n");

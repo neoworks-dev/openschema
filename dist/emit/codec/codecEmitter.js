@@ -56,7 +56,7 @@ function planModels(context) {
  * an overlay field routinely claim the same tag. Encoding both into one message
  * would be ambiguous.
  */
-function rejectOverlayCompany(context) {
+export function rejectOverlayCompany(context) {
     if (context.company === null)
         return;
     for (const record of context.schema.records.values()) {
@@ -72,7 +72,7 @@ function rejectOverlayCompany(context) {
  * `Name` in different namespaces would silently share generated functions — and
  * therefore cross-wire their encoders.
  */
-function rejectDuplicateLocalNames(schema) {
+export function rejectDuplicateLocalNames(schema) {
     const seen = new Map();
     for (const record of schema.records.values()) {
         reportDuplicate(seen, record.symbol.localName, record.symbol.qualifiedName, record.symbol.span);

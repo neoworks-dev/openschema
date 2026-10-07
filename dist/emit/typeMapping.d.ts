@@ -21,15 +21,14 @@ export declare function isInputModel(model: ResolvedModel): boolean;
 /** Find a decorator by its dotted name, e.g. "sql.type" or "table". */
 export declare function findDecorator(decorators: Decorator[], name: string): Decorator | null;
 export declare function hasDecorator(decorators: Decorator[], name: string): boolean;
-/** Every decorator with the given dotted name (a name may repeat, e.g. multiple
- *  @neoworks.index declarations on one model). */
+/** Every decorator with the given dotted name; a name may repeat on one element. */
 export declare function allDecorators(decorators: Decorator[], name: string): Decorator[];
 /** The positional (unnamed) string arguments of a decorator, in order. */
 export declare function positionalStringArgs(decorator: Decorator): string[];
 /** First positional argument value of a decorator, as a plain string. */
 export declare function firstStringArg(decorators: Decorator[], name: string): string | null;
-/** A named argument of a decorator, as a plain string. E.g. the "text_en" in
- *  @neoworks.fulltext(analyzer: "text_en"). Returns null when absent. */
+/** A named argument of a decorator, as a plain string, e.g. `start` in
+ *  @neoworks.timeRange(start: "from", end: "to"). Returns null when absent. */
 export declare function namedStringArg(decorators: Decorator[], name: string, argName: string): string | null;
 export declare function decoratorValueToString(value: DecoratorValue): string | null;
 /** Strip a single nullable wrapper, returning the inner type and a flag. */

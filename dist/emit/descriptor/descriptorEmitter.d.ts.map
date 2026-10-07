@@ -1,0 +1,1 @@
+{"version":3,"file":"descriptorEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/descriptor/descriptorEmitter.ts"],"names":[],"mappings":"AAOA,OAAO,KAAK,EAAE,WAAW,EAAE,OAAO,EAAc,MAAM,aAAa,CAAC;AAMpE,OAAO,EACgF,KAAK,gBAAgB,EAC3G,MAAM,sBAAsB,CAAC;AAE9B,eAAO,MAAM,iBAAiB,EAAE,OAQ/B,CAAC;AAEF,wBAAgB,eAAe,CAAC,OAAO,EAAE,WAAW,GAAG,gBAAgB,CAYtE"}

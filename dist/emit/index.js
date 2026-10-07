@@ -8,9 +8,8 @@ import { graphqlEmitter } from "./graphql/graphqlEmitter.js";
 import { openApiEmitter } from "./openapi/openApiEmitter.js";
 import { surrealEmitter } from "./surrealdb/surrealEmitter.js";
 import { zodEmitter } from "./zod/zodEmitter.js";
-import { internalEmitter } from "./internal/internalEmitter.js";
-import { neoworksDdlEmitter } from "./neoworks/neoworksDdlEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
+import { descriptorEmitter } from "./descriptor/descriptorEmitter.js";
 const EMITTERS = {
     [sqlEmitter.target]: sqlEmitter,
     [typescriptEmitter.target]: typescriptEmitter,
@@ -20,9 +19,8 @@ const EMITTERS = {
     [openApiEmitter.target]: openApiEmitter,
     [surrealEmitter.target]: surrealEmitter,
     [zodEmitter.target]: zodEmitter,
-    [internalEmitter.target]: internalEmitter,
-    [neoworksDdlEmitter.target]: neoworksDdlEmitter,
     [codecEmitter.target]: codecEmitter,
+    [descriptorEmitter.target]: descriptorEmitter,
 };
 export function getEmitter(target) {
     return EMITTERS[target] ?? null;
