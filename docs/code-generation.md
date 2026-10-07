@@ -14,7 +14,7 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--include-private` | include the schema's own `private` fields | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `neoworks-ddl`, `internal`, `codec`. Pass several at once with a
+`surrealdb`, `internal`, `codec`. Pass several at once with a
 comma: `-t ts,zod,sql`.
 
 The `codec` target generates a canonical binary encoder and decoder, and writes

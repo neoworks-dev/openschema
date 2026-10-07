@@ -11,7 +11,6 @@ import { openApiEmitter } from "./openapi/openApiEmitter.js";
 import { surrealEmitter } from "./surrealdb/surrealEmitter.js";
 import { zodEmitter } from "./zod/zodEmitter.js";
 import { internalEmitter } from "./internal/internalEmitter.js";
-import { neoworksDdlEmitter } from "./neoworks/neoworksDdlEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
 
 export type { Emitter, EmitContext, OutputFile } from "./types.js";
@@ -27,7 +26,6 @@ const EMITTERS: Record<string, Emitter> = {
   [surrealEmitter.target]: surrealEmitter,
   [zodEmitter.target]: zodEmitter,
   [internalEmitter.target]: internalEmitter,
-  [neoworksDdlEmitter.target]: neoworksDdlEmitter,
   [codecEmitter.target]: codecEmitter,
 };
 
