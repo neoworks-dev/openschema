@@ -17,6 +17,7 @@ import type { DeclSymbol, ResolvedSchema } from "../resolver/types.js";
 import { expandReserved } from "../resolver/reserved.js";
 import { describeType } from "../engine/type-compat.js";
 import { encodingSignatureOf, type EncodingSignature } from "../emit/codec/wireFormat.js";
+import { firstStringArg } from "../emit/typeMapping.js";
 import type { SpaceKind } from "./types.js";
 
 export interface ObservedOrdinal {
@@ -24,6 +25,8 @@ export interface ObservedOrdinal {
   name:     string;
   type:     string | null;
   encoding: EncodingSignature | null;
+  /** The @neoworks.facet name; null for the default facet and for non-field ordinals. */
+  facet:    string | null;
   span:     Span;
 }
 
@@ -77,6 +80,7 @@ function collectModelSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void
         name:     field.name,
         type:     describeType(field.type),
         encoding: encodingSignatureOf(field.type, schema),
+        facet:    firstStringArg(field.decorators, "neoworks.facet"),
         span:     field.span,
       }));
 
@@ -102,6 +106,7 @@ function collectOverlaySpaces(schema: ResolvedSchema, into: ObservedSpace[]): vo
           name:     field.name,
           type:     describeType(field.type),
           encoding: encodingSignatureOf(field.type, schema),
+          facet:    null,
           span:     field.span,
         }));
 
@@ -131,6 +136,7 @@ function collectEnumSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void 
         name:     variant.name,
         type:     null,
         encoding: null,
+        facet:    null,
         span:     variant.span,
       })),
       reserved: reservedOrdinals(decl.reserved, symbol.localName),
@@ -175,6 +181,7 @@ function walkOneofs(type: TypeExpr, owner: string, fieldOrdinal: number, into: O
           name:     variant.name,
           type:     describeType(variant.type),
           encoding: null,
+          facet:    null,
           span:     variant.span,
         })),
         reserved: [],

@@ -32,8 +32,9 @@ import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, isSuperset, loadLedger, serializeLedger } from "../ledger/io.js";
 import type { OrdinalLedger } from "../ledger/types.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
+import { DescriptorError } from "../emit/descriptor/errors.js";
 import type { Change, Severity } from "../engine/types.js";
-import type { CompatMode } from "../parser/ast.js";
+import type { CompatMode, Span } from "../parser/ast.js";
 import { AST } from "../index.js";
 
 // ── Version ───────────────────────────────────────────────────────────────────
@@ -302,12 +303,16 @@ function checkBase(candidate: OrdinalLedger, basePath: string | undefined): stri
 }
 
 function reportEmitError(error: unknown): void {
-  if (error instanceof CodecUnsupportedError) {
-    const where = error.span === null ? "" : `${error.span.line}:${error.span.col} `;
-    console.error(chalk.red(`error ${error.code} ${where}${error.message}`));
+  if (error instanceof CodecUnsupportedError || error instanceof DescriptorError) {
+    console.error(chalk.red(`error ${error.code} ${spanPrefix(error.span)}${error.message}`));
     return;
   }
   console.error(chalk.red(`error: ${(error as Error).message}`));
+}
+
+function spanPrefix(span: Span | null): string {
+  if (span === null) return "";
+  return `${span.line}:${span.col} `;
 }
 
 // ── add ───────────────────────────────────────────────────────────────────────

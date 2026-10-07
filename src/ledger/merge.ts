@@ -124,6 +124,7 @@ function reconcileSpace(
       continue;
     }
     if (reportEncodingChange(space, declared, existing, diagnostics)) continue;
+    if (reportFacetChange(space, declared, existing, diagnostics)) continue;
     if (updateEntry(existing, declared)) changed = true;
   }
 
@@ -184,13 +185,44 @@ function reportEncodingChange(
 }
 
 function newEntry(declared: ObservedOrdinal, timestamp: string): OrdinalEntry {
-  return {
+  const entry: OrdinalEntry = {
     state: "active",
     name: declared.name,
     type: declared.type,
     encoding: declared.encoding,
     since: timestamp,
   };
+  if (declared.facet !== null) entry.facet = declared.facet;
+  return entry;
+}
+
+/**
+ * OS2013: the field moved to another @neoworks.facet, or its facet was renamed.
+ * Existing nodes keep the field encrypted under the old facet's key and tag.
+ */
+function reportFacetChange(
+  space: ObservedSpace,
+  declared: ObservedOrdinal,
+  existing: OrdinalEntry,
+  diagnostics: Diagnostic[],
+): boolean {
+  const recorded = describeFacet(existing.facet);
+  const current = describeFacet(declared.facet);
+  if (recorded === current) return false;
+
+  diagnostics.push({
+    code: "OS2013", severity: "error", span: declared.span,
+    message:
+      `Ordinal ${declared.ordinal} ('${declared.name}') in '${space.id}' moved from facet ` +
+      `${recorded} to ${current}. Existing data stays encrypted in ${recorded}; facets cannot be ` +
+      `renamed and fields cannot change facet.`,
+  });
+  return true;
+}
+
+function describeFacet(facet: string | null | undefined): string {
+  if (facet === null || facet === undefined) return "default";
+  return `'${facet}'`;
 }
 
 /** Renames and compatible type edits update the record silently. */

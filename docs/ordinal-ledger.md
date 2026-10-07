@@ -178,6 +178,12 @@ model leaves its ordinals permanently spent.
 | `OS2010` | the encoding signature changed at a live ordinal |
 | `OS2011` | no ledger found |
 | `OS2012` | a malformed `reserved` declaration |
+| `OS2013` | a field moved to another `@neoworks.facet`, or its facet was renamed |
+
+A field entry also records its `@neoworks.facet` as `facet` (absent for the default
+facet). Existing encrypted data stays in the facet it was written in, so the facet
+of a live ordinal can never change. See
+[Descriptor target and Neoworks nodes](./descriptor.md#facets-are-permanent).
 
 ## Relationship to `reserved`
 

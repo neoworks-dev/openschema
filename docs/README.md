@@ -49,6 +49,7 @@ Two design choices make this practical:
 | [Overlays](./overlays.md) | Sharing a schema across companies with private fields |
 | [Compatibility Checking](./compatibility.md) | `diff`, `check`, compatibility modes, suppressing rules |
 | [Wire Format](./wire-format.md) | The `codec` target's binary encoding |
+| [Descriptor and Neoworks nodes](./descriptor.md) | The `descriptor` target, facets and the `@neoworks` decorators |
 | [Ordinal Ledger](./ordinal-ledger.md) | The auto-maintained lockfile, and why an ordinal can never be reused |
 | [CLI Reference](./cli.md) | Every command and flag |
 | [Use Cases](./use-cases.md) | End-to-end scenarios this tool is designed for |

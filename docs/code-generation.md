@@ -14,12 +14,16 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--include-private` | include the schema's own `private` fields | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `codec`. Pass several at once with a
+`surrealdb`, `codec`, `descriptor`. Pass several at once with a
 comma: `-t ts,zod,sql`.
 
 The `codec` target generates a canonical binary encoder and decoder, and writes
 `schema.codec.ts` rather than `schema.ts`. It has its own rules and its own set of
 rejected constructs — see [Wire Format](./wire-format.md).
+
+The `descriptor` target writes `schema.descriptor.json`, the same wire layout as
+data for runtimes without generated code, plus the Neoworks node decorators — see
+[Descriptor target and Neoworks nodes](./descriptor.md).
 
 The command parses the entry file, follows its `import`s, resolves the whole
 graph, reports any semantic errors (and stops on them), then writes the output.
