@@ -22,8 +22,12 @@ const NODE_DECORATOR = "neoworks.node";
 const FACET_DECORATOR = "neoworks.facet";
 const SEARCHABLE_DECORATOR = "neoworks.searchable";
 const TIME_RANGE_DECORATOR = "neoworks.timeRange";
-const KNOWN_DECORATORS = new Set([NODE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR]);
-const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["root", "container", "item"]);
+const TITLE_DECORATOR = "neoworks.title";
+const KNOWN_DECORATORS = new Set([
+  NODE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
+]);
+// Roots carry no content: the collection's name comes from the registry title.
+const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item"]);
 const FACET_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 
 /** `models` must hold one descriptor per record, under the record's local name. */
@@ -71,6 +75,7 @@ function describeNode(record: ResolvedModel, model: ModelDescriptor, kind: NodeK
     model: model.name,
     facets: groupFacets(record, model, facetByOrdinal),
     searchable: searchableFields(record, model),
+    title: titleField(record, model),
     timeRange: describeTimeRange(record, model, facetByOrdinal),
   };
 }
@@ -83,7 +88,7 @@ function nodeKindOf(record: ResolvedModel): NodeKind | null {
   const kind = firstStringArg(decorators, NODE_DECORATOR);
   if (decorators.length > 1 || kind === null || !NODE_KINDS.has(kind)) {
     throw new DescriptorError("OSD002", record.symbol.localName, null,
-      `@${NODE_DECORATOR} takes one of "root", "container" or "item", once`, decorators[0].span);
+      `@${NODE_DECORATOR} takes one of "container" or "item", once`, decorators[0].span);
   }
   return kind as NodeKind;
 }
@@ -116,6 +121,7 @@ function rejectNodeOnlyDecorators(record: ResolvedModel): void {
     ...record.fields.flatMap(field => [
       ...allDecorators(field.decorators, FACET_DECORATOR),
       ...allDecorators(field.decorators, SEARCHABLE_DECORATOR),
+      ...allDecorators(field.decorators, TITLE_DECORATOR),
     ]),
   ];
   if (misplaced.length === 0) return;
@@ -185,6 +191,20 @@ function searchableFields(record: ResolvedModel, model: ModelDescriptor): number
     ordinals.push(field.ordinal);
   }
   return ordinals;
+}
+
+/** The single string field that names the node, if the model marks one. */
+function titleField(record: ResolvedModel, model: ModelDescriptor): number | null {
+  const marked = model.fields.filter(field => allDecorators(decoratorsOf(record, field), TITLE_DECORATOR).length > 0);
+  if (marked.length === 0) return null;
+  const field = marked[0];
+  const singularString = field.container.kind === "singular" &&
+    field.value.kind === "scalar" && field.value.scalar === "string";
+  if (marked.length > 1 || !singularString) {
+    throw new DescriptorError("OSD010", record.symbol.localName, field.name,
+      `@${TITLE_DECORATOR} marks exactly one single string field per model`, null);
+  }
+  return field.ordinal;
 }
 
 function isStringField(field: FieldDescriptor): boolean {

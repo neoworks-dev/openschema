@@ -38,6 +38,7 @@ model Event {
 
 @neoworks.node("container")
 model Calendar {
+  @neoworks.title
   1 name: string
 }
 `;
@@ -136,6 +137,12 @@ describe("node models", () => {
   it("leaves ordinary models out of the node list", () => {
     expect(describeSchema("model M { 1 a: i32 }").nodes).toEqual([]);
   });
+
+  it("names the title field by ordinal", () => {
+    const [event, calendar] = describeSchema(EVENT).nodes;
+    expect(event.title).toBeNull();
+    expect(calendar.title).toBe(1);
+  });
 });
 
 describe("node decorator errors", () => {
@@ -143,8 +150,16 @@ describe("node decorator errors", () => {
     expect(descriptorError("@neoworks.history model M { 1 a: i32 }").code).toBe("OSD001");
   });
 
-  it("rejects an invalid node kind", () => {
+  it("rejects an invalid node kind, including root", () => {
     expect(descriptorError('@neoworks.node("leaf") model M { 1 a: i32 }').code).toBe("OSD002");
+    expect(descriptorError('@neoworks.node("root") model M { 1 a: i32 }').code).toBe("OSD002");
+  });
+
+  it("rejects a title that is not one single string field", () => {
+    expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: [string] }').code).toBe("OSD010");
+    expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: string  @neoworks.title 2 b: string }').code)
+      .toBe("OSD010");
+    expect(descriptorError('model M { @neoworks.title 1 a: string }').code).toBe("OSD004");
   });
 
   it("rejects two models for the same node kind", () => {

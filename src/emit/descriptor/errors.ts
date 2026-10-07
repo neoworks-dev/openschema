@@ -13,7 +13,8 @@ export type DescriptorErrorCode =
   | "OSD006"   // two facets of one model hash to the same tag
   | "OSD007"   // @neoworks.searchable on a field that is not a string
   | "OSD008"   // invalid @neoworks.timeRange
-  | "OSD009";  // invalid validation decorator
+  | "OSD009"   // invalid validation decorator
+  | "OSD010";  // @neoworks.title not on exactly one single string field
 
 export class DescriptorError extends Error {
   constructor(

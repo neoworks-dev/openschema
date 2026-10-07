@@ -36,6 +36,7 @@ The descriptor rejects every construct the codec rejects.
       { "name": "Availability", "tag": 488337835, "fields": [3, 4] }
     ],
     "searchable": [1],
+    "title": null,
     "timeRange": { "start": 3, "end": 4 }
   }]
 }
@@ -66,14 +67,16 @@ ignored.
 
 Neoworks stores user data as end-to-end encrypted nodes in a tree of roots,
 containers and items. A schema published as a collection says which model each
-node kind stores and how that model is encrypted.
+container and item stores and how that model is encrypted. Roots carry no content;
+a collection's name is the registry title from its manifest.
 
 | Decorator | On | Meaning |
 |---|---|---|
-| `@neoworks.node("root" \| "container" \| "item")` | model | The model is the content of every node of this kind. At most one model per kind. |
+| `@neoworks.node("container" \| "item")` | model | The model is the content of every node of this kind. At most one model per kind. |
 | `@neoworks.facet("Name")` | field of a node model | The field is encrypted in the named facet. |
 | `@neoworks.searchable` | `string` or `[string]` field of a node model | The client indexes the field for search. |
 | `@neoworks.timeRange(start: "a", end: "b")` | node model | The client indexes nodes by the interval between two `timestamp` fields in the same facet. |
+| `@neoworks.title` | one single `string` field of a node model | The node's display name, e.g. a calendar's name on the consent screen. |
 
 ```openschema
 namespace neoworks.calendar
@@ -118,9 +121,10 @@ refuses to move a field to another facet — including by renaming the facet —
 | `OSD001` | unknown `@neoworks` decorator |
 | `OSD002` | `@neoworks.node` without exactly one valid node kind |
 | `OSD003` | two models declare the same node kind |
-| `OSD004` | `@neoworks.facet`, `@neoworks.searchable` or `@neoworks.timeRange` on a model that is not a node |
+| `OSD004` | `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.timeRange` or `@neoworks.title` on a model that is not a node |
 | `OSD005` | invalid or repeated facet name |
 | `OSD006` | two facets of one model derive the same tag |
 | `OSD007` | `@neoworks.searchable` on a field that is not `string` or `[string]` |
 | `OSD008` | invalid `@neoworks.timeRange` |
 | `OSD009` | invalid validation decorator |
+| `OSD010` | `@neoworks.title` not on exactly one single `string` field |
