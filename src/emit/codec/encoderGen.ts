@@ -220,7 +220,7 @@ function scalarWriteCall(scalar: ScalarKind, source: string, path: string): stri
     case "json":      return `string(canonicalJson(${source}))`;
     case "date":      return `varintNumber(dateToDays(${source}, ${path}))`;
     case "time":      return `varintNumber(timeToNanos(${source}, ${path}))`;
-    case "timestamp": return `varintNumber(timestampToMillis(${source}, ${path}))`;
+    case "timestamp": return `varintNumber(dateToMillis(${source}, ${path}))`;
     case "duration":  return `varint(${source})`;
   }
 }

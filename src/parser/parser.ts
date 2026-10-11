@@ -640,6 +640,10 @@ export class Parser {
       return inner;
     }
   
+    if (tok.kind === TokenKind.Ident && this.isReferenceType()) {
+      return this.parseReferenceType(span);
+    }
+
     if (tok.kind === TokenKind.Ident) {
       const path = this.parseQualifiedIdent();
       const typeArgs = this.parseTypeArgs();
@@ -649,6 +653,19 @@ export class Parser {
     throw new ParseError("Expected a type expression", tok);
   }
   
+  private isReferenceType(): boolean {
+    return this.peek().value === "ref" && this.peekAt(1).kind === TokenKind.Lt;
+  }
+
+  /** `ref<Model>`: the id of a node of that model, stored as a uuid. */
+  private parseReferenceType(span: AST.Span): AST.TypeExpr {
+    this.advance(); // ref
+    this.expect(TokenKind.Lt);
+    const reference = this.parseQualifiedIdent();
+    this.expect(TokenKind.Gt);
+    return { kind: "scalar", scalar: "uuid", reference, span };
+  }
+
   // ── Expressions ──────────────────────────────────────────────────────────────
   //
   //  Standard operator-precedence grammar:

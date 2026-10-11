@@ -90,7 +90,7 @@ export const SCALAR_CODEC_TS: Record<ScalarKind, string> = {
   json:      "unknown",
   date:      "string",
   time:      "string",
-  timestamp: "string",
+  timestamp: "Date",
   duration:  "bigint",
 };
 

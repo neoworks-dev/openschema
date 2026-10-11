@@ -328,7 +328,7 @@ function fromVarint(value: ValueShape, source: string, path: string): string {
     case "duration":  return `toSigned(${source})`;
     case "date":      return `daysToDate(${source}, ${path})`;
     case "time":      return `nanosToTime(${source}, ${path})`;
-    case "timestamp": return `millisToTimestamp(${source}, ${path})`;
+    case "timestamp": return `millisToDate(${source}, ${path})`;
     default:          return source;
   }
 }

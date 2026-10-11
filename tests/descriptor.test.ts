@@ -145,6 +145,51 @@ describe("node models", () => {
   });
 });
 
+describe("assets and references", () => {
+  const CONTACTS = `
+@neoworks.node("asset")
+model Picture { 1 name: string }
+
+@neoworks.node("item")
+model Contact {
+  1 name: string
+  2 photo: ref<Picture>?
+  3 gallery: [ref<Picture>]?
+}
+`;
+
+  it("describes an asset as a node kind of its own", () => {
+    const kinds = describeSchema(CONTACTS).nodes.map(node => `${node.kind}:${node.model}`);
+    expect(kinds).toEqual(["asset:Picture", "item:Contact"]);
+  });
+
+  it("records the target of a reference on the uuid value, one level per element", () => {
+    const contact = describeSchema(CONTACTS).models.find(model => model.name === "Contact")!;
+    expect(contact.fields[1].value).toEqual({ kind: "scalar", scalar: "uuid", reference: "test.calendar.Picture" });
+    expect(contact.fields[1].container).toEqual({ kind: "singular", nullable: true });
+    expect(contact.fields[2].value).toEqual({ kind: "scalar", scalar: "uuid", reference: "test.calendar.Picture" });
+    expect(contact.fields[0].value).toEqual({ kind: "scalar", scalar: "string" });
+  });
+
+  it("allows only one asset model per schema", () => {
+    expect(descriptorError('@neoworks.node("asset") model A { 1 a: i32 }\n@neoworks.node("asset") model B { 1 b: i32 }').code)
+      .toBe("OSD003");
+  });
+
+  it("reports a reference to an unknown model or to a model that is not a node", () => {
+    const unknown = resolve(parse("namespace t\nmodel M { 1 photo: ref<Missing> }"));
+    expect(unknown.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1003");
+    const plain = resolve(parse("namespace t\nmodel Plain { 1 a: i32 }\nmodel M { 1 photo: ref<Plain> }"));
+    expect(plain.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1017");
+  });
+
+  it("types a reference as a string in the generated code", () => {
+    const schema = resolve(parse(`namespace t\n${CONTACTS}`));
+    const files = getEmitter("codec")!.emit({ schema, company: null, includePrivate: false, options: {} });
+    expect(files[0].contents).toContain("photo?: string");
+  });
+});
+
 describe("node decorator errors", () => {
   it("rejects an unknown @neoworks decorator", () => {
     expect(descriptorError("@neoworks.history model M { 1 a: i32 }").code).toBe("OSD001");

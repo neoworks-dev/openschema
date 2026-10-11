@@ -1,6 +1,7 @@
 // src/emit/descriptor/nodes.ts
 // The Neoworks node extension. A model marked @neoworks.node("item") is the
-// content of every item node in the collection the schema is published as.
+// content of every item node in the collection the schema is published as;
+// @neoworks.node("asset") marks the model of items that carry exactly one file.
 // Its fields are split into facets, each encrypted under its own key so a grant
 // can cover only some of them; fields without @neoworks.facet share the
 // default facet.
@@ -27,7 +28,7 @@ const KNOWN_DECORATORS = new Set([
   NODE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
 ]);
 // Roots carry no content: the collection's name comes from the registry title.
-const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item"]);
+const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item", "asset"]);
 const FACET_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 
 /** `models` must hold one descriptor per record, under the record's local name. */
@@ -88,7 +89,7 @@ function nodeKindOf(record: ResolvedModel): NodeKind | null {
   const kind = firstStringArg(decorators, NODE_DECORATOR);
   if (decorators.length > 1 || kind === null || !NODE_KINDS.has(kind)) {
     throw new DescriptorError("OSD002", record.symbol.localName, null,
-      `@${NODE_DECORATOR} takes one of "container" or "item", once`, decorators[0].span);
+      `@${NODE_DECORATOR} takes one of "container", "item" or "asset", once`, decorators[0].span);
   }
   return kind as NodeKind;
 }

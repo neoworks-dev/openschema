@@ -1,4 +1,4 @@
-// The collection target writes the module apps give to `session.collection()`:
+// The collection target writes the module apps give to `neoworks.collection()`:
 // the registry path from openschema.yaml and the descriptor exactly as publish
 // uploads it. `openschema init` writes the starting point.
 
@@ -91,6 +91,29 @@ describe("the collection target", () => {
 
     run(["recipes.schema", "-t", "collection,codec", "-o", "generated"], directory);
     expect(generatedModule(directory)).toContain("export * from './schema.codec.ts'");
+  });
+
+  it("types the content of every node model when the codec is generated too", () => {
+    const directory = scaffold();
+    run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory);
+    const module = generatedModule(directory);
+
+    expect(module).toContain("readonly name: '@acme/recipes'");
+    expect(module).toMatch(/readonly containers\?: \{ \w+: \w+ \}/);
+    expect(module).toMatch(/readonly items\?: \{ \w+: \w+ \}/);
+    expect(module).toContain("export default collection");
+  });
+
+  it("types the content of the asset model and the reference to it", () => {
+    const directory = scaffold();
+    writeFileSync(
+      join(directory, "recipes.schema"),
+      'namespace acme.recipes\n@neoworks.node("asset")\nmodel Picture {\n  1 name: string\n}\n@neoworks.node("item")\nmodel Recipe {\n  1 title: string\n  2 photo: ref<Picture>?\n}\n',
+    );
+    expect(run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory).exitCode).toBe(0);
+
+    expect(generatedModule(directory)).toContain("readonly assets?: { Picture: Picture }");
+    expect(readFileSync(join(directory, "generated", "schema.codec.ts"), "utf8")).toContain("photo?: string");
   });
 
   it("needs an openschema.yaml beside the schema", () => {

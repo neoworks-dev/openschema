@@ -36,7 +36,7 @@ const VECTORS: Vector[] = [
   { label: "uuid",                schema: model("uuid"),          value: "3f2504e0-4f89-11d3-9a0c-0305e82c3301", expected: "0a103f2504e04f8911d39a0c0305e82c3301" },
   { label: "date",                schema: model("date"),          value: "2026-07-28",                      expected: "08b6a101" },
   { label: "time",                schema: model("time"),          value: "01:00:00",                        expected: "0880c0e285e368" },
-  { label: "timestamp",           schema: model("timestamp"),     value: "2026-07-28T10:00:00.000Z",        expected: "0880f2aac1fa33" },
+  { label: "timestamp",           schema: model("timestamp"),     value: new Date("2026-07-28T10:00:00.000Z"), expected: "0880f2aac1fa33" },
   { label: "duration",            schema: model("duration"),      value: 1500000000n,                       expected: "0880dea0cb05" },
   // Canonicalized to the declared scale.
   { label: "decimal 1.5",         schema: model("decimal(12,2)"), value: "1.5",                             expected: "0a04312e3530" },

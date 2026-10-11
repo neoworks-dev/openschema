@@ -15,7 +15,7 @@ import {
 export const UNKNOWN_PROPERTY = "$unknown";
 
 export type ValueShape =
-  | { kind: "scalar"; scalar: ScalarKind }
+  | { kind: "scalar"; scalar: ScalarKind; reference?: string }
   | { kind: "enum"; name: string }
   | { kind: "message"; name: string }
   | { kind: "decimal"; precision: number; scale: number }
@@ -167,9 +167,23 @@ function planMap(
 
 // ── Values ────────────────────────────────────────────────────────────────────
 
+/** The qualified name of the model a `ref<...>` names, as the resolver checked it. */
+function referenceTargetOf(path: string[], schema: ResolvedSchema): string {
+  const joined = path.join(".");
+  if (schema.symbols.has(joined)) return joined;
+  const localName = path[path.length - 1];
+  for (const symbol of schema.symbols.values()) {
+    if (symbol.localName === localName) return symbol.qualifiedName;
+  }
+  return joined;
+}
+
 function planValue(model: string, field: ResolvedField, type: TypeExpr, schema: ResolvedSchema): ValueShape {
   const resolved = resolveAliasInline(unwrapNullable(type).inner, schema);
 
+  if (resolved.kind === "scalar" && resolved.reference !== undefined) {
+    return { kind: "scalar", scalar: resolved.scalar, reference: referenceTargetOf(resolved.reference, schema) };
+  }
   if (resolved.kind === "scalar")  return { kind: "scalar", scalar: resolved.scalar };
   if (resolved.kind === "decimal") return { kind: "decimal", precision: resolved.precision, scale: resolved.scale };
   if (resolved.kind === "oneof") {

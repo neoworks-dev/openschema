@@ -114,7 +114,7 @@ a collection's name is the registry title from its manifest.
 
 | Decorator | On | Meaning |
 |---|---|---|
-| `@neoworks.node("container" \| "item")` | model | The model is the content of every node of this kind. At most one model per kind. |
+| `@neoworks.node("container" \| "item" \| "asset")` | model | The model is the content of every node of this kind. At most one model per kind. An `asset` is an item that carries exactly one encrypted file; items refer to it with `ref<Model>`. |
 | `@neoworks.facet("Name")` | field of a node model | The field is encrypted in the named facet. |
 | `@neoworks.searchable` | `string` or `[string]` field of a node model | The client indexes the field for search. |
 | `@neoworks.timeRange(start: "a", end: "b")` | node model | The client indexes nodes by the interval between two `timestamp` fields in the same facet. |
@@ -132,6 +132,28 @@ model Event {
 
   @neoworks.facet("Availability") 3 start: timestamp
   @neoworks.facet("Availability") 4 end: timestamp
+}
+```
+
+### References
+
+`ref<Model>` is a field type for the id of a node of another model, possibly of
+another schema (`ref<neoworks.photos.PhotoFile>`). The model must be marked
+`@neoworks.node`; the resolver reports `OS1003` for an unknown model and `OS1017`
+for one that is not a node model. A reference is a `uuid` on the wire and in the
+generated types. In the descriptor the field's value stays `{"kind": "scalar",
+"scalar": "uuid"}` and gains `"reference": "<qualified model name>"`, which is how
+a runtime finds the references in a node's content. Neoworks shares the nodes an
+item references along with the item.
+
+```openschema
+@neoworks.node("asset")
+model Picture { 1 name: string }
+
+@neoworks.node("item")
+model Contact {
+  1 formattedName: string
+  2 photo: ref<Picture>?
 }
 ```
 
