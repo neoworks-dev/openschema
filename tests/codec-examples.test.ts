@@ -105,7 +105,7 @@ model Contact {
       birthday: "1815-12-10",
       geo: new Map([["lat", 52.5], ["lng", 13.4]]),
       notes: [],
-      updatedAt: "2026-07-28T10:00:00.000Z",
+      updatedAt: new Date("2026-07-28T10:00:00.000Z"),
     };
 
     const back = codec.decodeContact(codec.encodeContact(value));
@@ -115,6 +115,6 @@ model Contact {
     expect(back.addresses[0].country).toBe("DE");
     expect(back.birthday).toBe("1815-12-10");
     expect([...back.geo.entries()]).toEqual([["lat", 52.5], ["lng", 13.4]]);
-    expect(back.updatedAt).toBe("2026-07-28T10:00:00.000Z");
+    expect(back.updatedAt).toEqual(new Date("2026-07-28T10:00:00.000Z"));
   });
 });

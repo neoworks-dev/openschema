@@ -15,8 +15,8 @@
 //     and their length back-filled, rather than each building its own buffer.
 //   - No allocation per primitive: floats go through one shared scratch view,
 //     short strings are encoded and decoded by hand (TextEncoder/TextDecoder
-//     cost a native call and a subarray per string), and the common date and
-//     timestamp shapes are converted without touching Date.
+//     cost a native call and a subarray per string), and the common calendar
+//     date shapes are converted without touching Date.
 //
 // None of this changes a single emitted byte — codec-golden.test.ts pins the
 // wire format against hardcoded vectors.
@@ -681,15 +681,12 @@ const MS_PER_DAY = 86400000;
 const NS_PER_SECOND = 1000000000;
 
 // Date and Date.parse dominate the encode/decode profile when every row
-// carries timestamps, so the common shapes — YYYY-MM-DD and the exact
-// toISOString form — are converted by hand. Anything else falls back to Date,
-// with identical results.
+// carries dates, so the common YYYY-MM-DD shape is converted by hand. Anything
+// else falls back to Date, with identical results.
 
 /** Epoch days for 0000-01-01 and 9999-12-31, the four-digit-year window. */
 const MIN_FOUR_DIGIT_DAY = -719528;
 const MAX_FOUR_DIGIT_DAY = 2932896;
-const MIN_FOUR_DIGIT_MS = MIN_FOUR_DIGIT_DAY * MS_PER_DAY;
-const MAX_FOUR_DIGIT_MS = (MAX_FOUR_DIGIT_DAY + 1) * MS_PER_DAY - 1;
 
 /** -1 unless both characters are digits. */
 function twoDigits(value: string, index: number): number {
@@ -801,56 +798,16 @@ export function daysToDate(days: number, path: string): string {
   return date.toISOString().substring(0, 10);
 }
 
-/** Epoch ms for the exact toISOString shape YYYY-MM-DDTHH:MM:SS.sssZ, else NaN. */
-function parseIsoUtcTimestamp(value: string): number {
-  if (value.length !== 24) return NaN;
-  if (value.charCodeAt(10) !== 84 || value.charCodeAt(13) !== 58 || value.charCodeAt(16) !== 58 ||
-      value.charCodeAt(19) !== 46 || value.charCodeAt(23) !== 90) return NaN;
-
-  const days = parseIsoDate(value);
-  const hours = twoDigits(value, 11);
-  const minutes = twoDigits(value, 14);
-  const seconds = twoDigits(value, 17);
-  const millisHigh = twoDigits(value, 20);
-  const millisLow = value.charCodeAt(22) - 48;
-  if (Number.isNaN(days) || hours < 0 || minutes < 0 || seconds < 0 || millisHigh < 0) return NaN;
-  if (millisLow < 0 || millisLow > 9) return NaN;
-  if (hours > 23 || minutes > 59 || seconds > 59) return NaN;
-
-  const secondOfDay = hours * 3600 + minutes * 60 + seconds;
-  return days * MS_PER_DAY + secondOfDay * 1000 + millisHigh * 10 + millisLow;
-}
-
-export function timestampToMillis(value: string, path: string): number {
-  const fast = parseIsoUtcTimestamp(value);
-  if (!Number.isNaN(fast)) return fast;
-
-  const ms = Date.parse(value);
-  if (Number.isNaN(ms)) throw new CodecError("BAD_TIMESTAMP", path, "invalid timestamp " + value);
+export function dateToMillis(value: Date, path: string): number {
+  const ms = value.getTime();
+  if (Number.isNaN(ms)) throw new CodecError("BAD_TIMESTAMP", path, "invalid timestamp");
   return ms;
 }
 
-export function millisToTimestamp(ms: number, path: string): string {
-  if (Number.isInteger(ms) && ms >= MIN_FOUR_DIGIT_MS && ms <= MAX_FOUR_DIGIT_MS) {
-    return formatIsoUtcTimestamp(ms);
-  }
+export function millisToDate(ms: number, path: string): Date {
   const date = new Date(ms);
   if (Number.isNaN(date.getTime())) throw new CodecError("BAD_TIMESTAMP", path, "timestamp out of range");
-  return date.toISOString();
-}
-
-function formatIsoUtcTimestamp(ms: number): string {
-  const days = Math.floor(ms / MS_PER_DAY);
-  const msOfDay = ms - days * MS_PER_DAY;
-  const secondOfDay = Math.floor(msOfDay / 1000);
-  const millis = msOfDay - secondOfDay * 1000;
-  const hours = Math.floor(secondOfDay / 3600);
-  const minutes = Math.floor((secondOfDay % 3600) / 60);
-  const seconds = secondOfDay % 60;
-
-  return formatDateFromDays(days) + "T" +
-    TWO_DIGIT_STRINGS[hours] + ":" + TWO_DIGIT_STRINGS[minutes] + ":" + TWO_DIGIT_STRINGS[seconds] + "." +
-    TWO_DIGIT_STRINGS[Math.floor(millis / 10)] + String(millis % 10) + "Z";
+  return date;
 }
 
 export function timeToNanos(value: string, path: string): number {

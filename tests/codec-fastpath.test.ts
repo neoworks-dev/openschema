@@ -128,7 +128,7 @@ describe("date fast paths", () => {
   });
 });
 
-describe("timestamp fast paths", () => {
+describe("timestamp conversion", () => {
   const MILLIS = [
     0,
     1,
@@ -141,42 +141,23 @@ describe("timestamp fast paths", () => {
     Date.parse("1912-06-23T01:02:03.045Z"),
   ];
 
-  it("formats exactly like toISOString", async () => {
+  it("turns epoch milliseconds into the same instant as a Date", async () => {
     const codec = await loadCodec(TIME_SCHEMA);
     for (const ms of MILLIS) {
-      expect(codec.millisToTimestamp(ms, "t")).toBe(new Date(ms).toISOString());
+      expect(codec.millisToDate(ms, "t")).toEqual(new Date(ms));
     }
   });
 
-  it("parses the toISOString shape exactly like Date.parse", async () => {
+  it("turns a Date into its epoch milliseconds", async () => {
     const codec = await loadCodec(TIME_SCHEMA);
     for (const ms of MILLIS) {
-      const iso = new Date(ms).toISOString();
-      expect(codec.timestampToMillis(iso, "t")).toBe(ms);
+      expect(codec.dateToMillis(new Date(ms), "t")).toBe(ms);
     }
   });
 
-  it("falls back to Date.parse for other accepted shapes", async () => {
+  it("rejects an invalid Date and an out-of-range instant", async () => {
     const codec = await loadCodec(TIME_SCHEMA);
-    const shapes = [
-      "2026-07-28T10:00:00Z",           // no milliseconds
-      "2026-07-28T12:00:00.000+02:00",  // offset instead of Z
-      "+010000-01-01T00:00:00.000Z",    // expanded year
-    ];
-    for (const value of shapes) {
-      expect(codec.timestampToMillis(value, "t")).toBe(Date.parse(value));
-    }
-  });
-
-  it("matches Date.parse on shapes the fast path rejects", async () => {
-    const codec = await loadCodec(TIME_SCHEMA);
-    for (const edge of ["not a time", "2026-07-28T25:00:00.000Z", "2026-02-30T10:00:00.000Z"]) {
-      const expected = Date.parse(edge);
-      if (Number.isNaN(expected)) {
-        expect(() => codec.timestampToMillis(edge, "t")).toThrow("invalid timestamp");
-      } else {
-        expect(codec.timestampToMillis(edge, "t")).toBe(expected);
-      }
-    }
+    expect(() => codec.dateToMillis(new Date("not a time"), "t")).toThrow("invalid timestamp");
+    expect(() => codec.millisToDate(8.64e15 + 1, "t")).toThrow("timestamp out of range");
   });
 });

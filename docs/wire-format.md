@@ -55,7 +55,7 @@ not be used by a schema.
 | `decimal(p,s)` | LEN | `string` | canonical decimal string |
 | `date` | VARINT | `YYYY-MM-DD` | int32 days since 1970-01-01 UTC |
 | `time` | VARINT | `HH:MM:SS[.fffffffff]` | int64 nanoseconds since midnight |
-| `timestamp` | VARINT | ISO-8601 UTC | int64 milliseconds since the epoch |
+| `timestamp` | VARINT | `Date` | int64 milliseconds since the epoch |
 | `duration` | VARINT | `bigint` | int64 nanoseconds, signed |
 | enum | VARINT | numeric enum | the variant's ordinal |
 | model | LEN | `interface` | nested message |
