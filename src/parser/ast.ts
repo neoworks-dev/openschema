@@ -70,11 +70,15 @@ export type TypeExpr =
   | UnionTypeExpr
 	| OneofTypeExpr;
 
-/** Primitive scalar — bool, i32, string, uuid, etc. */
+/**
+ * Primitive scalar — bool, i32, string, uuid, etc. `ref<Model>` is a uuid that
+ * names a node of that model: `reference` is the model's (possibly qualified) name.
+ */
 export interface ScalarTypeExpr {
-  kind:   "scalar";
-  scalar: ScalarKind;
-  span:   Span;
+  kind:       "scalar";
+  scalar:     ScalarKind;
+  reference?: string[];
+  span:       Span;
 }
 
 /**

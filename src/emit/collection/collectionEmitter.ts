@@ -37,7 +37,7 @@ export const collectionEmitter: Emitter = {
 };
 
 interface NodeModel {
-  kind: "container" | "item";
+  kind: "container" | "item" | "asset";
   model: string;
 }
 
@@ -62,7 +62,7 @@ function untypedCollection(name: string, descriptor: string): string[] {
   ];
 }
 
-/** The `containers` and `items` members exist only in the type: they tell the SDK which content type each model has. */
+/** The `containers`, `items` and `assets` members exist only in the type: they tell the SDK which content type each model has. */
 function typedCollection(name: string, descriptor: string, nodes: NodeModel[]): string[] {
   const lines = [
     "/** Pass to `Neoworks.collection`; the descriptor text is exactly what the registry publishes. */",
@@ -73,7 +73,7 @@ function typedCollection(name: string, descriptor: string, nodes: NodeModel[]): 
     `\treadonly name: '${name}'`,
     "\treadonly descriptor: string",
   ];
-  for (const [kind, member] of [["container", "containers"], ["item", "items"]] as const) {
+  for (const [kind, member] of [["container", "containers"], ["item", "items"], ["asset", "assets"]] as const) {
     const models = nodes.filter((node) => node.kind === kind);
     if (models.length === 0) continue;
     lines.push(`\treadonly ${member}?: { ${models.map((node) => `${node.model}: ${node.model}`).join("; ")} }`);

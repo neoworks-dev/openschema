@@ -289,10 +289,34 @@ function checkNamedReference(
   byQualified: Map<string, DeclSymbol>,
   diagnostics: Diagnostics,
 ): void {
+  if (type.kind === "scalar" && type.reference !== undefined) {
+    checkReferenceTarget(type.reference, type.span, byLocal, byQualified, diagnostics);
+    return;
+  }
   if (type.kind !== "named") return;
   if (type.path.length === 1 && typeParams.has(type.path[0])) return;
   if (resolveName(type.path, byLocal, byQualified)) return;
   diagnostics.error("OS1003", `Undefined type '${type.path.join(".")}'`, type.span);
+}
+
+/** `ref<Model>` names a node, so the model must exist and be marked @neoworks.node. */
+function checkReferenceTarget(
+  path: string[],
+  span: Span,
+  byLocal: Map<string, DeclSymbol>,
+  byQualified: Map<string, DeclSymbol>,
+  diagnostics: Diagnostics,
+): void {
+  const target = resolveName(path, byLocal, byQualified);
+  if (target === null) {
+    diagnostics.error("OS1003", `Undefined type '${path.join(".")}'`, span);
+    return;
+  }
+  const isNodeModel = target.decl.kind === "model" &&
+    target.decl.decorators.some(decorator => decorator.name === "neoworks.node");
+  if (!isNodeModel) {
+    diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.node`, span);
+  }
 }
 
 function resolveName(

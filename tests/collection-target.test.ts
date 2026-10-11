@@ -104,6 +104,18 @@ describe("the collection target", () => {
     expect(module).toContain("export default collection");
   });
 
+  it("types the content of the asset model and the reference to it", () => {
+    const directory = scaffold();
+    writeFileSync(
+      join(directory, "recipes.schema"),
+      'namespace acme.recipes\n@neoworks.node("asset")\nmodel Picture {\n  1 name: string\n}\n@neoworks.node("item")\nmodel Recipe {\n  1 title: string\n  2 photo: ref<Picture>?\n}\n',
+    );
+    expect(run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory).exitCode).toBe(0);
+
+    expect(generatedModule(directory)).toContain("readonly assets?: { Picture: Picture }");
+    expect(readFileSync(join(directory, "generated", "schema.codec.ts"), "utf8")).toContain("photo?: string");
+  });
+
   it("needs an openschema.yaml beside the schema", () => {
     const directory = scaffold();
     rmSync(join(directory, "openschema.yaml"));

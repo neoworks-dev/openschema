@@ -51,8 +51,11 @@ export interface ValueConstraints {
   format?:    string;
 }
 
-/** Roots carry no content, so only containers and items have a node model. */
-export type NodeKind = "container" | "item";
+/**
+ * Roots carry no content, so only containers, items and assets have a node model.
+ * An asset is an item that carries exactly one file.
+ */
+export type NodeKind = "container" | "item" | "asset";
 
 /** A model stored as the content of a Neoworks node of one kind. */
 export interface NodeDescriptor {
