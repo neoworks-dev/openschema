@@ -68,3 +68,10 @@ test("a 401 asks for a login", async () => {
   stubSite(401, { error: "authentication required" });
   await expect(publish("https://site.example", "token", payload)).rejects.toThrow("run `openschema login`");
 });
+
+test("a refusal with a null body still explains the status", async () => {
+  stubSite(500, null);
+  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  expect(failure).toBeInstanceOf(PublishRefusedError);
+  expect(failure.message).toBe("publish failed (500)");
+});

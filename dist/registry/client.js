@@ -114,7 +114,7 @@ export async function publish(site, token, payload) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
     });
-    const body = (await response.json().catch(() => ({})));
+    const body = await readPublishResponse(response);
     if (response.ok) {
         return;
     }
@@ -123,6 +123,14 @@ export async function publish(site, token, payload) {
         throw new IncompatibleSchemaError(message, body.violations);
     }
     throw new PublishRefusedError(message, response.status, body.code);
+}
+/** The response body as an object; an empty, non-JSON or non-object body (such as `null`) reads as {}. */
+async function readPublishResponse(response) {
+    const parsed = await response.json().catch(() => null);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {};
+    }
+    return parsed;
 }
 /** The lines the CLI prints for a refused publish: one header, then each violation. */
 export function describeViolations(payload, violations) {

@@ -186,7 +186,7 @@ export async function publish(site: string, token: string, payload: PublishPaylo
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json().catch(() => ({}))) as PublishResponseBody;
+  const body = await readPublishResponse(response);
   if (response.ok) {
     return;
   }
@@ -195,6 +195,15 @@ export async function publish(site: string, token: string, payload: PublishPaylo
     throw new IncompatibleSchemaError(message, body.violations);
   }
   throw new PublishRefusedError(message, response.status, body.code);
+}
+
+/** The response body as an object; an empty, non-JSON or non-object body (such as `null`) reads as {}. */
+async function readPublishResponse(response: Response): Promise<PublishResponseBody> {
+  const parsed: unknown = await response.json().catch(() => null);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+  return parsed as PublishResponseBody;
 }
 
 /** The lines the CLI prints for a refused publish: one header, then each violation. */
