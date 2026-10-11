@@ -110,9 +110,30 @@ export interface PublishPayload {
   descriptor?: string;
 }
 
+/** One rule a refused publish broke; `path` points into the schema's descriptor. */
+export interface Violation {
+  rule: string;
+  path: string;
+  message: string;
+}
+
+/** The registry refused the version because it breaks versions published before it. */
+export class IncompatibleSchemaError extends Error {
+  constructor(message: string, readonly violations: Violation[]) {
+    super(message);
+    this.name = "IncompatibleSchemaError";
+  }
+}
+
+interface PublishResponseBody {
+  error?: string;
+  violations?: Violation[];
+}
+
 /**
  * Submit a schema to the openschema site's /publish endpoint. The site (the org's
  * server) authenticates the bearer token and writes the org-owned registry rows.
+ * A 409 that lists violations throws an IncompatibleSchemaError.
  */
 export async function publish(site: string, token: string, payload: PublishPayload): Promise<void> {
   const response = await fetch(`${site.replace(/\/+$/, "")}/publish`, {
@@ -120,8 +141,26 @@ export async function publish(site: string, token: string, payload: PublishPaylo
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) {
-    throw new Error(body.error || `publish failed (${response.status})`);
+  const body = (await response.json().catch(() => ({}))) as PublishResponseBody;
+  if (response.ok) {
+    return;
   }
+  let message = `publish failed (${response.status})`;
+  if (body.error) {
+    message = body.error;
+  }
+  if (response.status === 409 && Array.isArray(body.violations) && body.violations.length > 0) {
+    throw new IncompatibleSchemaError(message, body.violations);
+  }
+  throw new Error(message);
+}
+
+/** The lines the CLI prints for a refused publish: one header, then each violation. */
+export function describeViolations(payload: Pick<PublishPayload, "scope" | "name" | "version">, violations: Violation[]): string[] {
+  const lines = [`@${payload.scope}/${payload.name}@${payload.version} is not compatible with the versions already published:`];
+  for (const violation of violations) {
+    lines.push(`  ${violation.rule}  ${violation.path}`);
+    lines.push(`      ${violation.message}`);
+  }
+  return lines;
 }

@@ -44,9 +44,23 @@ export interface PublishPayload {
     /** The descriptor target's output, when the schema defines Neoworks nodes. */
     descriptor?: string;
 }
+/** One rule a refused publish broke; `path` points into the schema's descriptor. */
+export interface Violation {
+    rule: string;
+    path: string;
+    message: string;
+}
+/** The registry refused the version because it breaks versions published before it. */
+export declare class IncompatibleSchemaError extends Error {
+    readonly violations: Violation[];
+    constructor(message: string, violations: Violation[]);
+}
 /**
  * Submit a schema to the openschema site's /publish endpoint. The site (the org's
  * server) authenticates the bearer token and writes the org-owned registry rows.
+ * A 409 that lists violations throws an IncompatibleSchemaError.
  */
 export declare function publish(site: string, token: string, payload: PublishPayload): Promise<void>;
+/** The lines the CLI prints for a refused publish: one header, then each violation. */
+export declare function describeViolations(payload: Pick<PublishPayload, "scope" | "name" | "version">, violations: Violation[]): string[];
 //# sourceMappingURL=client.d.ts.map

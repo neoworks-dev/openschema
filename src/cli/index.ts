@@ -22,7 +22,7 @@ import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
-import { fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
+import { IncompatibleSchemaError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints } from "../registry/urls.js";
 import { preparePublish } from "../registry/preparePublish.js";
@@ -377,12 +377,23 @@ async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
     const token = await getAccessToken();
     await publish(publishSite(opts), token, payload);
   } catch (error) {
-    console.error(chalk.red(`error: ${describeError(error)}`));
+    if (error instanceof IncompatibleSchemaError) {
+      reportRefusedPublish(payload, error);
+    } else {
+      console.error(chalk.red(`error: ${describeError(error)}`));
+    }
     process.exit(1);
   }
   console.log(chalk.green(
     `\n  ✓ published @${payload.scope}/${payload.name}@${payload.version} (${describeUpload(payload)})\n`,
   ));
+}
+
+function reportRefusedPublish(payload: PublishPayload, refusal: IncompatibleSchemaError): void {
+  const [header, ...violations] = describeViolations(payload, refusal.violations);
+  console.error(chalk.red(`error: ${header}`));
+  for (const line of violations) console.error(line);
+  console.error(chalk.dim("  nothing was published"));
 }
 
 function publishSite(opts: PublishOptions): string {

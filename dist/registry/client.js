@@ -58,9 +58,18 @@ export async function fetchSchema(registry, ref) {
     const files = [...versionRow.files].sort((a, b) => a.ordinal - b.ordinal);
     return { scope: ref.scope, name: ref.name, version, files };
 }
+/** The registry refused the version because it breaks versions published before it. */
+export class IncompatibleSchemaError extends Error {
+    constructor(message, violations) {
+        super(message);
+        this.violations = violations;
+        this.name = "IncompatibleSchemaError";
+    }
+}
 /**
  * Submit a schema to the openschema site's /publish endpoint. The site (the org's
  * server) authenticates the bearer token and writes the org-owned registry rows.
+ * A 409 that lists violations throws an IncompatibleSchemaError.
  */
 export async function publish(site, token, payload) {
     const response = await fetch(`${site.replace(/\/+$/, "")}/publish`, {
@@ -69,8 +78,25 @@ export async function publish(site, token, payload) {
         body: JSON.stringify(payload),
     });
     const body = (await response.json().catch(() => ({})));
-    if (!response.ok) {
-        throw new Error(body.error || `publish failed (${response.status})`);
+    if (response.ok) {
+        return;
     }
+    let message = `publish failed (${response.status})`;
+    if (body.error) {
+        message = body.error;
+    }
+    if (response.status === 409 && Array.isArray(body.violations) && body.violations.length > 0) {
+        throw new IncompatibleSchemaError(message, body.violations);
+    }
+    throw new Error(message);
+}
+/** The lines the CLI prints for a refused publish: one header, then each violation. */
+export function describeViolations(payload, violations) {
+    const lines = [`@${payload.scope}/${payload.name}@${payload.version} is not compatible with the versions already published:`];
+    for (const violation of violations) {
+        lines.push(`  ${violation.rule}  ${violation.path}`);
+        lines.push(`      ${violation.message}`);
+    }
+    return lines;
 }
 //# sourceMappingURL=client.js.map
