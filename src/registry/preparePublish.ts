@@ -12,8 +12,7 @@ import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, loadLedger } from "../ledger/io.js";
-import { hasDecorator } from "../emit/typeMapping.js";
-import { descriptorEmitter } from "../emit/descriptor/descriptorEmitter.js";
+import { definesNeoworksNodes, publishedDescriptor } from "../emit/descriptor/descriptorEmitter.js";
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { MANIFEST_FILE, parseManifest, type Manifest } from "./manifest.js";
@@ -113,11 +112,9 @@ function checkLedger(entryPath: string, schema: ResolvedSchema, generator: strin
 
 /** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks nodes. */
 function describeNodes(schema: ResolvedSchema): string | null {
-  const definesNodes = [...schema.records.values()].some(record => hasDecorator(record.decorators, "neoworks.node"));
-  if (!definesNodes) return null;
+  if (!definesNeoworksNodes(schema)) return null;
   try {
-    const [file] = descriptorEmitter.emit({ schema, company: null, includePrivate: false, options: {} });
-    return file.contents;
+    return publishedDescriptor(schema);
   } catch (error) {
     throw new PublishRefused([describeEmitError(error)]);
   }

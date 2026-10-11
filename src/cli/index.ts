@@ -13,7 +13,7 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
 import { diff as engineDiff } from "../engine/index.js";
@@ -22,9 +22,12 @@ import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
-import { IncompatibleSchemaError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
+import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
 import { getAccessToken, login } from "../registry/auth.js";
-import { resolveEndpoints } from "../registry/urls.js";
+import { resolveEndpoints, type Endpoints } from "../registry/urls.js";
+import { readCollectionName } from "../registry/collectionName.js";
+import { CODEC_MODULE_OPTION, COLLECTION_OPTION } from "../emit/collection/collectionEmitter.js";
+import { initProject, type InitOptions } from "./init.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
@@ -112,7 +115,7 @@ function cmdGenerate(schemaPath: string, opts: GenerateOptions): void {
   const emitters = resolveTargets(opts.target);
   const schema = resolveProject(schemaPath);
   const pendingLock = syncLedger(schemaPath, schema, opts);
-  const files = emitAll(emitters, schema, opts);
+  const files = emitAll(emitters, schema, opts, schemaPath);
 
   // The lockfile lands only after every emitter has succeeded, so a rejected
   // construct never leaves behind a ledger recording ordinals that produced no
@@ -127,22 +130,45 @@ function cmdGenerate(schemaPath: string, opts: GenerateOptions): void {
   }
 }
 
-function emitAll(emitters: Emitter[], schema: ResolvedSchema, opts: GenerateOptions): OutputFile[] {
+/**
+ * Runs every emitter. The collection target runs last: it names the schema by the
+ * manifest beside it and re-exports the codec module when the codec target ran.
+ */
+function emitAll(emitters: Emitter[], schema: ResolvedSchema, opts: GenerateOptions, schemaPath: string): OutputFile[] {
   const files: OutputFile[] = [];
-  for (const emitter of emitters) {
+  const codecModules: string[] = [];
+  const ordered = [...emitters.filter(isNotCollection), ...emitters.filter(isCollection)];
+  for (const emitter of ordered) {
     try {
-      files.push(...emitter.emit({
+      const emitted = emitter.emit({
         schema,
         company: opts.company ?? null,
         includePrivate: opts.includePrivate === true,
-        options: {},
-      }));
+        options: emitOptions(emitter, schemaPath, codecModules),
+      });
+      if (emitter.target === "codec") codecModules.push(...emitted.map(file => file.path));
+      files.push(...emitted);
     } catch (error) {
       reportEmitError(error);
       process.exit(1);
     }
   }
   return files;
+}
+
+function isCollection(emitter: Emitter): boolean {
+  return emitter.target === "collection";
+}
+
+function isNotCollection(emitter: Emitter): boolean {
+  return !isCollection(emitter);
+}
+
+function emitOptions(emitter: Emitter, schemaPath: string, codecModules: string[]): Record<string, string> {
+  if (!isCollection(emitter)) return {};
+  const options: Record<string, string> = { [COLLECTION_OPTION]: readCollectionName(dirname(schemaPath)) };
+  if (codecModules.length > 0) options[CODEC_MODULE_OPTION] = codecModules[0];
+  return options;
 }
 
 // ── Ordinal ledger ────────────────────────────────────────────────────────────
@@ -317,13 +343,27 @@ function spanPrefix(span: Span | null): string {
 
 // ── add ───────────────────────────────────────────────────────────────────────
 
-interface AddOptions {
+interface EndpointOptions {
+  basePort?: string;
+}
+
+/** The service URLs for this run, or an exit with the reason the --base-port is unusable. */
+function endpointsOrExit(opts: EndpointOptions): Endpoints {
+  try {
+    return resolveEndpoints({ port: opts.basePort });
+  } catch (e) {
+    console.error(chalk.red(`error: ${describeError(e)}`));
+    process.exit(1);
+  }
+}
+
+interface AddOptions extends EndpointOptions {
   out: string;
   registry?: string;
 }
 
 async function cmdAdd(ref: string, opts: AddOptions): Promise<void> {
-  const registry = resolveRegistry(opts.registry);
+  const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
 
   let resolved;
   try {
@@ -350,9 +390,10 @@ async function cmdAdd(ref: string, opts: AddOptions): Promise<void> {
 
 // ── login / publish ───────────────────────────────────────────────────────────
 
-async function cmdLogin(): Promise<void> {
+async function cmdLogin(opts: EndpointOptions): Promise<void> {
+  const endpoints = endpointsOrExit(opts);
   try {
-    await login();
+    await login(endpoints);
     console.log(chalk.green("\n  ✓ signed in. Credentials saved.\n"));
   } catch (e) {
     console.error(chalk.red(`error: ${e instanceof Error ? e.message : String(e)}`));
@@ -360,7 +401,7 @@ async function cmdLogin(): Promise<void> {
   }
 }
 
-interface PublishOptions {
+interface PublishOptions extends EndpointOptions {
   site?: string;
 }
 
@@ -372,16 +413,13 @@ async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
     process.exit(1);
   }
   const payload = prepared.payload;
+  const endpoints = endpointsOrExit(opts);
 
   try {
-    const token = await getAccessToken();
-    await publish(publishSite(opts), token, payload);
+    const token = await getAccessToken(endpoints);
+    await publish(publishSite(opts, endpoints), token, payload);
   } catch (error) {
-    if (error instanceof IncompatibleSchemaError) {
-      reportRefusedPublish(payload, error);
-    } else {
-      console.error(chalk.red(`error: ${describeError(error)}`));
-    }
+    reportPublishFailure(payload, error);
     process.exit(1);
   }
   console.log(chalk.green(
@@ -396,9 +434,18 @@ function reportRefusedPublish(payload: PublishPayload, refusal: IncompatibleSche
   console.error(chalk.dim("  nothing was published"));
 }
 
-function publishSite(opts: PublishOptions): string {
+function reportPublishFailure(payload: PublishPayload, error: unknown): void {
+  if (error instanceof IncompatibleSchemaError) {
+    reportRefusedPublish(payload, error);
+    return;
+  }
+  console.error(chalk.red(`error: ${describeError(error)}`));
+  if (error instanceof PublishRefusedError) console.error(chalk.dim("  nothing was published"));
+}
+
+function publishSite(opts: PublishOptions, endpoints: Endpoints): string {
   if (opts.site) return opts.site;
-  return resolveEndpoints().site;
+  return endpoints.site;
 }
 
 function describeError(error: unknown): string {
@@ -411,6 +458,19 @@ function describeUpload(payload: PublishPayload): string {
   if (payload.files.length === 1) files = "1 file";
   if (payload.descriptor === undefined) return files;
   return `${files}, with descriptor`;
+}
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+function cmdInit(dir: string, opts: InitOptions): void {
+  try {
+    for (const path of initProject(dir, opts)) console.log(chalk.green(`✓ ${path}`));
+  } catch (e) {
+    console.error(chalk.red(`error: ${describeError(e)}`));
+    process.exit(1);
+  }
+  if (opts.scope === undefined) console.log(chalk.yellow("\n  ⚠ set `scope` in openschema.yaml to your handle before publishing."));
+  console.log(chalk.dim("  The header of the schema file shows how to generate the collection module."));
 }
 
 // ── migrate ───────────────────────────────────────────────────────────────────
@@ -878,6 +938,8 @@ function cmdCheck(
 
 // ── Program ───────────────────────────────────────────────────────────────────
 
+const BASE_PORT_HELP = "port of every service on the base domain, e.g. 8443 for *.neoworks.localhost:8443 (env: OPENSCHEMA_BASE_PORT)";
+
 const program = new Command();
 
 program
@@ -1011,6 +1073,7 @@ program
   .description("Download a published schema from the registry (e.g. @neoworks/commerce)")
   .option("-o, --out <dir>", "output directory (defaults to the schema name)", ".")
   .option("--registry <url>", "registry API base (default: production)")
+  .option("--base-port <port>", BASE_PORT_HELP)
   .action((schema, opts) => cmdAdd(schema, opts));
 
 // ── login ─────────────────────────────────────────────────────────────────────
@@ -1018,7 +1081,8 @@ program
 program
   .command("login")
   .description("Sign in to the OpenSchema registry (browser-based)")
-  .action(() => cmdLogin());
+  .option("--base-port <port>", BASE_PORT_HELP)
+  .action((opts) => cmdLogin(opts));
 
 // ── publish ─────────────────────────────────────────────────────────────────────
 
@@ -1026,7 +1090,20 @@ program
   .command("publish [dir]")
   .description("Publish the schema described by [dir]/openschema.yaml to the registry (submitted to the org's server)")
   .option("--site <url>", "openschema site base (default: production)")
+  .option("--base-port <port>", BASE_PORT_HELP)
   .action((dir, opts) => cmdPublish(dir ?? ".", opts));
+
+// ── init ──────────────────────────────────────────────────────────────────────
+
+program
+  .command("init [dir]")
+  .description("Write a starter openschema.yaml and schema for a new collection")
+  .option("--scope <handle>", "your handle or organization, the scope of the registry path")
+  .option("--name <name>", "the schema's name (default: the directory name)")
+  .option("--title <text>", "the title shown in the registry")
+  .option("--description <text>", "the description shown in the registry")
+  .option("--force", "overwrite files that already exist")
+  .action((dir, opts) => cmdInit(dir ?? ".", opts));
 
 program.parse(process.argv);
 

@@ -2,7 +2,7 @@
 // The `descriptor` target: the schema as data, for runtimes that encode, decode
 // and validate the codec wire format without generated code. Field layouts come
 // from the same plan the codec target generates from, so the two cannot disagree.
-import { baseFieldsToEmit } from "../typeMapping.js";
+import { baseFieldsToEmit, hasDecorator } from "../typeMapping.js";
 import { planModel } from "../codec/plan.js";
 import { rejectDuplicateLocalNames, rejectOverlayCompany } from "../codec/codecEmitter.js";
 import { describeConstraints } from "./constraints.js";
@@ -16,6 +16,15 @@ export const descriptorEmitter = {
         return [{ path: "schema.descriptor.json", contents: `${JSON.stringify(descriptor, null, 2)}\n` }];
     },
 };
+/** Whether the schema defines Neoworks nodes, which is what makes it a collection with a descriptor. */
+export function definesNeoworksNodes(schema) {
+    return [...schema.records.values()].some(record => hasDecorator(record.decorators, "neoworks.node"));
+}
+/** The descriptor text exactly as `openschema publish` uploads it: no company overlay, no private fields. */
+export function publishedDescriptor(schema) {
+    const [file] = descriptorEmitter.emit({ schema, company: null, includePrivate: false, options: {} });
+    return file.contents;
+}
 export function buildDescriptor(context) {
     rejectOverlayCompany(context);
     rejectDuplicateLocalNames(context.schema);

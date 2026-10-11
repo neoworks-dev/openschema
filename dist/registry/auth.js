@@ -10,7 +10,6 @@ import { createServer } from "http";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
-import { resolveEndpoints } from "./urls.js";
 const CLIENT_ID = "openschema";
 // Must match the loopback redirect seeded on the openschema client (007_seed_clients.surql).
 const LOOPBACK_PORT = 8765;
@@ -86,8 +85,8 @@ async function exchangeCode(oauth, code, verifier) {
     };
 }
 /** Run the loopback PKCE login, persisting the resulting tokens. Returns the access token. */
-export async function login() {
-    const { oauth } = resolveEndpoints();
+export async function login(endpoints) {
+    const { oauth } = endpoints;
     const verifier = base64url(randomBytes(32));
     const challenge = base64url(createHash("sha256").update(verifier).digest());
     const state = base64url(randomBytes(16));
@@ -105,22 +104,22 @@ export async function login() {
     return creds.access_token;
 }
 /** Return a valid access token, refreshing or prompting login as needed. */
-export async function getAccessToken() {
+export async function getAccessToken(endpoints) {
     const creds = loadCredentials();
     if (creds && creds.expires_at - 30000 > Date.now()) {
         return creds.access_token;
     }
     if (creds?.refresh_token) {
-        const refreshed = await tryRefresh(creds.refresh_token);
+        const refreshed = await tryRefresh(endpoints, creds.refresh_token);
         if (refreshed) {
             saveCredentials(refreshed);
             return refreshed.access_token;
         }
     }
-    return login();
+    return login(endpoints);
 }
-async function tryRefresh(refreshToken) {
-    const { oauth } = resolveEndpoints();
+async function tryRefresh(endpoints, refreshToken) {
+    const { oauth } = endpoints;
     const body = new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,

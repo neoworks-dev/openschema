@@ -12,7 +12,7 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
 import { diff as engineDiff } from "../engine/index.js";
@@ -20,9 +20,12 @@ import { resolveModules, loadProject } from "../resolver/index.js";
 import { getEmitter, listTargets } from "../emit/index.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
-import { IncompatibleSchemaError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry } from "../registry/client.js";
+import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry } from "../registry/client.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints } from "../registry/urls.js";
+import { readCollectionName } from "../registry/collectionName.js";
+import { CODEC_MODULE_OPTION, COLLECTION_OPTION } from "../emit/collection/collectionEmitter.js";
+import { initProject } from "./init.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
@@ -83,7 +86,7 @@ function cmdGenerate(schemaPath, opts) {
     const emitters = resolveTargets(opts.target);
     const schema = resolveProject(schemaPath);
     const pendingLock = syncLedger(schemaPath, schema, opts);
-    const files = emitAll(emitters, schema, opts);
+    const files = emitAll(emitters, schema, opts, schemaPath);
     // The lockfile lands only after every emitter has succeeded, so a rejected
     // construct never leaves behind a ledger recording ordinals that produced no
     // output.
@@ -96,16 +99,25 @@ function cmdGenerate(schemaPath, opts) {
         console.log(chalk.green(`✓ ${fullPath}`));
     }
 }
-function emitAll(emitters, schema, opts) {
+/**
+ * Runs every emitter. The collection target runs last: it names the schema by the
+ * manifest beside it and re-exports the codec module when the codec target ran.
+ */
+function emitAll(emitters, schema, opts, schemaPath) {
     const files = [];
-    for (const emitter of emitters) {
+    const codecModules = [];
+    const ordered = [...emitters.filter(isNotCollection), ...emitters.filter(isCollection)];
+    for (const emitter of ordered) {
         try {
-            files.push(...emitter.emit({
+            const emitted = emitter.emit({
                 schema,
                 company: opts.company ?? null,
                 includePrivate: opts.includePrivate === true,
-                options: {},
-            }));
+                options: emitOptions(emitter, schemaPath, codecModules),
+            });
+            if (emitter.target === "codec")
+                codecModules.push(...emitted.map(file => file.path));
+            files.push(...emitted);
         }
         catch (error) {
             reportEmitError(error);
@@ -113,6 +125,20 @@ function emitAll(emitters, schema, opts) {
         }
     }
     return files;
+}
+function isCollection(emitter) {
+    return emitter.target === "collection";
+}
+function isNotCollection(emitter) {
+    return !isCollection(emitter);
+}
+function emitOptions(emitter, schemaPath, codecModules) {
+    if (!isCollection(emitter))
+        return {};
+    const options = { [COLLECTION_OPTION]: readCollectionName(dirname(schemaPath)) };
+    if (codecModules.length > 0)
+        options[CODEC_MODULE_OPTION] = codecModules[0];
+    return options;
 }
 const GENERATOR = `openschema ${VERSION}`;
 function lockPathFor(schemaPath, opts) {
@@ -254,8 +280,18 @@ function spanPrefix(span) {
         return "";
     return `${span.line}:${span.col} `;
 }
+/** The service URLs for this run, or an exit with the reason the --base-port is unusable. */
+function endpointsOrExit(opts) {
+    try {
+        return resolveEndpoints({ port: opts.basePort });
+    }
+    catch (e) {
+        console.error(chalk.red(`error: ${describeError(e)}`));
+        process.exit(1);
+    }
+}
 async function cmdAdd(ref, opts) {
-    const registry = resolveRegistry(opts.registry);
+    const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
     let resolved;
     try {
         resolved = await fetchSchema(registry, parseSchemaRef(ref));
@@ -275,9 +311,10 @@ async function cmdAdd(ref, opts) {
     console.log(chalk.dim(`\n  added @${resolved.scope}/${resolved.name}@${resolved.version} (${resolved.files.length} file${resolved.files.length === 1 ? "" : "s"})`));
 }
 // ── login / publish ───────────────────────────────────────────────────────────
-async function cmdLogin() {
+async function cmdLogin(opts) {
+    const endpoints = endpointsOrExit(opts);
     try {
-        await login();
+        await login(endpoints);
         console.log(chalk.green("\n  ✓ signed in. Credentials saved.\n"));
     }
     catch (e) {
@@ -294,17 +331,13 @@ async function cmdPublish(dir, opts) {
         process.exit(1);
     }
     const payload = prepared.payload;
+    const endpoints = endpointsOrExit(opts);
     try {
-        const token = await getAccessToken();
-        await publish(publishSite(opts), token, payload);
+        const token = await getAccessToken(endpoints);
+        await publish(publishSite(opts, endpoints), token, payload);
     }
     catch (error) {
-        if (error instanceof IncompatibleSchemaError) {
-            reportRefusedPublish(payload, error);
-        }
-        else {
-            console.error(chalk.red(`error: ${describeError(error)}`));
-        }
+        reportPublishFailure(payload, error);
         process.exit(1);
     }
     console.log(chalk.green(`\n  ✓ published @${payload.scope}/${payload.name}@${payload.version} (${describeUpload(payload)})\n`));
@@ -316,10 +349,19 @@ function reportRefusedPublish(payload, refusal) {
         console.error(line);
     console.error(chalk.dim("  nothing was published"));
 }
-function publishSite(opts) {
+function reportPublishFailure(payload, error) {
+    if (error instanceof IncompatibleSchemaError) {
+        reportRefusedPublish(payload, error);
+        return;
+    }
+    console.error(chalk.red(`error: ${describeError(error)}`));
+    if (error instanceof PublishRefusedError)
+        console.error(chalk.dim("  nothing was published"));
+}
+function publishSite(opts, endpoints) {
     if (opts.site)
         return opts.site;
-    return resolveEndpoints().site;
+    return endpoints.site;
 }
 function describeError(error) {
     if (error instanceof Error)
@@ -333,6 +375,20 @@ function describeUpload(payload) {
     if (payload.descriptor === undefined)
         return files;
     return `${files}, with descriptor`;
+}
+// ── init ──────────────────────────────────────────────────────────────────────
+function cmdInit(dir, opts) {
+    try {
+        for (const path of initProject(dir, opts))
+            console.log(chalk.green(`✓ ${path}`));
+    }
+    catch (e) {
+        console.error(chalk.red(`error: ${describeError(e)}`));
+        process.exit(1);
+    }
+    if (opts.scope === undefined)
+        console.log(chalk.yellow("\n  ⚠ set `scope` in openschema.yaml to your handle before publishing."));
+    console.log(chalk.dim("  The header of the schema file shows how to generate the collection module."));
 }
 function cmdMigrate(oldPath, newPath, opts) {
     const oldSchema = resolveProject(oldPath);
@@ -683,6 +739,7 @@ function cmdCheck(oldPath, newPath, opts) {
     process.exit(1);
 }
 // ── Program ───────────────────────────────────────────────────────────────────
+const BASE_PORT_HELP = "port of every service on the base domain, e.g. 8443 for *.neoworks.localhost:8443 (env: OPENSCHEMA_BASE_PORT)";
 const program = new Command();
 program
     .name("openschema")
@@ -779,17 +836,30 @@ program
     .description("Download a published schema from the registry (e.g. @neoworks/commerce)")
     .option("-o, --out <dir>", "output directory (defaults to the schema name)", ".")
     .option("--registry <url>", "registry API base (default: production)")
+    .option("--base-port <port>", BASE_PORT_HELP)
     .action((schema, opts) => cmdAdd(schema, opts));
 // ── login ─────────────────────────────────────────────────────────────────────
 program
     .command("login")
     .description("Sign in to the OpenSchema registry (browser-based)")
-    .action(() => cmdLogin());
+    .option("--base-port <port>", BASE_PORT_HELP)
+    .action((opts) => cmdLogin(opts));
 // ── publish ─────────────────────────────────────────────────────────────────────
 program
     .command("publish [dir]")
     .description("Publish the schema described by [dir]/openschema.yaml to the registry (submitted to the org's server)")
     .option("--site <url>", "openschema site base (default: production)")
+    .option("--base-port <port>", BASE_PORT_HELP)
     .action((dir, opts) => cmdPublish(dir ?? ".", opts));
+// ── init ──────────────────────────────────────────────────────────────────────
+program
+    .command("init [dir]")
+    .description("Write a starter openschema.yaml and schema for a new collection")
+    .option("--scope <handle>", "your handle or organization, the scope of the registry path")
+    .option("--name <name>", "the schema's name (default: the directory name)")
+    .option("--title <text>", "the title shown in the registry")
+    .option("--description <text>", "the description shown in the registry")
+    .option("--force", "overwrite files that already exist")
+    .action((dir, opts) => cmdInit(dir ?? ".", opts));
 program.parse(process.argv);
 //# sourceMappingURL=index.js.map

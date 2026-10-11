@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { IncompatibleSchemaError, describeViolations, publish, type PublishPayload } from "../src/registry/client";
+import { IncompatibleSchemaError, PublishRefusedError, describeViolations, publish, type PublishPayload } from "../src/registry/client";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -40,4 +40,31 @@ test("violations are printed with their rule, path and message", () => {
     "  node_kind_removed  nodes.container",
     "      container nodes stored Playlist",
   ]);
+});
+
+test("a 403 names the scope and the permission it lacks", async () => {
+  stubSite(403, { error: "this needs the schemas.publish permission", code: "missing_permission", permission: "schemas.publish" });
+  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  expect(failure).toBeInstanceOf(PublishRefusedError);
+  expect(failure.status).toBe(403);
+  expect(failure.message).toBe("you may not publish into @example: it needs the schemas.publish permission for the owner of @example");
+});
+
+test("a 404 says the scope is not a handle yet", async () => {
+  stubSite(404, { error: "not found", code: "not_found" });
+  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  expect(failure).toBeInstanceOf(PublishRefusedError);
+  expect(failure.message).toContain("@example is not a handle");
+});
+
+test("a 409 for an archived organization is not mistaken for an existing version", async () => {
+  stubSite(409, { error: "the organization is archived", code: "archived" });
+  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  expect(failure).toBeInstanceOf(PublishRefusedError);
+  expect(failure.message).toBe("@example belongs to an archived organization; nobody can publish into it");
+});
+
+test("a 401 asks for a login", async () => {
+  stubSite(401, { error: "authentication required" });
+  await expect(publish("https://site.example", "token", payload)).rejects.toThrow("run `openschema login`");
 });

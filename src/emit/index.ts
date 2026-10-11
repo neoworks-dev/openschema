@@ -12,6 +12,7 @@ import { surrealEmitter } from "./surrealdb/surrealEmitter.js";
 import { zodEmitter } from "./zod/zodEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
 import { descriptorEmitter } from "./descriptor/descriptorEmitter.js";
+import { collectionEmitter } from "./collection/collectionEmitter.js";
 
 export type { Emitter, EmitContext, OutputFile } from "./types.js";
 export type * from "./descriptor/descriptorTypes.js";
@@ -27,6 +28,7 @@ const EMITTERS: Record<string, Emitter> = {
   [zodEmitter.target]: zodEmitter,
   [codecEmitter.target]: codecEmitter,
   [descriptorEmitter.target]: descriptorEmitter,
+  [collectionEmitter.target]: collectionEmitter,
 };
 
 export function getEmitter(target: string): Emitter | null {

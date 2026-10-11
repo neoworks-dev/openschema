@@ -4,9 +4,9 @@
 // from the same plan the codec target generates from, so the two cannot disagree.
 
 import type { EnumDecl } from "../../parser/ast.js";
-import type { ResolvedField, ResolvedModel } from "../../resolver/types.js";
+import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
 import type { EmitContext, Emitter, OutputFile } from "../types.js";
-import { baseFieldsToEmit } from "../typeMapping.js";
+import { baseFieldsToEmit, hasDecorator } from "../typeMapping.js";
 import { planModel, type FieldPlan } from "../codec/plan.js";
 import { rejectDuplicateLocalNames, rejectOverlayCompany } from "../codec/codecEmitter.js";
 import { describeConstraints } from "./constraints.js";
@@ -24,6 +24,17 @@ export const descriptorEmitter: Emitter = {
     return [{ path: "schema.descriptor.json", contents: `${JSON.stringify(descriptor, null, 2)}\n` }];
   },
 };
+
+/** Whether the schema defines Neoworks nodes, which is what makes it a collection with a descriptor. */
+export function definesNeoworksNodes(schema: ResolvedSchema): boolean {
+  return [...schema.records.values()].some(record => hasDecorator(record.decorators, "neoworks.node"));
+}
+
+/** The descriptor text exactly as `openschema publish` uploads it: no company overlay, no private fields. */
+export function publishedDescriptor(schema: ResolvedSchema): string {
+  const [file] = descriptorEmitter.emit({ schema, company: null, includePrivate: false, options: {} });
+  return file.contents;
+}
 
 export function buildDescriptor(context: EmitContext): SchemaDescriptor {
   rejectOverlayCompany(context);

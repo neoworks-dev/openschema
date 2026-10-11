@@ -33,7 +33,7 @@ the older `openschema gen` are aliases for the same command.
 | `--no-lock` | skip the ordinal ledger entirely | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `codec`, `descriptor`.
+`surrealdb`, `codec`, `descriptor`, `collection`.
 
 ```bash
 openschema order.schema -t sql -o ./generated
@@ -179,6 +179,28 @@ published.
 | Flag | Meaning |
 |---|---|
 | `--site <url>` | openschema site base (default: production) |
+| `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) |
+
+A refused publish says why (not signed in, no `schemas.publish` permission, the scope is
+not a handle, an archived organization, an incompatible version); see
+[Collection target and project setup](./collection.md#when-a-publish-is-refused).
+
+## `init [dir]`
+
+Writes a starter `openschema.yaml` and schema for a new collection.
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `--scope <handle>` | the scope of the registry path | `your-handle` (a placeholder) |
+| `--name <name>` | the schema's name | the directory name |
+| `--title <text>` | title shown in the registry | derived from the name |
+| `--description <text>` | description shown in the registry | derived from the title |
+| `--force` | overwrite existing files | off |
+
+## `login`
+
+Signs in through the browser and saves the credentials. Takes `--base-port <port>`
+like `publish` and `add`.
 
 ## Exit codes
 
