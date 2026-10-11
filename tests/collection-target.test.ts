@@ -1,4 +1,4 @@
-// The collection target writes the module apps give to `session.collection()`:
+// The collection target writes the module apps give to `neoworks.collection()`:
 // the registry path from openschema.yaml and the descriptor exactly as publish
 // uploads it. `openschema init` writes the starting point.
 
@@ -91,6 +91,17 @@ describe("the collection target", () => {
 
     run(["recipes.schema", "-t", "collection,codec", "-o", "generated"], directory);
     expect(generatedModule(directory)).toContain("export * from './schema.codec.ts'");
+  });
+
+  it("types the content of every node model when the codec is generated too", () => {
+    const directory = scaffold();
+    run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory);
+    const module = generatedModule(directory);
+
+    expect(module).toContain("readonly name: '@acme/recipes'");
+    expect(module).toMatch(/readonly containers\?: \{ \w+: \w+ \}/);
+    expect(module).toMatch(/readonly items\?: \{ \w+: \w+ \}/);
+    expect(module).toContain("export default collection");
   });
 
   it("needs an openschema.yaml beside the schema", () => {

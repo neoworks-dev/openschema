@@ -1,6 +1,6 @@
 # Collection target and project setup
 
-A Neoworks app opens a collection with `session.collection()`, which needs the
+A Neoworks app opens a collection with `neoworks.collection()`, which needs the
 collection's registry path and its [descriptor](./descriptor.md) text. The
 `collection` target writes both as one module, so an app never copies a
 descriptor by hand.
@@ -38,12 +38,20 @@ Writes `index.ts`:
 
 ```ts
 export * from './schema.codec.ts'
+import type { Folder, Note } from './schema.codec.ts'
 
-/** Pass to `NeoworksSession.collection`; the descriptor text is exactly what the registry publishes. */
+/** Pass to `Neoworks.collection`; the descriptor text is exactly what the registry publishes. */
 export const collection = {
 	name: '@acme/notes',
 	descriptor: "{\n  \"descriptorVersion\": 1, ...",
-} as const
+} as {
+	readonly name: '@acme/notes'
+	readonly descriptor: string
+	readonly containers?: { Folder: Folder }
+	readonly items?: { Note: Note }
+}
+
+export default collection
 ```
 
 - `name` is the registry path `@scope/name`, taken from the `openschema.yaml` in the
@@ -54,6 +62,10 @@ export const collection = {
 - The `export * from './schema.codec.ts'` line is written when the `codec` target runs
   in the same command, so apps import the content types and `collection` from one
   module. Run the targets together: `--target descriptor,codec,collection`.
+- With the codec, the export is typed: `containers` and `items` exist only in the type
+  system and give the content type of every node model, so `neoworks.collection()`
+  can return typed resources. Without the codec the export is the plain `as const`
+  object and the SDK resources are untyped.
 - The schema must define `@neoworks.node` models; a schema without nodes has no
   descriptor and the target fails.
 
@@ -61,9 +73,10 @@ Regenerate and commit the output whenever the schema changes. The `openschema.lo
 ordinal ledger is kept up to date by the same command, as for every target.
 
 ```ts
-import { collection, type Note } from './generated/index.ts'
+import schema from './generated/index.ts'
 
-const notes = session.collection<Note, Folder>(collection)
+const { folders, notes } = neoworks.collection(schema)
+const note = await notes.create({ folder: folderId, title: 'Hello' })
 ```
 
 ## Publishing to a development stack
