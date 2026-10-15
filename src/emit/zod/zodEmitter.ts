@@ -9,6 +9,10 @@ import {
   firstStringArg, findDecorator, unionAliases, resolveAliasInline,
 } from "../typeMapping.js";
 
+const ZOD_FILE = "z.object({ objectId: z.string().uuid(), name: z.string(), mediaType: z.string(), " +
+  "size: z.number().int().nonnegative(), " +
+  "variants: z.record(z.string(), z.object({ objectId: z.string().uuid(), size: z.number().int().nonnegative() })) })";
+
 // Base Zod expression for each scalar. String-shaped temporal/uuid scalars mirror
 // the TypeScript emitter, which renders them as `string`.
 const SCALAR_ZOD: Record<ScalarKind, string> = {
@@ -169,6 +173,7 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "map":      return `z.record(${mapType(type.key, schema)}, ${mapType(type.value, schema)})`;
     case "nullable": return `${mapType(type.inner, schema)}.nullish()`;
     case "null":     return "z.null()";
+    case "file":     return ZOD_FILE;
     case "union":    return `z.union([${type.variants.map(v => mapType(v, schema)).join(", ")}])`;
     case "oneof":    return mapOneof(type.variants, schema);
   }

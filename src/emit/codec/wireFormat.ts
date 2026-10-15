@@ -153,6 +153,7 @@ function singularSignature(type: TypeExpr, schema: ResolvedSchema): EncodingSign
   if (type.kind === "scalar")  return fromWireType(SCALAR_WIRE[type.scalar]);
   if (type.kind === "decimal") return "singular:len";
   if (type.kind === "oneof")   return "singular:len";
+  if (type.kind === "file")    return "singular:len";
   if (type.kind === "union")   return "unencodable";
   if (type.kind === "named") {
     const named = classifyNamed(type, schema);

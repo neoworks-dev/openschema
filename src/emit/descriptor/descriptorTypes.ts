@@ -51,20 +51,17 @@ export interface ValueConstraints {
   format?:    string;
 }
 
-/**
- * Roots carry no content, so only containers, items and assets have a node model.
- * An asset is an item that carries exactly one file.
- */
-export type NodeKind = "container" | "item" | "asset";
+/** Roots carry no content, so only containers and items have a node model. */
+export type NodeKind = "container" | "item";
 
 /** A model stored as the content of a Neoworks node of one kind. */
 export interface NodeDescriptor {
   kind:       NodeKind;
   model:      string;
   facets:     FacetDescriptor[];
-  /** Ordinals of string fields the client indexes for search. */
+  /** Ordinals of string and File fields the client indexes for search; a File is indexed by its name. */
   searchable: number[];
-  /** Ordinal of the string field that names the node, from @neoworks.title. */
+  /** Ordinal of the string or File field that names the node, from @neoworks.title. */
   title:      number | null;
   timeRange:  TimeRangeDescriptor | null;
 }

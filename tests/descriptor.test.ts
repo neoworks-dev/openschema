@@ -145,9 +145,9 @@ describe("node models", () => {
   });
 });
 
-describe("assets and references", () => {
+describe("references", () => {
   const CONTACTS = `
-@neoworks.node("asset")
+@neoworks.node("container")
 model Picture { 1 name: string }
 
 @neoworks.node("item")
@@ -158,9 +158,9 @@ model Contact {
 }
 `;
 
-  it("describes an asset as a node kind of its own", () => {
+  it("describes the model of each node kind", () => {
     const kinds = describeSchema(CONTACTS).nodes.map(node => `${node.kind}:${node.model}`);
-    expect(kinds).toEqual(["asset:Picture", "item:Contact"]);
+    expect(kinds).toEqual(["container:Picture", "item:Contact"]);
   });
 
   it("records the target of a reference on the uuid value, one level per element", () => {
@@ -171,9 +171,8 @@ model Contact {
     expect(contact.fields[0].value).toEqual({ kind: "scalar", scalar: "string" });
   });
 
-  it("allows only one asset model per schema", () => {
-    expect(descriptorError('@neoworks.node("asset") model A { 1 a: i32 }\n@neoworks.node("asset") model B { 1 b: i32 }').code)
-      .toBe("OSD003");
+  it("has no asset node kind", () => {
+    expect(descriptorError('@neoworks.node("asset") model A { 1 a: i32 }').code).toBe("OSD002");
   });
 
   it("reports a reference to an unknown model or to a model that is not a node", () => {
@@ -200,7 +199,7 @@ describe("node decorator errors", () => {
     expect(descriptorError('@neoworks.node("root") model M { 1 a: i32 }').code).toBe("OSD002");
   });
 
-  it("rejects a title that is not one single string field", () => {
+  it("rejects a title that is not one single string or File field", () => {
     expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: [string] }').code).toBe("OSD010");
     expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: string  @neoworks.title 2 b: string }').code)
       .toBe("OSD010");

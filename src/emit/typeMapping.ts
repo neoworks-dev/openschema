@@ -5,6 +5,35 @@ import type { Decorator, DecoratorValue, TypeExpr, TypeAlias, Span } from "../pa
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../resolver/types.js";
 import type { EmitContext } from "./types.js";
 
+// ── File ──────────────────────────────────────────────────────────────────────
+//
+// The built-in `File` type as the API-surface targets render it. The codec and
+// descriptor targets describe the same value on the wire (see codec/filePlan.ts).
+
+export const FILE_TS = "{ objectId: string; name: string; mediaType: string; size: number; " +
+  "variants: Record<string, { objectId: string; size: number }> }";
+
+const FILE_OBJECT_ID = { type: "string", format: "uuid" };
+
+export const FILE_JSON_SCHEMA = {
+  type: "object",
+  required: ["objectId", "name", "mediaType", "size"],
+  properties: {
+    objectId: FILE_OBJECT_ID,
+    name: { type: "string" },
+    mediaType: { type: "string" },
+    size: { type: "integer", minimum: 0 },
+    variants: {
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        required: ["objectId", "size"],
+        properties: { objectId: FILE_OBJECT_ID, size: { type: "integer", minimum: 0 } },
+      },
+    },
+  },
+};
+
 /** Base-record fields an emitter should render, honouring includePrivate. */
 export function baseFieldsToEmit(record: ResolvedModel, context: EmitContext): ResolvedField[] {
   if (context.includePrivate) return record.fields;

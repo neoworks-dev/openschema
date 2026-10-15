@@ -201,6 +201,7 @@ export function describeType(t: TypeExpr): string {
     case "map":      return `{${describeType(t.key)}:${describeType(t.value)}}`;
     case "nullable": return `${describeType(t.inner)}?`;
     case "null":     return "null";
+    case "file":     return "File";
     case "union":    return t.variants.map(describeType).join("|");
     case "oneof":    return `oneof{${t.variants.map(v => `${v.ordinal}:${describeType(v.type)}`).join(",")}}`;
   }

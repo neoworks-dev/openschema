@@ -14,10 +14,14 @@ import {
 
 export const UNKNOWN_PROPERTY = "$unknown";
 
+/** The message a `File` value is encoded as; see filePlan.ts. */
+export const FILE_MESSAGE_NAME = "File";
+
 export type ValueShape =
   | { kind: "scalar"; scalar: ScalarKind; reference?: string }
   | { kind: "enum"; name: string }
   | { kind: "message"; name: string }
+  | { kind: "file" }
   | { kind: "decimal"; precision: number; scale: number }
   | { kind: "oneof"; variants: OneofVariantPlan[] };
 
@@ -186,6 +190,7 @@ function planValue(model: string, field: ResolvedField, type: TypeExpr, schema: 
   }
   if (resolved.kind === "scalar")  return { kind: "scalar", scalar: resolved.scalar };
   if (resolved.kind === "decimal") return { kind: "decimal", precision: resolved.precision, scale: resolved.scale };
+  if (resolved.kind === "file")    return { kind: "file" };
   if (resolved.kind === "oneof") {
     return {
       kind: "oneof",
@@ -260,6 +265,7 @@ export function valueTsType(value: ValueShape): string {
     case "scalar":  return SCALAR_CODEC_TS[value.scalar];
     case "enum":    return value.name;
     case "message": return value.name;
+    case "file":    return FILE_MESSAGE_NAME;
     case "decimal": return "string";
     case "oneof":   return oneofTsType(value.variants);
   }
@@ -280,6 +286,7 @@ export function wireTypeOf(value: ValueShape): WireType {
     case "scalar":  return SCALAR_WIRE[value.scalar];
     case "enum":    return WireType.Varint;
     case "message": return WireType.Len;
+    case "file":    return WireType.Len;
     case "decimal": return WireType.Len;
     case "oneof":   return WireType.Len;
   }

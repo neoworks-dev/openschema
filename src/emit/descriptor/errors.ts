@@ -11,10 +11,10 @@ export type DescriptorErrorCode =
   | "OSD004"   // a node-only decorator on a model that is not a node
   | "OSD005"   // invalid or repeated facet name
   | "OSD006"   // two facets of one model hash to the same tag
-  | "OSD007"   // @neoworks.searchable on a field that is not a string
+  | "OSD007"   // @neoworks.searchable on a field that is not a string or File
   | "OSD008"   // invalid @neoworks.timeRange
   | "OSD009"   // invalid validation decorator
-  | "OSD010";  // @neoworks.title not on exactly one single string field
+  | "OSD010";  // @neoworks.title not on exactly one single string or File field
 
 export class DescriptorError extends Error {
   constructor(
