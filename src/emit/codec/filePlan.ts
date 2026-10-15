@@ -5,6 +5,7 @@
 //
 //   File         1 objectId: uuid   2 name: string   3 mediaType: string
 //                4 size: u64        5 variants: {string: FileVariant}
+//                6 key: bytes, the 32-byte key of the file's objects
 //   FileVariant  1 objectId: uuid   2 size: u64
 
 import type { ScalarKind } from "../../parser/ast.js";
@@ -43,6 +44,7 @@ export function fileModelPlans(): ModelPlan[] {
         field(3, "mediaType", SINGULAR, scalar("string")),
         field(4, "size", SINGULAR, scalar("u64")),
         field(5, "variants", { kind: "map", key: "string" }, { kind: "message", name: FILE_VARIANT_MESSAGE_NAME }),
+        field(6, "key", SINGULAR, scalar("bytes")),
       ],
     },
     {

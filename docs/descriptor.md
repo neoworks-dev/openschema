@@ -174,11 +174,13 @@ variants (the codec target emits both when a schema uses `File`):
 | | 3 | `mediaType` | `string` |
 | | 4 | `size` | `u64`, bytes of the original |
 | | 5 | `variants` | `{string: FileVariant}`, by name, e.g. `thumbnail` |
+| | 6 | `key` | `bytes`, the 32-byte key the file's objects are encrypted under |
 | `FileVariant` | 1 | `objectId` | `uuid` |
 | | 2 | `size` | `u64` |
 
 In the descriptor the field's value is `{"kind": "file"}`; the message layout is
-built into the runtime. `@neoworks.title` and `@neoworks.searchable` on a `File`
+built into the runtime, which keeps the `key` to itself: values handed to and from
+an app carry no key. `@neoworks.title` and `@neoworks.searchable` on a `File`
 field mean its `name`. Validation decorators do not apply to a `File`.
 
 ```openschema

@@ -46,6 +46,7 @@ const SAMPLE_FILE = {
     ["thumbnail", { objectId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8", size: 1024n }],
     ["preview", { objectId: "6ba7b811-9dad-11d1-80b4-00c04fd430c8", size: 2048n }],
   ]),
+  key: Uint8Array.from({ length: 32 }, (_, offset) => offset),
 };
 
 describe("the File type", () => {
@@ -117,6 +118,7 @@ describe("the File codec", () => {
     const back = codec.decodePhoto(codec.encodePhoto(photo));
 
     expect(back.image).toEqual(SAMPLE_FILE);
+    expect(back.image.key).toEqual(SAMPLE_FILE.key);
     expect(back.picture).toBeUndefined();
     expect(back.attachments).toHaveLength(2);
     expect(back.attachments[1].variants.size).toBe(0);
