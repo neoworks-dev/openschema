@@ -6,7 +6,7 @@
 // present fields always written — including 0, "", and false.
 
 import type { ScalarKind } from "../../parser/ast.js";
-import { UNKNOWN_PROPERTY, wireTypeOf, type Container, type FieldPlan, type ModelPlan, type ValueShape } from "./plan.js";
+import { FILE_MESSAGE_NAME, UNKNOWN_PROPERTY, wireTypeOf, type Container, type FieldPlan, type ModelPlan, type ValueShape } from "./plan.js";
 import { WireType } from "./wireFormat.js";
 
 export function emitEncoder(plan: ModelPlan): string {
@@ -164,6 +164,8 @@ function writeValue(target: string, value: ValueShape, source: string, path: str
     case "enum":    return `${target}.varintNumber(${source});`;
     case "decimal":
       return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;
+    case "file":
+      return writeValue(target, { kind: "message", name: FILE_MESSAGE_NAME }, source, path);
     case "message":
       // A block, not a closure: a closure per present message field was the
       // single largest cost in the encode profile.

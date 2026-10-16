@@ -13,7 +13,7 @@ import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, ParamDecl } from ".
 import {
   findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink,
   isVisibleInInput, isVisibleInOutput, isInputModel,
-  unionAliases, resolveAliasInline,
+  unionAliases, resolveAliasInline, FILE_JSON_SCHEMA,
 } from "../typeMapping.js";
 
 type Json = Record<string, unknown>;
@@ -140,6 +140,7 @@ function mapType(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): Js
     case "map":      return { type: "object", additionalProperties: mapType(type.value, inputMode, schema) };
     case "nullable": return mapType(type.inner, inputMode, schema);
     case "null":     return { type: "null" };
+    case "file":     return structuredClone(FILE_JSON_SCHEMA);
     case "union":    return { oneOf: type.variants.map(v => mapType(v, inputMode, schema)) };
     case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type, inputMode, schema)) };
   }

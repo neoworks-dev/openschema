@@ -644,6 +644,11 @@ export class Parser {
       return this.parseReferenceType(span);
     }
 
+    if (tok.kind === TokenKind.Ident && this.isFileType()) {
+      this.advance();
+      return { kind: "file", span };
+    }
+
     if (tok.kind === TokenKind.Ident) {
       const path = this.parseQualifiedIdent();
       const typeArgs = this.parseTypeArgs();
@@ -653,6 +658,12 @@ export class Parser {
     throw new ParseError("Expected a type expression", tok);
   }
   
+  /** A bare `File`: a qualified name such as `acme.File` stays a named type. */
+  private isFileType(): boolean {
+    const next = this.peekAt(1).kind;
+    return this.peek().value === "File" && next !== TokenKind.Dot && next !== TokenKind.Lt;
+  }
+
   private isReferenceType(): boolean {
     return this.peek().value === "ref" && this.peekAt(1).kind === TokenKind.Lt;
   }

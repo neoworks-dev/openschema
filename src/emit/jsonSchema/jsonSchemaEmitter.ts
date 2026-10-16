@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, EnumDecl } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
-  firstStringArg, findDecorator, unionAliases, resolveAliasInline,
+  firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA,
 } from "../typeMapping.js";
 
 type Json = Record<string, unknown>;
@@ -113,6 +113,7 @@ function mapType(type: TypeExpr): Json {
     case "map":      return { type: "object", additionalProperties: mapType(type.value) };
     case "nullable": return mapType(type.inner);
     case "null":     return { type: "null" };
+    case "file":     return structuredClone(FILE_JSON_SCHEMA);
     case "union":    return { anyOf: type.variants.map(mapType) };
     case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type)) };
   }

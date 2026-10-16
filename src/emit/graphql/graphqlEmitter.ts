@@ -214,6 +214,7 @@ function renderInner(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema)
     case "map":      return "JSON";
     case "union":    return "JSON";
     case "oneof":    return "JSON";
+    case "file":     return "JSON";
     case "nullable": return renderInner(type.inner, inputMode, schema);
     // Reached only for a bare `null`; `T | null` is handled in renderType.
     case "null":     return "JSON";

@@ -129,6 +129,8 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
   return schema;
 }
 
+const BUILT_IN_FILE_TYPE = "File";
+
 function registerModuleSymbols(
   module: Module,
   namespace: string[],
@@ -142,6 +144,10 @@ function registerModuleSymbols(
     if (kind === undefined) continue;
 
     const named = decl as ModelDecl | EnumDecl | TypeAlias;
+    if (named.name === BUILT_IN_FILE_TYPE) {
+      diagnostics.error("OS1018", `'${named.name}' is a built-in type and cannot be declared`, named.span);
+      continue;
+    }
     if (ownByLocal.has(named.name)) {
       diagnostics.error("OS1001", `Duplicate declaration '${named.name}'`, named.span);
       continue;
@@ -617,6 +623,7 @@ function walkOneofs(type: TypeExpr, scopeLabel: string, diagnostics: Diagnostics
       return;
     case "scalar":
     case "decimal":
+    case "file":
       return;
   }
 }

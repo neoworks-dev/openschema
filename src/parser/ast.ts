@@ -68,7 +68,8 @@ export type TypeExpr =
   | NullableTypeExpr
   | NullTypeExpr
   | UnionTypeExpr
-	| OneofTypeExpr;
+	| OneofTypeExpr
+  | FileTypeExpr;
 
 /**
  * Primitive scalar — bool, i32, string, uuid, etc. `ref<Model>` is a uuid that
@@ -79,6 +80,15 @@ export interface ScalarTypeExpr {
   scalar:     ScalarKind;
   reference?: string[];
   span:       Span;
+}
+
+/**
+ * `File` — a file in object storage, described by a name, a media type, a size
+ * and named variants. Built in: a model or enum cannot be called `File`.
+ */
+export interface FileTypeExpr {
+  kind: "file";
+  span: Span;
 }
 
 /**

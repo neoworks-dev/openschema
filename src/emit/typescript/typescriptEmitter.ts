@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, ModelDecl, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
-  unionAliases, resolveAliasInline,
+  unionAliases, resolveAliasInline, FILE_TS,
 } from "../typeMapping.js";
 
 const SCALAR_TS: Record<ScalarKind, string> = {
@@ -91,6 +91,7 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "map":      return `Record<${mapType(type.key, schema)}, ${mapType(type.value, schema)}>`;
     case "nullable": return `${mapType(type.inner, schema)} | null`;
     case "null":     return "null";
+    case "file":     return FILE_TS;
     case "union":    return type.variants.map(v => mapType(v, schema)).join(" | ");
     case "oneof":    return mapOneof(type.variants, schema);
   }

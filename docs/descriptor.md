@@ -93,6 +93,7 @@ field name. Each value maps as follows:
 | `json` | any JSON value; stored as canonical JSON text |
 | enum | variant name; an unknown variant read from newer data is its ordinal number, and is written back unchanged |
 | model | object |
+| `File` | object `{objectId, name, mediaType, size, variants}`, `size` a decimal string, `variants` an object of `{objectId, size}` by variant name |
 | oneof | object with exactly one key, the variant name |
 | `[T]` | array |
 | `{K: V}` | object; non-string keys are written as their JSON text, e.g. `"42"` |
@@ -114,11 +115,11 @@ a collection's name is the registry title from its manifest.
 
 | Decorator | On | Meaning |
 |---|---|---|
-| `@neoworks.node("container" \| "item" \| "asset")` | model | The model is the content of every node of this kind. At most one model per kind. An `asset` is an item that carries exactly one encrypted file; items refer to it with `ref<Model>`. |
+| `@neoworks.node("container" \| "item")` | model | The model is the content of every node of this kind. At most one model per kind. |
 | `@neoworks.facet("Name")` | field of a node model | The field is encrypted in the named facet. |
-| `@neoworks.searchable` | `string` or `[string]` field of a node model | The client indexes the field for search. |
+| `@neoworks.searchable` | `string`, `[string]`, `File` or `[File]` field of a node model | The client indexes the field for search; a `File` is indexed by its name. |
 | `@neoworks.timeRange(start: "a", end: "b")` | node model | The client indexes nodes by the interval between two `timestamp` fields in the same facet. |
-| `@neoworks.title` | one single `string` field of a node model | The node's display name, e.g. a calendar's name on the consent screen. |
+| `@neoworks.title` | one single `string` or `File` field of a node model | The node's display name, e.g. a calendar's name on the consent screen; for a `File`, the file's name. |
 
 ```openschema
 namespace neoworks.calendar
@@ -138,7 +139,7 @@ model Event {
 ### References
 
 `ref<Model>` is a field type for the id of a node of another model, possibly of
-another schema (`ref<neoworks.photos.PhotoFile>`). The model must be marked
+another schema (`ref<neoworks.photos.Album>`). The model must be marked
 `@neoworks.node`; the resolver reports `OS1003` for an unknown model and `OS1017`
 for one that is not a node model. A reference is a `uuid` on the wire and in the
 generated types. In the descriptor the field's value stays `{"kind": "scalar",
@@ -147,13 +148,49 @@ a runtime finds the references in a node's content. Neoworks shares the nodes an
 item references along with the item.
 
 ```openschema
-@neoworks.node("asset")
-model Picture { 1 name: string }
+@neoworks.node("container")
+model Album { 1 name: string }
 
 @neoworks.node("item")
-model Contact {
-  1 formattedName: string
-  2 photo: ref<Picture>?
+model Photo {
+  1 caption: string
+  2 album: ref<Album>?
+}
+```
+
+### Files
+
+`File` is a field type like `string`: `image: File` is required, `picture: File?`
+optional and `attachments: [File]` holds several. It may appear in any node model,
+and `File` cannot be declared as a model, enum or alias (`OS1018`). A file's
+bytes live in object storage; the `File` value in the content says where and
+what they are. On the wire it is the message `File`, with `FileVariant` for its
+variants (the codec target emits both when a schema uses `File`):
+
+| Message | Ordinal | Field | Type |
+|---|---|---|---|
+| `File` | 1 | `objectId` | `uuid`, the storage object of the original |
+| | 2 | `name` | `string` |
+| | 3 | `mediaType` | `string` |
+| | 4 | `size` | `u64`, bytes of the original |
+| | 5 | `variants` | `{string: FileVariant}`, by name, e.g. `thumbnail` |
+| | 6 | `key` | `bytes`, the 32-byte key the file's objects are encrypted under |
+| `FileVariant` | 1 | `objectId` | `uuid` |
+| | 2 | `size` | `u64` |
+
+In the descriptor the field's value is `{"kind": "file"}`; the message layout is
+built into the runtime, which keeps the `key` to itself: values handed to and from
+an app carry no key. `@neoworks.title` and `@neoworks.searchable` on a `File`
+field mean its `name`. Validation decorators do not apply to a `File`.
+
+```openschema
+@neoworks.node("item")
+model Photo {
+  @neoworks.title
+  1 image: File
+  2 picture: File?
+  @neoworks.searchable
+  3 attachments: [File]
 }
 ```
 
@@ -188,7 +225,7 @@ refuses to move a field to another facet — including by renaming the facet —
 | `OSD004` | `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.timeRange` or `@neoworks.title` on a model that is not a node |
 | `OSD005` | invalid or repeated facet name |
 | `OSD006` | two facets of one model derive the same tag |
-| `OSD007` | `@neoworks.searchable` on a field that is not `string` or `[string]` |
+| `OSD007` | `@neoworks.searchable` on a field that is not `string`, `[string]`, `File` or `[File]` |
 | `OSD008` | invalid `@neoworks.timeRange` |
 | `OSD009` | invalid validation decorator |
-| `OSD010` | `@neoworks.title` not on exactly one single `string` field |
+| `OSD010` | `@neoworks.title` not on exactly one single `string` or `File` field |

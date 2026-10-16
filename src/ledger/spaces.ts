@@ -207,6 +207,7 @@ function walkOneofs(type: TypeExpr, owner: string, fieldOrdinal: number, into: O
       return;
     case "scalar":
     case "decimal":
+    case "file":
       return;
   }
 }

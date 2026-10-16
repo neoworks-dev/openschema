@@ -7,7 +7,7 @@
 // rejected, for the same reason.
 
 import type { ScalarKind } from "../../parser/ast.js";
-import { UNKNOWN_PROPERTY, valueTsType, wireTypeOf, type Container, type FieldPlan, type ModelPlan, type ValueShape } from "./plan.js";
+import { FILE_MESSAGE_NAME, UNKNOWN_PROPERTY, valueTsType, wireTypeOf, type Container, type FieldPlan, type ModelPlan, type ValueShape } from "./plan.js";
 import { indent, propertyAccess, scalarWire, wireConstant } from "./encoderGen.js";
 import { SCALAR_CODEC_TS, WireType } from "./wireFormat.js";
 
@@ -251,6 +251,7 @@ function readValue(
     case "enum":    return `readUnsignedField(${reader}, ${wire}, ${path}) as ${value.name}`;
     case "decimal": return `canonicalDecimal(readStringField(${reader}, ${wire}, ${path}), ${value.precision}, ${value.scale}, ${path})`;
     case "message": return `read${value.name}(${subMessage(reader, wire, path)}, ${path})`;
+    case "file":    return readValue({ kind: "message", name: FILE_MESSAGE_NAME }, reader, wire, path, oneofs);
     case "oneof":   return `${oneofs.get(value)}(${subMessage(reader, wire, path)}, ${path})`;
   }
 }

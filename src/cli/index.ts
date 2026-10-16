@@ -832,6 +832,8 @@ function describeType(t: AST.TypeExpr): string {
       return `${describeType(t.inner)}?`;
     case "null":
       return "null";
+    case "file":
+      return "File";
     case "union":
       return t.variants.map(describeType).join(" | ");
     case "oneof":

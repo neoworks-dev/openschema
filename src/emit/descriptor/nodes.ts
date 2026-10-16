@@ -1,7 +1,6 @@
 // src/emit/descriptor/nodes.ts
 // The Neoworks node extension. A model marked @neoworks.node("item") is the
-// content of every item node in the collection the schema is published as;
-// @neoworks.node("asset") marks the model of items that carry exactly one file.
+// content of every item node in the collection the schema is published as.
 // Its fields are split into facets, each encrypted under its own key so a grant
 // can cover only some of them; fields without @neoworks.facet share the
 // default facet.
@@ -28,7 +27,7 @@ const KNOWN_DECORATORS = new Set([
   NODE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
 ]);
 // Roots carry no content: the collection's name comes from the registry title.
-const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item", "asset"]);
+const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item"]);
 const FACET_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 
 /** `models` must hold one descriptor per record, under the record's local name. */
@@ -89,7 +88,7 @@ function nodeKindOf(record: ResolvedModel): NodeKind | null {
   const kind = firstStringArg(decorators, NODE_DECORATOR);
   if (decorators.length > 1 || kind === null || !NODE_KINDS.has(kind)) {
     throw new DescriptorError("OSD002", record.symbol.localName, null,
-      `@${NODE_DECORATOR} takes one of "container", "item" or "asset", once`, decorators[0].span);
+      `@${NODE_DECORATOR} takes one of "container" or "item", once`, decorators[0].span);
   }
   return kind as NodeKind;
 }
@@ -185,31 +184,35 @@ function searchableFields(record: ResolvedModel, model: ModelDescriptor): number
   for (const field of model.fields) {
     const decorators = allDecorators(decoratorsOf(record, field), SEARCHABLE_DECORATOR);
     if (decorators.length === 0) continue;
-    if (!isStringField(field)) {
+    if (!isTextField(field)) {
       throw new DescriptorError("OSD007", record.symbol.localName, field.name,
-        `@${SEARCHABLE_DECORATOR} applies to string and [string] fields only`, decorators[0].span);
+        `@${SEARCHABLE_DECORATOR} applies to string, [string], File and [File] fields only`, decorators[0].span);
     }
     ordinals.push(field.ordinal);
   }
   return ordinals;
 }
 
-/** The single string field that names the node, if the model marks one. */
+/** The single string or File field that names the node (a File by its name), if the model marks one. */
 function titleField(record: ResolvedModel, model: ModelDescriptor): number | null {
   const marked = model.fields.filter(field => allDecorators(decoratorsOf(record, field), TITLE_DECORATOR).length > 0);
   if (marked.length === 0) return null;
   const field = marked[0];
-  const singularString = field.container.kind === "singular" &&
-    field.value.kind === "scalar" && field.value.scalar === "string";
-  if (marked.length > 1 || !singularString) {
+  if (marked.length > 1 || field.container.kind !== "singular" || !isTextValue(field)) {
     throw new DescriptorError("OSD010", record.symbol.localName, field.name,
-      `@${TITLE_DECORATOR} marks exactly one single string field per model`, null);
+      `@${TITLE_DECORATOR} marks exactly one single string or File field per model`, null);
   }
   return field.ordinal;
 }
 
-function isStringField(field: FieldDescriptor): boolean {
-  if (field.value.kind !== "scalar" || field.value.scalar !== "string") return false;
+/** A string, or a File, whose text is its name. */
+function isTextValue(field: FieldDescriptor): boolean {
+  if (field.value.kind === "file") return true;
+  return field.value.kind === "scalar" && field.value.scalar === "string";
+}
+
+function isTextField(field: FieldDescriptor): boolean {
+  if (!isTextValue(field)) return false;
   return field.container.kind !== "map" && field.container.kind !== "wrapperMap";
 }
 

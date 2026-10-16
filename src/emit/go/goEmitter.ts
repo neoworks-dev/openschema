@@ -73,6 +73,7 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "nullable": return `*${mapType(type.inner, schema)}`;
     // Go has no null type; a `T | null` union already renders as interface{}.
     case "null":     return "interface{}";
+    case "file":     return "map[string]interface{}";
     case "union":    return "interface{}";
     case "oneof":    return "interface{}";
   }

@@ -59,6 +59,7 @@ not be used by a schema.
 | `duration` | VARINT | `bigint` | int64 nanoseconds, signed |
 | enum | VARINT | numeric enum | the variant's ordinal |
 | model | LEN | `interface` | nested message |
+| `File` | LEN | `File` | nested message with fixed fields, see [Files](./descriptor.md#files) |
 | `oneof` | LEN | discriminated union | nested message; variant ordinal is the inner tag |
 | `[T]` packable | LEN | `T[]` | packed; decode accepts packed and unpacked |
 | `[T]` LEN element | repeated LEN | `T[]` | one key per element |

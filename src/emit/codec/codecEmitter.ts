@@ -10,6 +10,7 @@ import type { ResolvedSchema } from "../../resolver/types.js";
 import { baseFieldsToEmit, overlayFieldsToEmit } from "../typeMapping.js";
 import { CodecUnsupportedError } from "./errors.js";
 import { planModel, type ModelPlan } from "./plan.js";
+import { FILE_VARIANT_MESSAGE_NAME, fileModelPlans, usesFile } from "./filePlan.js";
 import { CODEC_RUNTIME } from "./runtimePrelude.js";
 import { emitEnum, emitInterface, emitTagSets } from "./typeGen.js";
 import { emitEncoder } from "./encoderGen.js";
@@ -60,7 +61,21 @@ function planModels(context: EmitContext): ModelPlan[] {
     const fields = baseFieldsToEmit(record, context);
     plans.push(planModel(record, fields, context.schema));
   }
+  if (usesFile(plans)) {
+    rejectFileVariantModel(context.schema);
+    plans.push(...fileModelPlans());
+  }
   return plans;
+}
+
+/** `File` is encoded as a `File` message holding `FileVariant` messages, so a model of that name would collide. */
+function rejectFileVariantModel(schema: ResolvedSchema): void {
+  for (const record of schema.records.values()) {
+    if (record.symbol.localName !== FILE_VARIANT_MESSAGE_NAME) continue;
+    throw new CodecUnsupportedError("OSC008", FILE_VARIANT_MESSAGE_NAME, null,
+      `'${FILE_VARIANT_MESSAGE_NAME}' is the message a File's variants are encoded as; rename the model`,
+      record.symbol.span);
+  }
 }
 
 /**
