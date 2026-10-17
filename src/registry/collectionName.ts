@@ -23,3 +23,12 @@ export function readCollectionIdentity(directory: string): CollectionIdentity {
   }
   return { name: `@${parsed.manifest.scope}/${parsed.manifest.name}`, version: parsed.manifest.version };
 }
+
+/** The version in the directory's manifest; null when there is none or it has problems. */
+export function readManifestVersion(directory: string): string | null {
+  const path = join(directory, MANIFEST_FILE);
+  if (!existsSync(path)) return null;
+  const parsed = parseManifest(readFileSync(path, "utf8"));
+  if (parsed.manifest === null) return null;
+  return parsed.manifest.version;
+}

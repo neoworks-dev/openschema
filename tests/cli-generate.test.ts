@@ -233,3 +233,43 @@ describe("--no-lock", () => {
     expect(existsSync(lockPath())).toBe(false);
   });
 });
+
+describe("the version in openschema.yaml", () => {
+  function writeManifest(version: string): void {
+    writeFileSync(join(workspace, "openschema.yaml"), [
+      "scope: acme", "name: things", `version: ${version}`, "title: Things",
+      "description: Things and their labels.", "entry: m.schema", "",
+    ].join("\n"), "utf8");
+  }
+
+  const WITHOUT_LABEL = "namespace t\nmodel M {\n  1 id: uuid\n}";
+  const REUSED_LABEL = "namespace t\nmodel M {\n  1 id: uuid\n  2 label: i32\n}";
+
+  function retireLabelIn(version: string): void {
+    writeManifest("1.0.0");
+    writeSchema(V1);
+    generate();
+    writeManifest(version);
+    writeSchema(WITHOUT_LABEL);
+    generate();
+  }
+
+  it("keeps a retired ordinal spent within its major", () => {
+    retireLabelIn("1.1.0");
+    writeManifest("1.2.0");
+    writeSchema(REUSED_LABEL);
+    const result = generate();
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("OS2007");
+  });
+
+  it("frees a retired ordinal from the next major on", () => {
+    retireLabelIn("1.1.0");
+    writeManifest("2.0.0");
+    writeSchema(REUSED_LABEL);
+    const result = generate();
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(readFileSync(lockPath(), "utf8")).spaces["model:t.M"].ordinals["2"])
+      .toMatchObject({ state: "active", type: "i32", major: "2" });
+  });
+});

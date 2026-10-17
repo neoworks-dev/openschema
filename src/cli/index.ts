@@ -26,7 +26,7 @@ import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetch
 import { snapshotVersions, writeVersionSnapshot } from "../registry/versionSnapshots.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints, type Endpoints } from "../registry/urls.js";
-import { readCollectionIdentity } from "../registry/collectionName.js";
+import { readCollectionIdentity, readManifestVersion } from "../registry/collectionName.js";
 import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERSIONS_MODULE_OPTION } from "../emit/collection/collectionEmitter.js";
 import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
@@ -276,6 +276,7 @@ function syncLedger(
     staleSeverity: "error",
     now: () => new Date().toISOString(),
     generator: GENERATOR,
+    version: readManifestVersion(dirname(schemaPath)),
   });
 
   printDiagnostics(result.diagnostics);
@@ -312,6 +313,7 @@ function cmdLock(schemaPath: string, opts: LockOptions): void {
     staleSeverity: "error",
     now: () => new Date().toISOString(),
     generator: GENERATOR,
+    version: readManifestVersion(dirname(schemaPath)),
   });
 
   const blocking = result.diagnostics.filter(d => d.severity === "error");

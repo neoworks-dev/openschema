@@ -41,7 +41,7 @@ function buildPayload(directory: string, generator: string): PublishPayload {
   const manifest = readManifest(directory);
   const entryPath = join(directory, manifest.entry);
   const schema = resolveEntry(entryPath);
-  checkLedger(entryPath, schema, generator);
+  checkLedger(entryPath, schema, generator, manifest.version);
 
   const payload: PublishPayload = {
     scope: manifest.scope,
@@ -92,7 +92,7 @@ function resolveEntry(entryPath: string): ResolvedSchema {
 }
 
 /** The lockfile must exist and already record this schema: publishing never writes it. */
-function checkLedger(entryPath: string, schema: ResolvedSchema, generator: string): void {
+function checkLedger(entryPath: string, schema: ResolvedSchema, generator: string, version: string): void {
   const lockPath = defaultLockPath(entryPath);
   const loaded = loadLedger(lockPath);
   if (loaded.integrityError !== null) throw new PublishRefused([`OS2009 ${loaded.integrityError}`]);
@@ -103,6 +103,7 @@ function checkLedger(entryPath: string, schema: ResolvedSchema, generator: strin
     staleSeverity: "error",
     now: () => new Date().toISOString(),
     generator,
+    version,
   });
   const errors = result.diagnostics.filter(diagnostic => diagnostic.severity === "error");
   if (errors.length > 0) {

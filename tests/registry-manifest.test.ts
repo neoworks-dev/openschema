@@ -9,6 +9,7 @@ import { parse, resolve } from "../src/index";
 import { collectSpaces } from "../src/ledger/spaces";
 import { reconcileLedger } from "../src/ledger/merge";
 import { serializeLedger } from "../src/ledger/io";
+import type { OrdinalLedger } from "../src/ledger/types";
 
 const MANIFEST = `scope: acme
 name: recipes
@@ -86,9 +87,9 @@ describe("preparePublish", () => {
     return directory;
   }
 
-  function ledgerFor(schema: string): string {
-    const result = reconcileLedger(collectSpaces(resolve(parse(schema))), null, {
-      mode: "update", required: false, staleSeverity: "error", now: () => "2026-01-01T00:00:00.000Z", generator: "test",
+  function ledgerFor(schema: string, current: OrdinalLedger | null = null, version = "1.0.0"): string {
+    const result = reconcileLedger(collectSpaces(resolve(parse(schema))), current, {
+      mode: "update", required: false, staleSeverity: "error", now: () => "2026-01-01T00:00:00.000Z", generator: "test", version,
     });
     return serializeLedger(result.next);
   }
@@ -129,6 +130,34 @@ describe("preparePublish", () => {
     project({ "openschema.yaml": MANIFEST, "recipes.schema": SCHEMA });
     writeFileSync(join(directory, "recipes.schema"), SCHEMA.replace("[string]", "[string]\n  3 minutes: i32"));
     expect(preparePublish(directory, "test").problems.join("\n")).toContain("OS2008");
+  });
+
+  describe("a retired field number", () => {
+    const WITHOUT_TITLE = SCHEMA.replace("  1 title: string\n", "");
+    const REUSED = SCHEMA.replace("1 title: string", "1 minutes: i32");
+
+    function ledgerAfter(schema: string, previous: OrdinalLedger | null, version: string): OrdinalLedger {
+      return reconcileLedger(collectSpaces(resolve(parse(schema))), previous, {
+        mode: "update", required: false, staleSeverity: "error", now: () => "2026-01-01T00:00:00.000Z", generator: "test", version,
+      }).next;
+    }
+
+    function publishReusing(version: string): string[] {
+      const retired = ledgerAfter(WITHOUT_TITLE, ledgerAfter(SCHEMA, null, "1.0.0"), "1.1.0");
+      const lock = ledgerAfter(REUSED, retired, version);
+      const manifest = MANIFEST.replace("version: 1.0.0", `version: ${version}`);
+      project({ "openschema.yaml": manifest, "recipes.schema": REUSED }, false);
+      writeFileSync(join(directory, "openschema.lock"), serializeLedger(lock));
+      return preparePublish(directory, "test").problems;
+    }
+
+    it("cannot be reused within its major", () => {
+      expect(publishReusing("1.2.0").join("\n")).toContain("OS2007");
+    });
+
+    it("can be reused in the next major", () => {
+      expect(publishReusing("2.0.0")).toEqual([]);
+    });
   });
 
   it("refuses a schema whose descriptor cannot be built", () => {

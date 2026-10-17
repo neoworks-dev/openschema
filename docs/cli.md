@@ -49,7 +49,10 @@ import), the diagnostics are printed with their codes and nothing is written.
 The [ordinal lockfile](./ordinal-ledger.md) beside the schema is created and kept
 up to date for you. In CI (detected via the `CI` environment variable) it is
 treated as read-only, so a stale or missing lockfile fails the build instead of
-being silently rebuilt.
+being silently rebuilt. When an `openschema.yaml` sits beside the schema, its
+`version` tells the lockfile which [major](./ordinal-ledger.md#majors) is being
+generated: a retired field number can be reused, and an encoding changed, from
+the next major on.
 
 ## `parse <file>`
 

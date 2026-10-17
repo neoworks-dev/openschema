@@ -222,19 +222,33 @@ each broken rule with the path in the descriptor it concerns.
   nullability, no new required field, no removed node model.
 - A new major may break all of that, a retired field number included. Apps then
   migrate the rows written by older versions on the user's devices, with steps
-  they ship in their own code. The local [ordinal ledger](./ordinal-ledger.md)
-  does not know about majors and still refuses a reused field number (`OS2007`)
-  and a changed encoding (`OS2010`) before anything is uploaded.
+  they ship in their own code.
+
+The major follows Cargo: it is the leftmost non-zero component of the version.
+
+| Versions | Major | Next major |
+|---|---|---|
+| `1.2.3` and any `1.y.z` | `1` | `2.0.0` |
+| `0.3.4` and any `0.3.z` | `0.3` | `0.4.0` |
+| `0.0.4` | `0.0.4` | `0.0.5` |
+
+So below `1.0.0` a minor bump is a new major and may break, while above it only
+a major bump may. For `0.0.z` every bump is a new major.
 
 A release without schema changes, for example one that only ships a data
 migration, may be any bump.
 
 ```
-0.4.0 → 0.4.1   add an optional field             accepted
-0.4.0 → 0.5.0   reuse field 1 with a new type     refused: breaking_change_needs_major
-0.4.0 → 1.0.0   reuse field 1 with a new type     accepted, apps migrate the rows
+0.4.0 → 0.4.1   reuse field 1 with a new type     refused: breaking_change_needs_major, publish it as 0.5.0
+0.4.0 → 0.5.0   reuse field 1 with a new type     accepted, apps migrate the rows
+1.1.0 → 1.2.0   reuse field 1 with a new type     refused: breaking_change_needs_major, publish it as 2.0.0
+1.1.0 → 2.0.0   reuse field 1 with a new type     accepted, apps migrate the rows
 1.1.0 → 1.0.5   any change                        refused: version_not_newer
 ```
+
+The local [ordinal ledger](./ordinal-ledger.md#majors) applies the same rule to
+retired field numbers and changed encodings, so `openschema gen` and `publish`
+let a new major reuse a number and refuse it within the same major.
 
 ## How it fits your workflow
 

@@ -94,6 +94,33 @@ LEN, and the compatibility checker calls it a **safe widening** — but it moves
 field from *repeated at tag N* to a *LEN wrapper at tag N*, and every existing row
 misparses. The ledger reports it as `OS2010`. Nothing else catches it.
 
+### Majors
+
+An entry also records the major in which it took its current state:
+
+```jsonc
+"7": { "state": "retired", …, "retiredAt": "…", "major": "1" }
+```
+
+The major is the leftmost non-zero component of the schema version in
+`openschema.yaml`, as [Cargo](./compatibility.md#versions-on-the-registry) reads
+it: `1` for `1.4.2`, `0.3` for `0.3.1`, `0.0.4` for `0.0.4`. For an active
+ordinal it is the major that introduced it or last changed its encoding, for a
+retired one the major that retired it.
+
+Rows carry the version that wrote them and decode with that version's schema, so
+a field number can mean something else in another major. From a later major on:
+
+- a retired ordinal may be reused, which starts a fresh active entry for it;
+- an active ordinal may change its encoding, and the entry takes the new major.
+
+Within the same major both stay refused (`OS2007`, `OS2010`). A reserved ordinal
+stays spent in every major. `gen`, `lock` and `publish` read the version from the
+`openschema.yaml` beside the schema; without one, or with a lockfile entry that
+records no major, nothing is ever freed. An entry without a major is taken to
+belong to the major being generated, so the first run with a version records it
+and the entry frees from the next major on.
+
 ### The digest
 
 `digest` is sha256 over the canonical form of `spaces`, verified on load. It catches
@@ -133,8 +160,8 @@ Two situations stay strictly read-only, because there the auto-repair *is* the d
 | out of date | updated, one dim line | `OS2008`, exit 1 |
 | missing | created, with a "commit it" notice | `OS2011`, exit 1 |
 | missing under `#requireLedger` | `OS2011`, exit 1 | `OS2011`, exit 1 |
-| ordinal reuse | `OS2007`, exit 1 | `OS2007`, exit 1 |
-| encoding change | `OS2010`, exit 1 | `OS2010`, exit 1 |
+| ordinal reuse in the major that retired it | `OS2007`, exit 1 | `OS2007`, exit 1 |
+| encoding change in the major that recorded it | `OS2010`, exit 1 | `OS2010`, exit 1 |
 
 `--write-lock` forces a write even when `CI` is set, for a bot that commits the
 result back. `--no-lock` skips the ledger entirely — explicitly, and greppably.
