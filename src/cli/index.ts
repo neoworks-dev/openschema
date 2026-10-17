@@ -13,7 +13,7 @@
 import { Command, Option } from "commander";
 import chalk from "chalk";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { basename, dirname, join } from "path";
 import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
 import { diff as engineDiff } from "../engine/index.js";
@@ -22,11 +22,13 @@ import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
-import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
+import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, listVersions, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
+import { snapshotVersions, writeVersionSnapshot } from "../registry/versionSnapshots.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints, type Endpoints } from "../registry/urls.js";
 import { readCollectionIdentity } from "../registry/collectionName.js";
-import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION } from "../emit/collection/collectionEmitter.js";
+import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERSIONS_MODULE_OPTION } from "../emit/collection/collectionEmitter.js";
+import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
@@ -130,23 +132,32 @@ function cmdGenerate(schemaPath: string, opts: GenerateOptions): void {
   }
 }
 
+/** The modules emitted so far that later targets import or re-export. */
+interface EmittedModules {
+  codec:    string[];
+  versions: string[];
+}
+
+// The versions target imports from the codec module, and the collection target
+// re-exports both, so they run last, in this order.
+const LATE_TARGETS = ["versions", "collection"];
+
 /**
- * Runs every emitter. The collection target runs last: it names the schema by the
- * manifest beside it and re-exports the codec module when the codec target ran.
+ * Runs every emitter. The versions and collection targets run last: they read the
+ * manifest beside the schema and use the modules the earlier targets wrote.
  */
 function emitAll(emitters: Emitter[], schema: ResolvedSchema, opts: GenerateOptions, schemaPath: string): OutputFile[] {
   const files: OutputFile[] = [];
-  const codecModules: string[] = [];
-  const ordered = [...emitters.filter(isNotCollection), ...emitters.filter(isCollection)];
-  for (const emitter of ordered) {
+  const modules: EmittedModules = { codec: [], versions: [] };
+  for (const emitter of inEmitOrder(emitters)) {
     try {
       const emitted = emitter.emit({
         schema,
         company: opts.company ?? null,
         includePrivate: opts.includePrivate === true,
-        options: emitOptions(emitter, schemaPath, codecModules),
+        options: emitOptions(emitter, schemaPath, modules),
       });
-      if (emitter.target === "codec") codecModules.push(...emitted.map(file => file.path));
+      recordModules(emitter, emitted, modules);
       files.push(...emitted);
     } catch (error) {
       reportEmitError(error);
@@ -156,19 +167,35 @@ function emitAll(emitters: Emitter[], schema: ResolvedSchema, opts: GenerateOpti
   return files;
 }
 
-function isCollection(emitter: Emitter): boolean {
-  return emitter.target === "collection";
+function inEmitOrder(emitters: Emitter[]): Emitter[] {
+  const early = emitters.filter(emitter => !LATE_TARGETS.includes(emitter.target));
+  const late = LATE_TARGETS.flatMap(target => emitters.filter(emitter => emitter.target === target));
+  return [...early, ...late];
 }
 
-function isNotCollection(emitter: Emitter): boolean {
-  return !isCollection(emitter);
+function recordModules(emitter: Emitter, emitted: OutputFile[], modules: EmittedModules): void {
+  if (emitter.target === "codec") modules.codec.push(...emitted.map(file => file.path));
+  if (emitter.target === "versions") modules.versions.push(...emitted.map(file => file.path));
 }
 
-function emitOptions(emitter: Emitter, schemaPath: string, codecModules: string[]): Record<string, string> {
-  if (!isCollection(emitter)) return {};
+function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModules): Record<string, string> {
+  if (emitter.target === "versions") return versionsOptions(schemaPath, modules);
+  if (emitter.target !== "collection") return {};
   const identity = readCollectionIdentity(dirname(schemaPath));
   const options: Record<string, string> = { [COLLECTION_OPTION]: identity.name, [COLLECTION_VERSION_OPTION]: identity.version };
-  if (codecModules.length > 0) options[CODEC_MODULE_OPTION] = codecModules[0];
+  if (modules.codec.length > 0) options[CODEC_MODULE_OPTION] = modules.codec[0];
+  if (modules.versions.length > 0) options[VERSIONS_MODULE_OPTION] = modules.versions[0];
+  return options;
+}
+
+function versionsOptions(schemaPath: string, modules: EmittedModules): Record<string, string> {
+  const projectDirectory = dirname(schemaPath);
+  const options: Record<string, string> = {
+    [PROJECT_DIRECTORY_OPTION]: projectDirectory,
+    [ENTRY_OPTION]: basename(schemaPath),
+    [CURRENT_VERSION_OPTION]: readCollectionIdentity(projectDirectory).version,
+  };
+  if (modules.codec.length > 0) options[VERSIONS_CODEC_MODULE_OPTION] = modules.codec[0];
   return options;
 }
 
@@ -424,8 +451,39 @@ async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
     process.exit(1);
   }
   console.log(chalk.green(
-    `\n  ✓ published @${payload.scope}/${payload.name}@${payload.version} (${describeUpload(payload)})\n`,
+    `\n  ✓ published @${payload.scope}/${payload.name}@${payload.version} (${describeUpload(payload)})`,
   ));
+  const snapshot = writeVersionSnapshot(dir, payload.version, payload.files);
+  console.log(chalk.dim(`  kept its files in ${snapshot} for the versions target\n`));
+}
+
+// ── versions pull ─────────────────────────────────────────────────────────────
+
+function describeVersionCount(count: number): string {
+  if (count === 1) return "1 version";
+  return `${count} versions`;
+}
+
+interface VersionsPullOptions extends EndpointOptions {
+  registry?: string;
+}
+
+async function cmdVersionsPull(dir: string, opts: VersionsPullOptions): Promise<void> {
+  try {
+    const identity = readCollectionIdentity(dir);
+    const ref = parseSchemaRef(identity.name);
+    const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
+    const present = new Set(snapshotVersions(dir));
+    const missing = (await listVersions(registry, ref.scope, ref.name)).filter(version => !present.has(version));
+    for (const version of missing) {
+      const resolved = await fetchSchema(registry, { ...ref, version });
+      console.log(chalk.green(`✓ ${writeVersionSnapshot(dir, version, resolved.files)}`));
+    }
+    console.log(chalk.dim(`\n  ${describeVersionCount(missing.length)} pulled`));
+  } catch (e) {
+    console.error(chalk.red(`error: ${describeError(e)}`));
+    process.exit(1);
+  }
 }
 
 function reportRefusedPublish(payload: PublishPayload, refusal: IncompatibleSchemaError): void {
@@ -1078,6 +1136,15 @@ program
   .option("--registry <url>", "registry API base (default: production)")
   .option("--base-port <port>", BASE_PORT_HELP)
   .action((schema, opts) => cmdAdd(schema, opts));
+
+program
+  .command("versions")
+  .description("The published versions of the schema beside openschema.yaml")
+  .command("pull [dir]")
+  .description("Download the files of every published version into [dir]/versions/<version>/, for the versions target")
+  .option("--registry <url>", "registry API base (default: production)")
+  .option("--base-port <port>", BASE_PORT_HELP)
+  .action((dir, opts) => cmdVersionsPull(dir ?? ".", opts));
 
 // ── login ─────────────────────────────────────────────────────────────────────
 

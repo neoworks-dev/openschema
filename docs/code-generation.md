@@ -14,8 +14,9 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--include-private` | include the schema's own `private` fields | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `codec`, `descriptor`, `collection`. Pass several at once with a
-comma: `-t ts,zod,sql`.
+`surrealdb`, `codec`, `descriptor`, `collection`, `versions`. Pass several at once
+with a comma: `-t ts,zod,sql`. The `versions` target writes the types of every
+published version of a collection ([Types per version](./collection.md#types-per-version)).
 
 The `codec` target generates a canonical binary encoder and decoder, and writes
 `schema.codec.ts` rather than `schema.ts`. It has its own rules and its own set of

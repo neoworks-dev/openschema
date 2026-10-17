@@ -84,6 +84,41 @@ const { folders, notes } = neoworks.collection(schema)
 const note = await notes.create({ folder: folderId, title: 'Hello' })
 ```
 
+## Types per version
+
+Rows record the schema version that wrote them. When a version breaks an earlier
+one, the app ships steps that migrate a row from one version to the next, and the
+`versions` target types both sides of every step:
+
+```sh
+openschema notes.schema --target descriptor,codec,versions,collection --out generated
+```
+
+`schema.versions.ts` holds every model and enum of every version, named after the
+version, and `index.ts` re-exports it:
+
+```ts
+export interface Note_0_4_0 { title: string; body?: string }
+export interface Note_1_0_0 { headline: string; body?: string }
+
+const steps = {
+  '1.0.0': (row: Note_0_4_0): Note_1_0_0 => ({ headline: row.title, body: row.body }),
+}
+```
+
+- The types are the codec target's types of that version, the values the SDK reads
+  and writes, without the bag of unknown fields. A message or enum field names the
+  same version's type. `File` is imported from the codec module, so run `codec` in
+  the same command.
+- The versions come from `versions/<major.minor.patch>/` beside `openschema.yaml`,
+  which holds that version's schema files under the manifest's `entry` name, and
+  from the schema being generated, as the manifest's `version`.
+- `openschema publish` writes `versions/<version>/` for the version it uploaded.
+  `openschema versions pull` downloads every published version the directory does
+  not have yet. Commit `versions/` like the lockfile.
+- The ordinal ledger cannot stand in for it: it records each field number's latest
+  name and type, not what each version looked like.
+
 ## Publishing to a development stack
 
 By default the CLI talks to production (`api.`, `oauth.` and `openschema.` under

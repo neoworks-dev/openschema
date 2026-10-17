@@ -20,6 +20,9 @@ export const COLLECTION_VERSION_OPTION = "collectionVersion";
 /** The context option naming the codec module to re-export, set when the codec target runs too. */
 export const CODEC_MODULE_OPTION = "codecModule";
 
+/** The context option naming the versions module to re-export, set when the versions target runs too. */
+export const VERSIONS_MODULE_OPTION = "versionsModule";
+
 export class CollectionTargetError extends Error {}
 
 export const collectionEmitter: Emitter = {
@@ -37,9 +40,17 @@ export const collectionEmitter: Emitter = {
     }
     const nodes = buildDescriptor({ schema: context.schema, company: null, includePrivate: false, options: {} }).nodes;
     const identity = { name, version };
-    return [{ path: COLLECTION_FILE, contents: collectionModule(identity, publishedDescriptor(context.schema), nodes, context.options[CODEC_MODULE_OPTION]) }];
+    const contents = collectionModule(identity, publishedDescriptor(context.schema), nodes, context.options[CODEC_MODULE_OPTION]);
+    return [{ path: COLLECTION_FILE, contents: withVersionsExport(contents, context.options[VERSIONS_MODULE_OPTION]) }];
   },
 };
+
+/** The versions module adds its types to the module's exports, after the header line. */
+function withVersionsExport(contents: string, versionsModule: string | undefined): string {
+  if (versionsModule === undefined) return contents;
+  const [header, ...rest] = contents.split("\n");
+  return [header, `export * from './${versionsModule}'`, ...rest].join("\n");
+}
 
 interface Identity {
   name:    string;

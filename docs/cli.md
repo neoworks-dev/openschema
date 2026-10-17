@@ -185,6 +185,21 @@ A refused publish says why (not signed in, no `schemas.publish` permission, the 
 not a handle, an archived organization, an incompatible version); see
 [Collection target and project setup](./collection.md#when-a-publish-is-refused).
 
+After a successful publish the uploaded files are kept in
+`versions/<version>/` beside the manifest, for the
+[versions target](./collection.md#types-per-version).
+
+## `versions pull [dir]`
+
+Downloads the files of every published version of the schema in
+`[dir]/openschema.yaml` into `[dir]/versions/<version>/`, skipping versions that
+are already there.
+
+| Flag | Meaning |
+|---|---|
+| `--registry <url>` | registry API base (default: production) |
+| `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) |
+
 ## `init [dir]`
 
 Writes a starter `openschema.yaml` and schema for a new collection.
