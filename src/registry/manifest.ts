@@ -12,12 +12,18 @@ const MAX_DESCRIPTION = 500;
 
 // The registry's own rules for scope and name.
 const REGISTRY_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-const SEMANTIC_VERSION =
-  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
+// Rows record the version that wrote them as three numbers, so there is no
+// pre-release or build suffix.
+const SEMANTIC_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const MAX_VERSION_PART = 4294967295;
 const SCHEMA_FILE = /^[^/\\]+\.schema$/;
 
 function text() {
   return z.string({ error: describeTypeError });
+}
+
+function partsFitThirtyTwoBits(version: string): boolean {
+  return version.split(".").every(part => Number(part) <= MAX_VERSION_PART);
 }
 
 function describeTypeError(issue: { input?: unknown }): string {
@@ -36,7 +42,9 @@ const NAME_RULE = "must be lowercase letters, digits, '.', '_' or '-', starting 
 const manifestShape = z.strictObject({
   scope:       text().regex(REGISTRY_NAME, NAME_RULE),
   name:        text().regex(REGISTRY_NAME, NAME_RULE),
-  version:     text().regex(SEMANTIC_VERSION, "must be a semantic version such as 1.0.0"),
+  version:     text()
+    .regex(SEMANTIC_VERSION, "must be a semantic version such as 1.0.0, without a suffix")
+    .refine(partsFitThirtyTwoBits, `must have parts of at most ${MAX_VERSION_PART}`),
   title:       filledText(MAX_TITLE),
   description: filledText(MAX_DESCRIPTION),
   entry:       text().regex(SCHEMA_FILE, "must name a .schema file in the manifest's directory"),

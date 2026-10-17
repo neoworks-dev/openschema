@@ -157,7 +157,7 @@ repository: https://github.com/acme/recipes   # optional
 | Field | Rule |
 |---|---|
 | `scope`, `name` | lowercase letters, digits, `.`, `_`, `-`; the schema's path is `@scope/name` |
-| `version` | semantic version; a published version can never change |
+| `version` | `major.minor.patch` without a suffix, above every published version; a published version can never change ([the publish rule](./compatibility.md#versions-on-the-registry)) |
 | `title` | required, at most 80 characters; the human-readable name |
 | `description` | required, at most 500 characters |
 | `entry` | the `.schema` file to compile, in the manifest's directory |
@@ -184,6 +184,21 @@ published.
 A refused publish says why (not signed in, no `schemas.publish` permission, the scope is
 not a handle, an archived organization, an incompatible version); see
 [Collection target and project setup](./collection.md#when-a-publish-is-refused).
+
+After a successful publish the uploaded files are kept in
+`versions/<version>/` beside the manifest, for the
+[versions target](./collection.md#types-per-version).
+
+## `versions pull [dir]`
+
+Downloads the files of every published version of the schema in
+`[dir]/openschema.yaml` into `[dir]/versions/<version>/`, skipping versions that
+are already there.
+
+| Flag | Meaning |
+|---|---|
+| `--registry <url>` | registry API base (default: production) |
+| `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) |
 
 ## `init [dir]`
 

@@ -95,6 +95,16 @@ export async function fetchSchema(registry: string, ref: SchemaRef): Promise<Res
   return { scope: ref.scope, name: ref.name, version, files };
 }
 
+/** Every published version of a schema, as the registry lists them. */
+export async function listVersions(registry: string, scope: string, name: string): Promise<string[]> {
+  const detail = await getJson<{ versions: { version: string }[] | null }>(
+    `${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`,
+    `schema @${scope}/${name} not found in the registry`,
+  );
+  if (detail.versions === null) return [];
+  return detail.versions.map(entry => entry.version);
+}
+
 export interface PublishPayload {
   scope: string;
   name: string;

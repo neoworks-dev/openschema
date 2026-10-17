@@ -1,13 +1,18 @@
 // src/registry/collectionName.ts
-// The registry path of the schema a directory publishes, `@scope/name`, read from
-// the openschema.yaml beside the schema.
+// The registry path of the schema a directory publishes, `@scope/name`, and the
+// version it publishes, read from the openschema.yaml beside the schema.
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { MANIFEST_FILE, parseManifest } from "./manifest.js";
 
+export interface CollectionIdentity {
+  name:    string;
+  version: string;
+}
+
 /** Throws with the reason when the directory has no valid manifest. */
-export function readCollectionName(directory: string): string {
+export function readCollectionIdentity(directory: string): CollectionIdentity {
   const path = join(directory, MANIFEST_FILE);
   if (!existsSync(path)) {
     throw new Error(`the collection target takes the registry path from ${path}, which does not exist; run \`openschema init\``);
@@ -16,5 +21,5 @@ export function readCollectionName(directory: string): string {
   if (parsed.manifest === null) {
     throw new Error(parsed.problems.join("\n"));
   }
-  return `@${parsed.manifest.scope}/${parsed.manifest.name}`;
+  return { name: `@${parsed.manifest.scope}/${parsed.manifest.name}`, version: parsed.manifest.version };
 }
