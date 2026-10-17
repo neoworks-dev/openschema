@@ -117,11 +117,6 @@ describe("tables", () => {
     ]);
   });
 
-  it("keeps the default facet when every field is in a named one", () => {
-    const table = describeSchema('@neoworks.table model M { @neoworks.facet("Private") 1 a: i32 }').tables[0];
-    expect(table.facets.map(facet => [facet.name, facet.fields])).toEqual([["default", []], ["Private", [1]]]);
-  });
-
   it("derives facet tags from the name, within the encodable range", () => {
     const tag = facetTag("Availability");
     expect(tag).toBe(facetTag("Availability"));

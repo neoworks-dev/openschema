@@ -156,13 +156,8 @@ function readFacetName(record: ResolvedModel, field: FieldDescriptor): string {
   return name;
 }
 
-/**
- * Every table has the default facet, even with all its fields in named ones: each
- * facet names the row's table, and a row always carries its default facet.
- */
 function groupFacets(record: ResolvedModel, model: ModelDescriptor, facetByOrdinal: Map<number, string>): FacetDescriptor[] {
   const facets = new Map<string, FacetDescriptor>();
-  facets.set(DEFAULT_FACET, { name: DEFAULT_FACET, tag: DEFAULT_FACET_TAG, fields: [] });
   for (const field of model.fields) {
     const name = facetByOrdinal.get(field.ordinal) as string;
     let facet = facets.get(name);

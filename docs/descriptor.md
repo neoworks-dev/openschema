@@ -242,26 +242,16 @@ A row's content is one message per facet, each encrypted under a key for that
 facet, so access to a row can be granted for some facets only. Above, sharing
 `Availability` reveals when an event is but not its title.
 
-- Fields without `@neoworks.facet` belong to the `default` facet, tag 1. Every
-  table has the default facet, even when all its fields are in named ones.
+- Fields without `@neoworks.facet` belong to the `default` facet, tag 1.
 - A named facet's tag is derived from its name: `2 + (first four bytes of
   sha256("neoworks.facet:" + name), big-endian) mod 536870909`. Two facets of one
   table that derive the same tag are an error (`OSD006`); rename one.
 - Facet names are letters and digits, starting with a letter, and cannot be
   `default` in any case (`OSD005`).
 
-Each facet's plaintext names the row's table, so a reader knows which model to
-decode with before decoding, and so does someone granted only some facets. It is
-the message `FacetContent`:
-
-| Ordinal | Field | Type |
-|---|---|---|
-| 1 | `table` | `string`, the table's model name as in `tables` |
-| 2 | `schema` | `bytes`, the 32-byte BLAKE2b-256 hash of the descriptor the writer used, the version the registry publishes under that hash |
-| 3 | `fields` | `bytes`, the facet's fields as a message of the table's model |
-
-A writer always writes every facet of the table, so each row names its table in
-every facet it carries.
+A facet's plaintext is a message of the table's model holding that facet's fields.
+The row names its table in plain, next to its collection and covered by the
+row's signature, so a reader picks the model before decrypting.
 
 ### Facets are permanent
 
