@@ -101,6 +101,7 @@ describe("the collection target", () => {
 
     expect(module).toContain("readonly name: '@acme/recipes'");
     expect(module).toContain("readonly tables?: { Folder: Folder; Note: Note }");
+    expect(module).toContain("readonly references?: { Note: { folder: 'Folder' } }");
     expect(module).toContain("readonly version: '0.1.0'");
     expect(module).toContain("export default collection");
   });
@@ -117,6 +118,25 @@ describe("the collection target", () => {
     expect(generatedModule(directory)).not.toContain("assets");
     expect(codec).toContain("book?: string");
     expect(codec).toContain("photo?: File");
+  });
+
+  it("names the target table of every single reference, optional or not, and leaves out lists", () => {
+    const directory = scaffold();
+    writeFileSync(
+      join(directory, "recipes.schema"),
+      'namespace acme.recipes\n@neoworks.table\nmodel Book {\n  1 name: string\n}\n@neoworks.table\nmodel Recipe {\n  1 title: string\n  2 book: ref<Book>?\n  3 cousins: [ref<Recipe>]\n  4 base: ref<Recipe>\n}\n@neoworks.table\nmodel Plain {\n  1 name: string\n}\n',
+    );
+    expect(run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory).exitCode).toBe(0);
+
+    expect(generatedModule(directory)).toContain("readonly references?: { Recipe: { book: 'Book'; base: 'Recipe' } }");
+  });
+
+  it("emits no references member when no table has a single reference", () => {
+    const directory = scaffold();
+    writeFileSync(join(directory, "recipes.schema"), "namespace acme.recipes\n@neoworks.table\nmodel Book {\n  1 name: string\n}\n");
+    expect(run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory).exitCode).toBe(0);
+
+    expect(generatedModule(directory)).not.toContain("references");
   });
 
   it("needs an openschema.yaml beside the schema", () => {

@@ -50,6 +50,7 @@ export const collection = {
 	readonly version: '1.0.0'
 	readonly descriptor: string
 	readonly tables?: { Folder: Folder; Note: Note }
+	readonly references?: { Note: { folder: 'Folder' } }
 }
 
 export default collection
@@ -70,6 +71,12 @@ export default collection
   gives the content type of every table, so `neoworks.collection()` can return
   typed resources. Without the codec the export is the plain `as const` object and
   the SDK resources are untyped.
+- `references` is the second type-only member. For each table that has single
+  `ref<T>` fields it names the table each field points to, so the SDK can type
+  `include`: `notes.list({ include: { folder: true } })` returns each `folder` as the
+  `Folder` row. Lists of references (`[ref<T>]`) are left out, because the core
+  includes single references only. A table without single references does not appear,
+  and the member is omitted when no table has one.
 - The schema must define `@neoworks.table` models; a schema without tables has no
   descriptor and the target fails.
 
