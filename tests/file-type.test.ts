@@ -90,7 +90,7 @@ describe("the File type", () => {
 
   it("is emitted by the API-surface and database targets", () => {
     const schema = resolve(parse(PHOTO));
-    const apiTargets = listTargets().filter(target => !["codec", "descriptor", "collection"].includes(target));
+    const apiTargets = listTargets().filter(target => !["codec", "descriptor", "collection", "versions"].includes(target));
     expect(apiTargets.length).toBeGreaterThanOrEqual(8);
     for (const target of apiTargets) {
       const emitter = getEmitter(target)!;

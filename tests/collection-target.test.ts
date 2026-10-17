@@ -73,13 +73,14 @@ describe("the collection target", () => {
     return directory;
   }
 
-  it("names the collection from the manifest and carries the published descriptor", () => {
+  it("names the collection and its version from the manifest and carries the published descriptor", () => {
     const directory = scaffold();
     expect(run(["recipes.schema", "-t", "descriptor,collection", "-o", "generated"], directory).exitCode).toBe(0);
 
     const module = generatedModule(directory);
     const descriptor = readFileSync(join(directory, "generated", "schema.descriptor.json"), "utf8");
     expect(module).toContain("name: '@acme/recipes'");
+    expect(module).toContain("version: '0.1.0'");
     expect(module).toContain(`descriptor: ${JSON.stringify(descriptor)},`);
     expect(preparePublish(directory, "openschema 0.1.0").payload?.descriptor).toBe(descriptor);
   });
@@ -100,6 +101,7 @@ describe("the collection target", () => {
 
     expect(module).toContain("readonly name: '@acme/recipes'");
     expect(module).toContain("readonly tables?: { Folder: Folder; Note: Note }");
+    expect(module).toContain("readonly version: '0.1.0'");
     expect(module).toContain("export default collection");
   });
 

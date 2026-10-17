@@ -93,6 +93,7 @@ field name. Each value maps as follows:
 | `time` | RFC 3339 partial time, e.g. `08:30:00` |
 | `timestamp` | RFC 3339 with any offset on input; written as UTC with milliseconds, e.g. `2026-10-05T08:00:00.000Z` |
 | `json` | any JSON value; stored as canonical JSON text |
+| `semver` | `"major.minor.patch"`, e.g. `"0.6.1"`; no leading zeros and no pre-release or build suffix |
 | enum | variant name; an unknown variant read from newer data is its ordinal number, and is written back unchanged |
 | model | object |
 | `File` | object `{objectId, name, mediaType, size, variants}`, `size` a decimal string, `variants` an object of `{objectId, size}` by variant name |

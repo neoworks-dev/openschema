@@ -13,7 +13,7 @@ import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, ParamDecl } from ".
 import {
   findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink,
   isVisibleInInput, isVisibleInOutput, isInputModel,
-  unionAliases, resolveAliasInline, FILE_JSON_SCHEMA,
+  unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
 
 type Json = Record<string, unknown>;
@@ -30,6 +30,7 @@ const SCALAR_JSON: Record<ScalarKind, Json> = {
   json: {},
   date: { type: "string", format: "date" }, time: { type: "string", format: "time" },
   timestamp: { type: "string", format: "date-time" }, duration: { type: "string", format: "duration" },
+  semver: { type: "string", pattern: SEMVER_PATTERN },
 };
 
 const HTTP_METHODS = ["get", "post", "put", "delete", "patch"];

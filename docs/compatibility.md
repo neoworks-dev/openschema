@@ -208,6 +208,34 @@ A `#suppress` on a field suppresses matching changes for that field; on a
 model or enum, for that declaration. The reason string is required — it
 documents *why* the rule was waived, for the next person who reads the diff.
 
+## Versions on the registry
+
+The registry checks every version `openschema publish` uploads, by its
+descriptor, and refuses a version that breaks the rules below. The CLI prints
+each broken rule with the path in the descriptor it concerns.
+
+- The version is `major.minor.patch` without a pre-release or build suffix,
+  because every encrypted row records the version that wrote it as three numbers.
+- It is above every version already published.
+- Its descriptor stays compatible with every published version of the same
+  major: no field number reused for another name, no changed type, container or
+  nullability, no new required field, no removed node model.
+- A new major may break all of that, a retired field number included. Apps then
+  migrate the rows written by older versions on the user's devices, with steps
+  they ship in their own code. The local [ordinal ledger](./ordinal-ledger.md)
+  does not know about majors and still refuses a reused field number (`OS2007`)
+  and a changed encoding (`OS2010`) before anything is uploaded.
+
+A release without schema changes, for example one that only ships a data
+migration, may be any bump.
+
+```
+0.4.0 → 0.4.1   add an optional field             accepted
+0.4.0 → 0.5.0   reuse field 1 with a new type     refused: breaking_change_needs_major
+0.4.0 → 1.0.0   reuse field 1 with a new type     accepted, apps migrate the rows
+1.1.0 → 1.0.5   any change                        refused: version_not_newer
+```
+
 ## How it fits your workflow
 
 1. Keep the last published schema in version control.

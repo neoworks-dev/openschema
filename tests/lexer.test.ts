@@ -128,6 +128,7 @@ describe("keywords", () => {
     ["time",        TokenKind.Time],
     ["timestamp",   TokenKind.Timestamp],
     ["duration",    TokenKind.Duration],
+    ["semver",      TokenKind.Semver],
   ];
 
   // These words were keywords in the bracket grammar. They are now ordinary

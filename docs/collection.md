@@ -43,9 +43,11 @@ import type { Folder, Note } from './schema.codec.ts'
 /** Pass to `Neoworks.collection`; the descriptor text is exactly what the registry publishes. */
 export const collection = {
 	name: '@acme/notes',
+	version: '1.0.0',
 	descriptor: "{\n  \"descriptorVersion\": 2, ...",
 } as {
 	readonly name: '@acme/notes'
+	readonly version: '1.0.0'
 	readonly descriptor: string
 	readonly tables?: { Folder: Folder; Note: Note }
 }
@@ -55,6 +57,9 @@ export default collection
 
 - `name` is the registry path `@scope/name`, taken from the `openschema.yaml` in the
   schema's directory. Without a manifest the target fails and writes nothing.
+- `version` is the manifest's `version`. Every row an app writes records it, plain
+  and signed, so the server can refuse rows older than a finished migration and the
+  collection's owner can see which versions are still in use.
 - `descriptor` is the text `openschema publish` uploads: the `descriptor` target's
   output with no company overlay and no private fields. The registry serves the same
   bytes by hash, which is how a client verifies the descriptor it bundled.
@@ -77,6 +82,41 @@ import schema from './generated/index.ts'
 const { folders, notes } = neoworks.collection(schema)
 const note = await notes.create({ folder: folderId, title: 'Hello' })
 ```
+
+## Types per version
+
+Rows record the schema version that wrote them. When a version breaks an earlier
+one, the app ships steps that migrate a row from one version to the next, and the
+`versions` target types both sides of every step:
+
+```sh
+openschema notes.schema --target descriptor,codec,versions,collection --out generated
+```
+
+`schema.versions.ts` holds every model and enum of every version, named after the
+version, and `index.ts` re-exports it:
+
+```ts
+export interface Note_0_4_0 { title: string; body?: string }
+export interface Note_1_0_0 { headline: string; body?: string }
+
+const steps = {
+  '1.0.0': (row: Note_0_4_0): Note_1_0_0 => ({ headline: row.title, body: row.body }),
+}
+```
+
+- The types are the codec target's types of that version, the values the SDK reads
+  and writes, without the bag of unknown fields. A message or enum field names the
+  same version's type. `File` is imported from the codec module, so run `codec` in
+  the same command.
+- The versions come from `versions/<major.minor.patch>/` beside `openschema.yaml`,
+  which holds that version's schema files under the manifest's `entry` name, and
+  from the schema being generated, as the manifest's `version`.
+- `openschema publish` writes `versions/<version>/` for the version it uploaded.
+  `openschema versions pull` downloads every published version the directory does
+  not have yet. Commit `versions/` like the lockfile.
+- The ordinal ledger cannot stand in for it: it records each field number's latest
+  name and type, not what each version looked like.
 
 ## Publishing to a development stack
 
@@ -114,6 +154,6 @@ version breaks:
 | 403 | you may not publish into `@scope`: it needs the `schemas.publish` permission for the owner of `@scope` |
 | 404 | `@scope` is not a handle: pick it in the developer dashboard first |
 | 409 | `@scope` belongs to an archived organization; nobody can publish into it |
-| 409 | a version that already exists, or an incompatible schema with the [violations](./compatibility.md) listed |
+| 409 | a version that already exists, a version not above every published one, or an incompatible schema with the [violations](./compatibility.md#versions-on-the-registry) listed |
 
 Nothing is published in any of these cases.
