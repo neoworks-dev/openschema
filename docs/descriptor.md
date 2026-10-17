@@ -258,9 +258,12 @@ table, with the same result.
 
 Searching text and time windows need no decorator. They are queries: a text
 filter is `{ title: { contains: "stand", mode: "insensitive" } }`, a `File` is
-searched by `{ image: { name: { contains: "beach" } } }`, a list by
-`{ emails: { some: { contains: "anna@" } } }` and the events overlapping a
-window by `{ start: { lt: windowEnd }, end: { gt: windowStart } }`.
+searched by `{ image: { name: { contains: "beach" } } }`, a list of plain values
+by `{ keywords: { has: "sea" } }`, a list of messages by the fields of its
+elements, `{ emails: { some: { value: { contains: "anna@" } } } }`, and the
+events overlapping a window by `{ start: { lt: windowEnd }, end: { gt: windowStart } }`.
+The fields of one list element have to match together. A field of a message that
+is a message, a `File`, a list or a map cannot be filtered.
 
 ### Facets
 

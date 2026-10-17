@@ -219,7 +219,7 @@ each broken rule with the path in the descriptor it concerns.
 - It is above every version already published.
 - Its descriptor stays compatible with every published version of the same
   major: no field number reused for another name, no changed type, container or
-  nullability, no new required field, no removed node model.
+  nullability, no new required field, no removed table.
 - A new major may break all of that, a retired field number included. Apps then
   migrate the rows written by older versions on the user's devices, with steps
   they ship in their own code.
