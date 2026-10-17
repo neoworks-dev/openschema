@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, ModelDecl, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
-  unionAliases, resolveAliasInline, FILE_TS,
+  unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS,
 } from "../typeMapping.js";
 
 const SCALAR_TS: Record<ScalarKind, string> = {
@@ -16,6 +16,7 @@ const SCALAR_TS: Record<ScalarKind, string> = {
   f32: "number", f64: "number",
   string: "string", bytes: "Uint8Array", uuid: "string", json: "unknown",
   date: "string", time: "string", timestamp: "string", duration: "string",
+  semver: SEMVER_TS,
 };
 
 export const typescriptEmitter: Emitter = {

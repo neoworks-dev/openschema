@@ -29,6 +29,7 @@ export const SCALAR_TYPES: VocabularyEntry[] = [
   { label: "time", detail: "scalar", documentation: "Time of day." },
   { label: "timestamp", detail: "scalar", documentation: "Instant in time." },
   { label: "duration", detail: "scalar", documentation: "Span of time." },
+  { label: "semver", detail: "scalar", documentation: "Semantic version major.minor.patch, without pre-release or build suffixes." },
   { label: "File", detail: "type", documentation: "A file in object storage: name, media type, size and named variants." },
 ];
 

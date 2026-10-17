@@ -48,6 +48,7 @@ const SCALAR_KINDS = new Map<TokenKind, AST.ScalarKind>([
   [TokenKind.Time,      "time"],
   [TokenKind.Timestamp, "timestamp"],
   [TokenKind.Duration,  "duration"],
+  [TokenKind.Semver,    "semver"],
 ]);
 
 // ── Parser ────────────────────────────────────────────────────────────────────

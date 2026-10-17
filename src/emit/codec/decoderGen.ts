@@ -311,6 +311,7 @@ function scalarRead(scalar: ScalarKind, reader: string, wire: string, path: stri
     case "bytes":  return `readBytesField(${reader}, ${wire}, ${path})`;
     case "uuid":   return `bytesToUuid(readBytesField(${reader}, ${wire}, ${path}), ${path})`;
     case "json":   return `parseJson(readStringField(${reader}, ${wire}, ${path}), ${path})`;
+    case "semver": return `readSemverField(${reader}, ${wire}, ${path})`;
     default: {
       const value: ValueShape = { kind: "scalar", scalar };
       const raw = `${FIELD_READER[varintFamily(value)]}(${reader}, ${wire}, ${path})`;

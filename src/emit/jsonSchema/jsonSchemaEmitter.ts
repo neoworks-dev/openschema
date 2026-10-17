@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, EnumDecl } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
-  firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA,
+  firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
 
 type Json = Record<string, unknown>;
@@ -22,6 +22,7 @@ const SCALAR_JSON: Record<ScalarKind, Json> = {
   json: {},
   date: { type: "string", format: "date" }, time: { type: "string", format: "time" },
   timestamp: { type: "string", format: "date-time" }, duration: { type: "string", format: "duration" },
+  semver: { type: "string", pattern: SEMVER_PATTERN },
 };
 
 export const jsonSchemaEmitter: Emitter = {

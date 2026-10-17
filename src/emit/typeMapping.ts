@@ -34,6 +34,18 @@ export const FILE_JSON_SCHEMA = {
   },
 };
 
+// ── semver ────────────────────────────────────────────────────────────────────
+//
+// In code a `semver` is three numbers, compared as integers. Its JSON form is
+// the text "major.minor.patch", without pre-release or build suffixes.
+
+export const SEMVER_TS = "{ major: number; minor: number; patch: number }";
+
+export const SEMVER_ZOD = "z.object({ major: z.number().int().nonnegative(), " +
+  "minor: z.number().int().nonnegative(), patch: z.number().int().nonnegative() })";
+
+export const SEMVER_PATTERN = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$";
+
 /** Base-record fields an emitter should render, honouring includePrivate. */
 export function baseFieldsToEmit(record: ResolvedModel, context: EmitContext): ResolvedField[] {
   if (context.includePrivate) return record.fields;

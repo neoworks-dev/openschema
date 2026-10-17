@@ -241,6 +241,7 @@ Primitive types built into the language:
 | `time` | time of day |
 | `timestamp` | date + time |
 | `duration` | a length of time |
+| `semver` | a version `major.minor.patch`, three unsigned integers compared numerically; no pre-release or build suffix |
 
 ```openschema
 model Measurement {

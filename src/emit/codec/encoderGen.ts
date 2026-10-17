@@ -160,7 +160,7 @@ function wrapperMapWriter(field: FieldPlan, keyScalar: ScalarKind, source: strin
 
 function writeValue(target: string, value: ValueShape, source: string, path: string): string {
   switch (value.kind) {
-    case "scalar":  return `${target}.${scalarWriteCall(value.scalar, source, path)};`;
+    case "scalar":  return scalarWriter(target, value.scalar, source, path);
     case "enum":    return `${target}.varintNumber(${source});`;
     case "decimal":
       return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;
@@ -203,7 +203,13 @@ function oneofWriter(target: string, value: ValueShape & { kind: "oneof" }, sour
   ].join("\n");
 }
 
-function scalarWriteCall(scalar: ScalarKind, source: string, path: string): string {
+function scalarWriter(target: string, scalar: ScalarKind, source: string, path: string): string {
+  if (scalar === "semver") return `writeSemver(${target}, ${source}, ${path});`;
+  return `${target}.${scalarWriteCall(scalar, source, path)};`;
+}
+
+/** A Writer method call; `semver` is written by scalarWriter. */
+function scalarWriteCall(scalar: Exclude<ScalarKind, "semver">, source: string, path: string): string {
   switch (scalar) {
     case "bool":      return `varintNumber(${source} ? 1 : 0)`;
     case "i8":
