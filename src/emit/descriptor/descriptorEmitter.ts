@@ -10,7 +10,7 @@ import { baseFieldsToEmit, hasDecorator } from "../typeMapping.js";
 import { planModel, type FieldPlan } from "../codec/plan.js";
 import { rejectDuplicateLocalNames, rejectOverlayCompany } from "../codec/codecEmitter.js";
 import { describeConstraints } from "./constraints.js";
-import { describeNodes } from "./nodes.js";
+import { describeTables, TABLE_DECORATOR } from "./tables.js";
 import {
   DESCRIPTOR_VERSION, type EnumDescriptor, type FieldDescriptor, type ModelDescriptor, type SchemaDescriptor,
 } from "./descriptorTypes.js";
@@ -25,9 +25,9 @@ export const descriptorEmitter: Emitter = {
   },
 };
 
-/** Whether the schema defines Neoworks nodes, which is what makes it a collection with a descriptor. */
-export function definesNeoworksNodes(schema: ResolvedSchema): boolean {
-  return [...schema.records.values()].some(record => hasDecorator(record.decorators, "neoworks.node"));
+/** Whether the schema defines Neoworks tables, which is what makes it a collection with a descriptor. */
+export function definesNeoworksTables(schema: ResolvedSchema): boolean {
+  return [...schema.records.values()].some(record => hasDecorator(record.decorators, TABLE_DECORATOR));
 }
 
 /** The descriptor text exactly as `openschema publish` uploads it: no company overlay, no private fields. */
@@ -46,7 +46,7 @@ export function buildDescriptor(context: EmitContext): SchemaDescriptor {
     namespace: context.schema.namespace.join("."),
     enums: describeEnums(context),
     models: [...models.values()],
-    nodes: describeNodes(context.schema, models),
+    tables: describeTables(context.schema, models),
   };
 }
 

@@ -22,7 +22,7 @@ repository: https://example.com/recipes
 
 const SCHEMA = `namespace acme.recipes
 
-@neoworks.node("item")
+@neoworks.table
 model Recipe {
   1 title: string
   @neoworks.facet("Ingredients") 2 ingredients: [string]
@@ -86,17 +86,17 @@ describe("preparePublish", () => {
     return serializeLedger(result.next);
   }
 
-  it("builds the payload from the manifest, with the descriptor for a node schema", () => {
+  it("builds the payload from the manifest, with the descriptor for a schema with tables", () => {
     const prepared = preparePublish(project({ "openschema.yaml": MANIFEST, "recipes.schema": SCHEMA }), "test");
     expect(prepared.problems).toEqual([]);
     expect(prepared.payload).toMatchObject({
       scope: "acme", name: "recipes", version: "1.0.0", title: "Recipes",
       license: "MIT", files: [{ path: "recipes.schema", contents: SCHEMA }],
     });
-    expect(JSON.parse(prepared.payload!.descriptor!).nodes[0].model).toBe("Recipe");
+    expect(JSON.parse(prepared.payload!.descriptor!).tables[0].model).toBe("Recipe");
   });
 
-  it("sends no descriptor for a schema without nodes", () => {
+  it("sends no descriptor for a schema without tables", () => {
     const plain = "namespace acme.recipes\nmodel Recipe { 1 title: string }\n";
     const prepared = preparePublish(project({ "openschema.yaml": MANIFEST, "recipes.schema": plain }), "test");
     expect(prepared.problems).toEqual([]);

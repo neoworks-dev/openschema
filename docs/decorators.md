@@ -239,10 +239,11 @@ See [Code Generation → OpenAPI](./code-generation.md#openapi).
 
 ## Neoworks decorators
 
-`@neoworks.node`, `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.title` and
-`@neoworks.timeRange` describe how a model is stored as an encrypted Neoworks
-node. The `descriptor` target reads them and rejects any other `@neoworks`
-decorator. See [Descriptor target and Neoworks nodes](./descriptor.md).
+`@neoworks.table`, `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.title` and
+`@neoworks.timeRange` describe how a model is stored as encrypted Neoworks rows,
+and `@belongsTo` and `@onDelete("cascade")` on a `ref<Table>` field describe how
+rows relate. The `descriptor` target reads them and rejects any other `@neoworks`
+decorator. See [Descriptor target and Neoworks tables](./descriptor.md).
 
 ## Defining your own decorators
 

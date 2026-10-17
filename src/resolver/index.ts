@@ -305,7 +305,7 @@ function checkNamedReference(
   diagnostics.error("OS1003", `Undefined type '${type.path.join(".")}'`, type.span);
 }
 
-/** `ref<Model>` names a node, so the model must exist and be marked @neoworks.node. */
+/** `ref<Model>` names a row, so the model must exist and be marked @neoworks.table. */
 function checkReferenceTarget(
   path: string[],
   span: Span,
@@ -318,10 +318,10 @@ function checkReferenceTarget(
     diagnostics.error("OS1003", `Undefined type '${path.join(".")}'`, span);
     return;
   }
-  const isNodeModel = target.decl.kind === "model" &&
-    target.decl.decorators.some(decorator => decorator.name === "neoworks.node");
-  if (!isNodeModel) {
-    diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.node`, span);
+  const isTable = target.decl.kind === "model" &&
+    target.decl.decorators.some(decorator => decorator.name === "neoworks.table");
+  if (!isTable) {
+    diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.table`, span);
   }
 }
 

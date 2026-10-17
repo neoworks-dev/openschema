@@ -1,4 +1,4 @@
-# Descriptor target and Neoworks nodes
+# Descriptor target and Neoworks tables
 
 ```sh
 openschema calendar.schema --target descriptor --out ./generated
@@ -14,7 +14,7 @@ The descriptor rejects every construct the codec rejects.
 
 ```jsonc
 {
-  "descriptorVersion": 1,
+  "descriptorVersion": 2,
   "namespace": "neoworks.calendar",
   "enums":  [{ "name": "Status", "variants": [{ "name": "confirmed", "ordinal": 1 }] }],
   "models": [{
@@ -28,8 +28,7 @@ The descriptor rejects every construct the codec rejects.
       "constraints": { "maxLength": 200 }
     }]
   }],
-  "nodes": [{
-    "kind": "item",
+  "tables": [{
     "model": "Event",
     "facets": [
       { "name": "default", "tag": 1, "fields": [1, 2] },
@@ -37,15 +36,18 @@ The descriptor rejects every construct the codec rejects.
     ],
     "searchable": [1],
     "title": null,
-    "timeRange": { "start": 3, "end": 4 }
+    "timeRange": { "start": 3, "end": 4 },
+    "belongsTo": 5,
+    "cascade": []
   }]
 }
 ```
 
 `container` and `value` are the wire layout described in
 [Wire Format](./wire-format.md). Named types refer to models and enums by local
-name. Everything inside `nodes` refers to fields by ordinal, so renaming a field
-never changes what a facet or index points at.
+name, a reference names its table by qualified name. Everything inside `tables`
+refers to fields by ordinal, so renaming a field never changes what a facet or
+index points at.
 
 ## Constraints
 
@@ -106,27 +108,41 @@ know are kept as they are, so an older client never drops data a newer one
 wrote. A rejected value is reported with its path and the reason, e.g.
 `Event.attendees[2].email` / `is not a valid email`.
 
-## Neoworks node decorators
+## Neoworks tables
 
-Neoworks stores user data as end-to-end encrypted nodes in a tree of roots,
-containers and items. A schema published as a collection says which model each
-container and item stores and how that model is encrypted. Roots carry no content;
-a collection's name is the registry title from its manifest.
+Neoworks stores user data as end-to-end encrypted rows. A schema published as a
+collection says which models are stored as rows, how each is encrypted and how
+rows refer to each other. A collection holds any number of tables. Every row
+sits under the collection's root, which carries no content, or belongs to
+another row; a collection's name is the registry title from its manifest.
 
 | Decorator | On | Meaning |
 |---|---|---|
-| `@neoworks.node("container" \| "item")` | model | The model is the content of every node of this kind. At most one model per kind. |
-| `@neoworks.facet("Name")` | field of a node model | The field is encrypted in the named facet. |
-| `@neoworks.searchable` | `string`, `[string]`, `File` or `[File]` field of a node model | The client indexes the field for search; a `File` is indexed by its name. |
-| `@neoworks.timeRange(start: "a", end: "b")` | node model | The client indexes nodes by the interval between two `timestamp` fields in the same facet. |
-| `@neoworks.title` | one single `string` or `File` field of a node model | The node's display name, e.g. a calendar's name on the consent screen; for a `File`, the file's name. |
+| `@neoworks.table` | model | The model is stored as rows. Any number of models per schema. |
+| `@neoworks.facet("Name")` | field of a table | The field is encrypted in the named facet. |
+| `@neoworks.searchable` | `string`, `[string]`, `File` or `[File]` field of a table | The client indexes the field for search; a `File` is indexed by its name. |
+| `@neoworks.timeRange(start: "a", end: "b")` | table | The client indexes rows by the interval between two `timestamp` fields in the same facet. |
+| `@neoworks.title` | one single `string` or `File` field of a table | The row's display name, e.g. a calendar's name on the consent screen; for a `File`, the file's name. |
+| `@belongsTo` | one single `ref<Table>` field of a table | The row belongs to the referenced row; see below. |
+| `@onDelete("cascade")` | a `ref<Table>` or `[ref<Table>]` field of a table | Deleting the referenced row deletes this one. |
+
+A model without `@neoworks.table` is a shape used inside fields, like a
+`GeoPoint`; it is not stored on its own and cannot be referenced.
 
 ```openschema
 namespace neoworks.calendar
 
-@neoworks.node("item")
+@neoworks.table
+model Calendar {
+  @neoworks.title
+  1 name: string
+}
+
+@neoworks.table
 @neoworks.timeRange(start: "start", end: "end")
 model Event {
+  @belongsTo
+  5 calendar: ref<Calendar>
   @neoworks.searchable
   1 title: string
   2 notes: string?
@@ -138,30 +154,56 @@ model Event {
 
 ### References
 
-`ref<Model>` is a field type for the id of a node of another model, possibly of
-another schema (`ref<neoworks.photos.Album>`). The model must be marked
-`@neoworks.node`; the resolver reports `OS1003` for an unknown model and `OS1017`
-for one that is not a node model. A reference is a `uuid` on the wire and in the
-generated types. In the descriptor the field's value stays `{"kind": "scalar",
-"scalar": "uuid"}` and gains `"reference": "<qualified model name>"`, which is how
-a runtime finds the references in a node's content. Neoworks shares the nodes an
-item references along with the item.
+`ref<Table>` is a field type for a link to a row of a table, possibly of another
+schema (`ref<neoworks.photos.Photo>`). The model must be marked
+`@neoworks.table`; the resolver reports `OS1003` for an unknown model and `OS1017`
+for one that is not a table. In the descriptor the field's value is
+`{"kind": "ref", "model": "<qualified table name>"}`.
+
+On the wire a reference is the message `Ref`:
+
+| Ordinal | Field | Type |
+|---|---|---|
+| 1 | `id` | `uuid`, the referenced row |
+| 2 | `key` | `bytes`, the referenced row's 32-byte key, absent on a `@belongsTo` field |
+
+The Neoworks core writes the key and keeps it to itself: an app passes and reads
+only the id, and the generated codec reads and writes the id alone. Whoever opens
+a row therefore opens the rows it links to. The core also lists the ids of the
+linked rows, unencrypted and covered by the row's signature, so the server can
+send the linked rows to everyone who can read the linking row.
+
+A reference marked `@belongsTo` reverses the access: the row's key is wrapped
+under the key of the row it belongs to, so whoever opens that row opens every row
+belonging to it, and the row it belongs to never changes when one is added.
+Deleting a row deletes the rows that belong to it. A row without `@belongsTo`, or
+whose `@belongsTo` field is null, sits under the collection's root. The field
+names a table of the same schema, at most one per table (`OSD011`), and does not
+change once the row is written.
+
+`@onDelete("cascade")` on a link deletes the row when the row it links to is
+deleted, where the deleting client may write it. Otherwise a link to a deleted row
+stays until someone who may write the linking row removes it. `"cascade"` is the
+only action (`OSD012`).
 
 ```openschema
-@neoworks.node("container")
+@neoworks.table
 model Album { 1 name: string }
 
-@neoworks.node("item")
-model Photo {
-  1 caption: string
-  2 album: ref<Album>?
+@neoworks.table
+model AlbumPhoto {
+  @belongsTo
+  1 album: ref<Album>
+  @onDelete("cascade")
+  2 photo: ref<Photo>
+  3 position: f64
 }
 ```
 
 ### Files
 
 `File` is a field type like `string`: `image: File` is required, `picture: File?`
-optional and `attachments: [File]` holds several. It may appear in any node model,
+optional and `attachments: [File]` holds several. It may appear in any model,
 and `File` cannot be declared as a model, enum or alias (`OS1018`). A file's
 bytes live in object storage; the `File` value in the content says where and
 what they are. On the wire it is the message `File`, with `FileVariant` for its
@@ -184,7 +226,7 @@ an app carry no key. `@neoworks.title` and `@neoworks.searchable` on a `File`
 field mean its `name`. Validation decorators do not apply to a `File`.
 
 ```openschema
-@neoworks.node("item")
+@neoworks.table
 model Photo {
   @neoworks.title
   1 image: File
@@ -196,21 +238,34 @@ model Photo {
 
 ### Facets
 
-A node's content is one message of the node model, split by facet. Each facet's
-fields are encoded as their own message and encrypted under a key for that facet,
-so access to a node can be granted for some facets only. Above, sharing
+A row's content is one message per facet, each encrypted under a key for that
+facet, so access to a row can be granted for some facets only. Above, sharing
 `Availability` reveals when an event is but not its title.
 
-- Fields without `@neoworks.facet` belong to the `default` facet, tag 1.
+- Fields without `@neoworks.facet` belong to the `default` facet, tag 1. Every
+  table has the default facet, even when all its fields are in named ones.
 - A named facet's tag is derived from its name: `2 + (first four bytes of
   sha256("neoworks.facet:" + name), big-endian) mod 536870909`. Two facets of one
-  model that derive the same tag are an error (`OSD006`); rename one.
+  table that derive the same tag are an error (`OSD006`); rename one.
 - Facet names are letters and digits, starting with a letter, and cannot be
   `default` in any case (`OSD005`).
 
+Each facet's plaintext names the row's table, so a reader knows which model to
+decode with before decoding, and so does someone granted only some facets. It is
+the message `FacetContent`:
+
+| Ordinal | Field | Type |
+|---|---|---|
+| 1 | `table` | `string`, the table's model name as in `tables` |
+| 2 | `schema` | `bytes`, the 32-byte BLAKE2b-256 hash of the descriptor the writer used, the version the registry publishes under that hash |
+| 3 | `fields` | `bytes`, the facet's fields as a message of the table's model |
+
+A writer always writes every facet of the table, so each row names its table in
+every facet it carries.
+
 ### Facets are permanent
 
-Existing nodes keep a field encrypted under the facet it was written in. The
+Existing rows keep a field encrypted under the facet it was written in. The
 [ordinal ledger](./ordinal-ledger.md) therefore records each field's facet and
 refuses to move a field to another facet — including by renaming the facet — as
 `OS2013`. Renaming the field itself is still fine.
@@ -219,13 +274,14 @@ refuses to move a field to another facet — including by renaming the facet —
 
 | Code | Meaning |
 |---|---|
-| `OSD001` | unknown `@neoworks` decorator |
-| `OSD002` | `@neoworks.node` without exactly one valid node kind |
-| `OSD003` | two models declare the same node kind |
-| `OSD004` | `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.timeRange` or `@neoworks.title` on a model that is not a node |
+| `OSD001` | unknown `@neoworks` decorator, including `@neoworks.node`, which `@neoworks.table` replaces |
+| `OSD002` | `@neoworks.table` with arguments, or more than once |
+| `OSD004` | `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.timeRange`, `@neoworks.title`, `@belongsTo` or `@onDelete` on a model that is not a table |
 | `OSD005` | invalid or repeated facet name |
 | `OSD006` | two facets of one model derive the same tag |
 | `OSD007` | `@neoworks.searchable` on a field that is not `string`, `[string]`, `File` or `[File]` |
 | `OSD008` | invalid `@neoworks.timeRange` |
 | `OSD009` | invalid validation decorator |
 | `OSD010` | `@neoworks.title` not on exactly one single `string` or `File` field |
+| `OSD011` | `@belongsTo` not on one single `ref<Table>` field naming a table of the schema, more than one per table, or with `@onDelete` |
+| `OSD012` | `@onDelete` other than `"cascade"`, or not on a `ref<Table>` or `[ref<Table>]` field |

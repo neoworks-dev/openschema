@@ -5,16 +5,17 @@
 import type { Span } from "../../parser/ast.js";
 
 export type DescriptorErrorCode =
-  | "OSD001"   // unknown @neoworks decorator
-  | "OSD002"   // @neoworks.node without a valid node kind
-  | "OSD003"   // two models declare the same node kind
-  | "OSD004"   // a node-only decorator on a model that is not a node
+  | "OSD001"   // unknown @neoworks decorator, or the retired @neoworks.node
+  | "OSD002"   // @neoworks.table with arguments or repeated
+  | "OSD004"   // a table-only decorator on a model that is not a table
   | "OSD005"   // invalid or repeated facet name
   | "OSD006"   // two facets of one model hash to the same tag
   | "OSD007"   // @neoworks.searchable on a field that is not a string or File
   | "OSD008"   // invalid @neoworks.timeRange
   | "OSD009"   // invalid validation decorator
-  | "OSD010";  // @neoworks.title not on exactly one single string or File field
+  | "OSD010"   // @neoworks.title not on exactly one single string or File field
+  | "OSD011"   // invalid @belongsTo
+  | "OSD012";  // invalid @onDelete
 
 export class DescriptorError extends Error {
   constructor(

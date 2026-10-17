@@ -22,7 +22,7 @@ function codes(result: { diagnostics: { code: string }[] }): string[] {
   return result.diagnostics.map(diagnostic => diagnostic.code);
 }
 
-const V1 = `@neoworks.node("item") model Event {
+const V1 = `@neoworks.table model Event {
   1 title: string
   @neoworks.facet("Availability") 2 start: timestamp
 }`;

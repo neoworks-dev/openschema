@@ -11,7 +11,7 @@ import { cleanupCodecs, generateCodec, loadCodec } from "./helpers/loadCodec";
 afterAll(cleanupCodecs);
 
 const PHOTO = `namespace test.photos
-@neoworks.node("item")
+@neoworks.table
 model Photo {
   @neoworks.title
   1 image: File
@@ -71,15 +71,15 @@ describe("the File type", () => {
   });
 
   it("names the title and the searchable fields by ordinal", () => {
-    const node = describeSchema(PHOTO).nodes[0];
+    const node = describeSchema(PHOTO).tables[0];
     expect(node.title).toBe(1);
     expect(node.searchable).toEqual([3]);
   });
 
   it("allows @neoworks.searchable on a File but not a title on a repeated File", () => {
-    const repeatedTitle = 'namespace t\n@neoworks.node("item") model M { @neoworks.title 1 a: [File] }';
+    const repeatedTitle = 'namespace t\n@neoworks.table model M { @neoworks.title 1 a: [File] }';
     expect(descriptorErrorCode(repeatedTitle)).toBe("OSD010");
-    const mapSearch = 'namespace t\n@neoworks.node("item") model M { @neoworks.searchable 1 a: {string: File} }';
+    const mapSearch = 'namespace t\n@neoworks.table model M { @neoworks.searchable 1 a: {string: File} }';
     expect(descriptorErrorCode(mapSearch)).toBe("OSD007");
   });
 

@@ -17,8 +17,16 @@ export const UNKNOWN_PROPERTY = "$unknown";
 /** The message a `File` value is encoded as; see filePlan.ts. */
 export const FILE_MESSAGE_NAME = "File";
 
+/**
+ * A `ref<Model>` value is the message `Ref { 1 id: uuid, 2 key: bytes? }`. The
+ * key is the target record's key, which only the Neoworks core writes and reads;
+ * in generated code a reference is its id alone.
+ */
+export const REF_MESSAGE_NAME = "Ref";
+
 export type ValueShape =
-  | { kind: "scalar"; scalar: ScalarKind; reference?: string }
+  | { kind: "scalar"; scalar: ScalarKind }
+  | { kind: "ref"; model: string }
   | { kind: "enum"; name: string }
   | { kind: "message"; name: string }
   | { kind: "file" }
@@ -186,7 +194,7 @@ function planValue(model: string, field: ResolvedField, type: TypeExpr, schema: 
   const resolved = resolveAliasInline(unwrapNullable(type).inner, schema);
 
   if (resolved.kind === "scalar" && resolved.reference !== undefined) {
-    return { kind: "scalar", scalar: resolved.scalar, reference: referenceTargetOf(resolved.reference, schema) };
+    return { kind: "ref", model: referenceTargetOf(resolved.reference, schema) };
   }
   if (resolved.kind === "scalar")  return { kind: "scalar", scalar: resolved.scalar };
   if (resolved.kind === "decimal") return { kind: "decimal", precision: resolved.precision, scale: resolved.scale };
@@ -263,6 +271,7 @@ function arrayElement(rendered: string): string {
 export function valueTsType(value: ValueShape): string {
   switch (value.kind) {
     case "scalar":  return SCALAR_CODEC_TS[value.scalar];
+    case "ref":     return "string";
     case "enum":    return value.name;
     case "message": return value.name;
     case "file":    return FILE_MESSAGE_NAME;
@@ -284,6 +293,7 @@ function oneofTsType(variants: OneofVariantPlan[]): string {
 export function wireTypeOf(value: ValueShape): WireType {
   switch (value.kind) {
     case "scalar":  return SCALAR_WIRE[value.scalar];
+    case "ref":     return WireType.Len;
     case "enum":    return WireType.Varint;
     case "message": return WireType.Len;
     case "file":    return WireType.Len;

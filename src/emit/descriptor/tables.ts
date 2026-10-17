@@ -1,9 +1,10 @@
-// src/emit/descriptor/nodes.ts
-// The Neoworks node extension. A model marked @neoworks.node("item") is the
-// content of every item node in the collection the schema is published as.
-// Its fields are split into facets, each encrypted under its own key so a grant
-// can cover only some of them; fields without @neoworks.facet share the
-// default facet.
+// src/emit/descriptor/tables.ts
+// The Neoworks table extension. A model marked @neoworks.table is stored as rows
+// of the collection the schema is published as; a collection holds any number of
+// tables. A row's fields are split into facets, each encrypted under its own key
+// so a grant can cover only some of them; fields without @neoworks.facet share the
+// default facet. A `ref<Table>` field links a row to another row, and @belongsTo
+// on one of them makes the row part of its target.
 
 import { createHash } from "node:crypto";
 import type { Decorator } from "../../parser/ast.js";
@@ -11,43 +12,53 @@ import type { ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
 import { allDecorators, firstStringArg, namedStringArg } from "../typeMapping.js";
 import { MAX_ORDINAL } from "../codec/wireFormat.js";
 import type {
-  FacetDescriptor, FieldDescriptor, ModelDescriptor, NodeDescriptor, NodeKind, TimeRangeDescriptor,
+  FacetDescriptor, FieldDescriptor, ModelDescriptor, TableDescriptor, TimeRangeDescriptor,
 } from "./descriptorTypes.js";
 import { DescriptorError } from "./errors.js";
 
 export const DEFAULT_FACET = "default";
 export const DEFAULT_FACET_TAG = 1;
+export const TABLE_DECORATOR = "neoworks.table";
 
-const NODE_DECORATOR = "neoworks.node";
+const RETIRED_NODE_DECORATOR = "neoworks.node";
 const FACET_DECORATOR = "neoworks.facet";
 const SEARCHABLE_DECORATOR = "neoworks.searchable";
 const TIME_RANGE_DECORATOR = "neoworks.timeRange";
 const TITLE_DECORATOR = "neoworks.title";
+const BELONGS_TO_DECORATOR = "belongsTo";
+const ON_DELETE_DECORATOR = "onDelete";
+const CASCADE = "cascade";
 const KNOWN_DECORATORS = new Set([
-  NODE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
+  TABLE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
 ]);
-// Roots carry no content: the collection's name comes from the registry title.
-const NODE_KINDS: ReadonlySet<string> = new Set<NodeKind>(["container", "item"]);
 const FACET_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 
 /** `models` must hold one descriptor per record, under the record's local name. */
-export function describeNodes(schema: ResolvedSchema, models: Map<string, ModelDescriptor>): NodeDescriptor[] {
-  const nodes: NodeDescriptor[] = [];
-  const modelByKind = new Map<NodeKind, string>();
-
+export function describeTables(schema: ResolvedSchema, models: Map<string, ModelDescriptor>): TableDescriptor[] {
+  const tables: TableDescriptor[] = [];
+  const tableNames = tableNamesOf(schema);
   for (const record of schema.records.values()) {
     rejectUnknownDecorators(record);
     const model = models.get(record.symbol.localName);
     if (model === undefined) continue;
-    const kind = nodeKindOf(record);
-    if (kind === null) {
-      rejectNodeOnlyDecorators(record);
+    if (!isTable(record)) {
+      rejectTableOnlyDecorators(record);
       continue;
     }
-    rejectDuplicateKind(modelByKind, kind, record);
-    nodes.push(describeNode(record, model, kind));
+    tables.push(describeTable(record, model, tableNames));
   }
-  return nodes;
+  return tables;
+}
+
+/** Whether the model is marked @neoworks.table, rejecting a marker that carries arguments or repeats. */
+export function isTable(record: ResolvedModel): boolean {
+  const decorators = allDecorators(record.decorators, TABLE_DECORATOR);
+  if (decorators.length === 0) return false;
+  if (decorators.length > 1 || decorators[0].args.length > 0) {
+    throw new DescriptorError("OSD002", record.symbol.localName, null,
+      `@${TABLE_DECORATOR} takes no arguments and appears once`, decorators[0].span);
+  }
+  return true;
 }
 
 /**
@@ -68,39 +79,26 @@ export function facetNameOf(decorators: Decorator[]): string {
   return name;
 }
 
-function describeNode(record: ResolvedModel, model: ModelDescriptor, kind: NodeKind): NodeDescriptor {
+function describeTable(record: ResolvedModel, model: ModelDescriptor, tableNames: Set<string>): TableDescriptor {
   const facetByOrdinal = assignFacets(record, model);
   return {
-    kind,
     model: model.name,
     facets: groupFacets(record, model, facetByOrdinal),
     searchable: searchableFields(record, model),
     title: titleField(record, model),
     timeRange: describeTimeRange(record, model, facetByOrdinal),
+    belongsTo: belongsToField(record, model, tableNames),
+    cascade: cascadeFields(record, model),
   };
 }
 
-// ── Node kind ─────────────────────────────────────────────────────────────────
-
-function nodeKindOf(record: ResolvedModel): NodeKind | null {
-  const decorators = allDecorators(record.decorators, NODE_DECORATOR);
-  if (decorators.length === 0) return null;
-  const kind = firstStringArg(decorators, NODE_DECORATOR);
-  if (decorators.length > 1 || kind === null || !NODE_KINDS.has(kind)) {
-    throw new DescriptorError("OSD002", record.symbol.localName, null,
-      `@${NODE_DECORATOR} takes one of "container" or "item", once`, decorators[0].span);
+/** The qualified names of this schema's tables, which a @belongsTo may name. */
+function tableNamesOf(schema: ResolvedSchema): Set<string> {
+  const names = new Set<string>();
+  for (const record of schema.records.values()) {
+    if (allDecorators(record.decorators, TABLE_DECORATOR).length > 0) names.add(record.symbol.qualifiedName);
   }
-  return kind as NodeKind;
-}
-
-function rejectDuplicateKind(modelByKind: Map<NodeKind, string>, kind: NodeKind, record: ResolvedModel): void {
-  const existing = modelByKind.get(kind);
-  if (existing !== undefined) {
-    throw new DescriptorError("OSD003", record.symbol.localName, null,
-      `'${existing}' is already the ${kind} node model; a schema has at most one model per node kind`,
-      record.symbol.span);
-  }
-  modelByKind.set(kind, record.symbol.localName);
+  return names;
 }
 
 // ── Decorator placement ───────────────────────────────────────────────────────
@@ -108,25 +106,31 @@ function rejectDuplicateKind(modelByKind: Map<NodeKind, string>, kind: NodeKind,
 function rejectUnknownDecorators(record: ResolvedModel): void {
   const decorators = [...record.decorators, ...record.fields.flatMap(field => field.decorators)];
   for (const decorator of decorators) {
+    if (decorator.name === RETIRED_NODE_DECORATOR) {
+      throw new DescriptorError("OSD001", record.symbol.localName, null,
+        `@${RETIRED_NODE_DECORATOR} is replaced by @${TABLE_DECORATOR}`, decorator.span);
+    }
     if (decorator.path[0] !== "neoworks" || KNOWN_DECORATORS.has(decorator.name)) continue;
     throw new DescriptorError("OSD001", record.symbol.localName, null,
       `unknown decorator @${decorator.name}`, decorator.span);
   }
 }
 
-/** Facets and indexes only mean something on a node model; elsewhere they would be silently ignored. */
-function rejectNodeOnlyDecorators(record: ResolvedModel): void {
+/** Facets, indexes and relations only mean something on a table; elsewhere they would be silently ignored. */
+function rejectTableOnlyDecorators(record: ResolvedModel): void {
   const misplaced = [
     ...allDecorators(record.decorators, TIME_RANGE_DECORATOR),
     ...record.fields.flatMap(field => [
       ...allDecorators(field.decorators, FACET_DECORATOR),
       ...allDecorators(field.decorators, SEARCHABLE_DECORATOR),
       ...allDecorators(field.decorators, TITLE_DECORATOR),
+      ...allDecorators(field.decorators, BELONGS_TO_DECORATOR),
+      ...allDecorators(field.decorators, ON_DELETE_DECORATOR),
     ]),
   ];
   if (misplaced.length === 0) return;
   throw new DescriptorError("OSD004", record.symbol.localName, null,
-    `@${misplaced[0].name} is only valid on a model marked @${NODE_DECORATOR}`, misplaced[0].span);
+    `@${misplaced[0].name} is only valid on a model marked @${TABLE_DECORATOR}`, misplaced[0].span);
 }
 
 // ── Facets ────────────────────────────────────────────────────────────────────
@@ -152,8 +156,13 @@ function readFacetName(record: ResolvedModel, field: FieldDescriptor): string {
   return name;
 }
 
+/**
+ * Every table has the default facet, even with all its fields in named ones: each
+ * facet names the row's table, and a row always carries its default facet.
+ */
 function groupFacets(record: ResolvedModel, model: ModelDescriptor, facetByOrdinal: Map<number, string>): FacetDescriptor[] {
   const facets = new Map<string, FacetDescriptor>();
+  facets.set(DEFAULT_FACET, { name: DEFAULT_FACET, tag: DEFAULT_FACET_TAG, fields: [] });
   for (const field of model.fields) {
     const name = facetByOrdinal.get(field.ordinal) as string;
     let facet = facets.get(name);
@@ -193,14 +202,14 @@ function searchableFields(record: ResolvedModel, model: ModelDescriptor): number
   return ordinals;
 }
 
-/** The single string or File field that names the node (a File by its name), if the model marks one. */
+/** The single string or File field that names the row (a File by its name), if the table marks one. */
 function titleField(record: ResolvedModel, model: ModelDescriptor): number | null {
   const marked = model.fields.filter(field => allDecorators(decoratorsOf(record, field), TITLE_DECORATOR).length > 0);
   if (marked.length === 0) return null;
   const field = marked[0];
   if (marked.length > 1 || field.container.kind !== "singular" || !isTextValue(field)) {
     throw new DescriptorError("OSD010", record.symbol.localName, field.name,
-      `@${TITLE_DECORATOR} marks exactly one single string or File field per model`, null);
+      `@${TITLE_DECORATOR} marks exactly one single string or File field per table`, null);
   }
   return field.ordinal;
 }
@@ -248,6 +257,58 @@ function timestampField(
     field.value.kind === "scalar" && field.value.scalar === "timestamp";
   if (!singularTimestamp) fail(`'${name}' must be a single timestamp`);
   return field;
+}
+
+// ── Relations ─────────────────────────────────────────────────────────────────
+
+/** The one single reference to a table of this schema that marks what the row belongs to. */
+function belongsToField(record: ResolvedModel, model: ModelDescriptor, tableNames: Set<string>): number | null {
+  const marked = model.fields.filter(field => markedWith(record, field, BELONGS_TO_DECORATOR).length > 0);
+  if (marked.length === 0) return null;
+  const field = marked[0];
+  const decorator = markedWith(record, field, BELONGS_TO_DECORATOR)[0];
+  const fail = (reason: string): never => {
+    throw new DescriptorError("OSD011", record.symbol.localName, field.name, reason, decorator.span);
+  };
+  if (marked.length > 1) fail(`@${BELONGS_TO_DECORATOR} marks at most one field per table`);
+  if (decorator.args.length > 0 || markedWith(record, field, BELONGS_TO_DECORATOR).length > 1) {
+    fail(`@${BELONGS_TO_DECORATOR} takes no arguments and appears once`);
+  }
+  if (field.container.kind !== "singular" || field.value.kind !== "ref") {
+    fail(`@${BELONGS_TO_DECORATOR} applies to a single ref<Table> field`);
+  }
+  if (!tableNames.has(referencedModel(field))) {
+    fail(`@${BELONGS_TO_DECORATOR} must name a table of this schema`);
+  }
+  if (markedWith(record, field, ON_DELETE_DECORATOR).length > 0) {
+    fail(`a row is deleted with what it belongs to; @${ON_DELETE_DECORATOR} does not apply`);
+  }
+  return field.ordinal;
+}
+
+function cascadeFields(record: ResolvedModel, model: ModelDescriptor): number[] {
+  const ordinals: number[] = [];
+  for (const field of model.fields) {
+    const decorators = markedWith(record, field, ON_DELETE_DECORATOR);
+    if (decorators.length === 0) continue;
+    const isReference = field.value.kind === "ref" && field.container.kind !== "map" && field.container.kind !== "wrapperMap";
+    const action = firstStringArg(decorators, ON_DELETE_DECORATOR);
+    if (decorators.length > 1 || decorators[0].args.length !== 1 || action !== CASCADE || !isReference) {
+      throw new DescriptorError("OSD012", record.symbol.localName, field.name,
+        `@${ON_DELETE_DECORATOR}("${CASCADE}") applies once to a ref<Table> or [ref<Table>] field`, decorators[0].span);
+    }
+    ordinals.push(field.ordinal);
+  }
+  return ordinals;
+}
+
+function referencedModel(field: FieldDescriptor): string {
+  if (field.value.kind !== "ref") return "";
+  return field.value.model;
+}
+
+function markedWith(record: ResolvedModel, field: FieldDescriptor, decoratorName: string): Decorator[] {
+  return allDecorators(decoratorsOf(record, field), decoratorName);
 }
 
 function decoratorsOf(record: ResolvedModel, field: FieldDescriptor): Decorator[] {

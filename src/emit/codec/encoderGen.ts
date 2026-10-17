@@ -161,6 +161,7 @@ function wrapperMapWriter(field: FieldPlan, keyScalar: ScalarKind, source: strin
 function writeValue(target: string, value: ValueShape, source: string, path: string): string {
   switch (value.kind) {
     case "scalar":  return `${target}.${scalarWriteCall(value.scalar, source, path)};`;
+    case "ref":     return `writeRef(${target}, ${source}, ${path});`;
     case "enum":    return `${target}.varintNumber(${source});`;
     case "decimal":
       return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;

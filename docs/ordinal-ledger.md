@@ -183,7 +183,7 @@ model leaves its ordinals permanently spent.
 A field entry also records its `@neoworks.facet` as `facet` (absent for the default
 facet). Existing encrypted data stays in the facet it was written in, so the facet
 of a live ordinal can never change. See
-[Descriptor target and Neoworks nodes](./descriptor.md#facets-are-permanent).
+[Descriptor target and Neoworks tables](./descriptor.md#facets-are-permanent).
 
 ## Relationship to `reserved`
 

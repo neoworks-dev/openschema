@@ -675,6 +675,30 @@ export function bytesToUuid(bytes: Uint8Array, path: string): string {
     HEX_PAIRS[bytes[13]] + HEX_PAIRS[bytes[14]] + HEX_PAIRS[bytes[15]];
 }
 
+// ── ref ───────────────────────────────────────────────────────────────────────
+//
+// A reference is the message Ref { 1 id: uuid, 2 key: bytes? }. The key belongs
+// to the Neoworks core; generated code writes the id alone and reads past a key.
+
+export function writeRef(writer: Writer, id: string, path: string): void {
+  const offset = writer.beginNested();
+  writer.key(1, WIRE_LEN);
+  writer.lengthDelimited(uuidToBytes(id, path));
+  writer.endNested(offset);
+}
+
+export function readRef(reader: Reader, path: string): string {
+  let id: string | null = null;
+  while (reader.hasMore()) {
+    const key = reader.key();
+    const wire = key & 7;
+    if ((key >>> 3) !== 1) { reader.skipBody(wire); continue; }
+    id = bytesToUuid(readBytesField(reader, wire, path), path);
+  }
+  if (id === null) throw missingField(path, "id", 1);
+  return id;
+}
+
 // ── date / time / timestamp ───────────────────────────────────────────────────
 
 const MS_PER_DAY = 86400000;

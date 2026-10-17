@@ -250,6 +250,7 @@ function readValue(
     case "scalar":  return scalarRead(value.scalar, reader, wire, path);
     case "enum":    return `readUnsignedField(${reader}, ${wire}, ${path}) as ${value.name}`;
     case "decimal": return `canonicalDecimal(readStringField(${reader}, ${wire}, ${path}), ${value.precision}, ${value.scale}, ${path})`;
+    case "ref":     return `readRef(${subMessage(reader, wire, path)}, ${path})`;
     case "message": return `read${value.name}(${subMessage(reader, wire, path)}, ${path})`;
     case "file":    return readValue({ kind: "message", name: FILE_MESSAGE_NAME }, reader, wire, path, oneofs);
     case "oneof":   return `${oneofs.get(value)}(${subMessage(reader, wire, path)}, ${path})`;

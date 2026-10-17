@@ -22,8 +22,8 @@ openschema publish
   is your handle, or the handle of an organization you may publish for; without it
   the file holds the placeholder `your-handle`, which you replace. `--name` defaults
   to the directory name, `--title` and `--description` to text derived from it.
-- `<name>.schema`, a small collection with one container and one item model. Its
-  header shows the generate command above.
+- `<name>.schema`, a small collection with two tables, folders and the notes that
+  belong to them. Its header shows the generate command above.
 
 The scope is a handle that already exists: publishing into a scope that is not a
 handle is refused. Pick your handle in the developer dashboard first.
@@ -43,12 +43,11 @@ import type { Folder, Note } from './schema.codec.ts'
 /** Pass to `Neoworks.collection`; the descriptor text is exactly what the registry publishes. */
 export const collection = {
 	name: '@acme/notes',
-	descriptor: "{\n  \"descriptorVersion\": 1, ...",
+	descriptor: "{\n  \"descriptorVersion\": 2, ...",
 } as {
 	readonly name: '@acme/notes'
 	readonly descriptor: string
-	readonly containers?: { Folder: Folder }
-	readonly items?: { Note: Note }
+	readonly tables?: { Folder: Folder; Note: Note }
 }
 
 export default collection
@@ -62,11 +61,11 @@ export default collection
 - The `export * from './schema.codec.ts'` line is written when the `codec` target runs
   in the same command, so apps import the content types and `collection` from one
   module. Run the targets together: `--target descriptor,codec,collection`.
-- With the codec, the export is typed: `containers` and `items` exist only in the type
-  system and give the content type of every node model, so `neoworks.collection()`
-  can return typed resources. Without the codec the export is the plain `as const`
-  object and the SDK resources are untyped.
-- The schema must define `@neoworks.node` models; a schema without nodes has no
+- With the codec, the export is typed: `tables` exists only in the type system and
+  gives the content type of every table, so `neoworks.collection()` can return
+  typed resources. Without the codec the export is the plain `as const` object and
+  the SDK resources are untyped.
+- The schema must define `@neoworks.table` models; a schema without tables has no
   descriptor and the target fails.
 
 Regenerate and commit the output whenever the schema changes. The `openschema.lock`

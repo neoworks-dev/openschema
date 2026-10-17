@@ -5,7 +5,7 @@ import { resolve } from "../src/resolver";
 import { getEmitter } from "../src/emit";
 import { buildDescriptor } from "../src/emit/descriptor/descriptorEmitter";
 import { DescriptorError } from "../src/emit/descriptor/errors";
-import { facetTag } from "../src/emit/descriptor/nodes";
+import { facetTag } from "../src/emit/descriptor/tables";
 import type { SchemaDescriptor } from "../src/emit/descriptor/descriptorTypes";
 
 function describeSchema(body: string): SchemaDescriptor {
@@ -25,7 +25,7 @@ function descriptorError(body: string): DescriptorError {
 }
 
 const EVENT = `
-@neoworks.node("item")
+@neoworks.table
 model Event {
   @neoworks.searchable
   1 title: string
@@ -36,7 +36,7 @@ model Event {
   4 end: timestamp
 }
 
-@neoworks.node("container")
+@neoworks.table
 model Calendar {
   @neoworks.title
   1 name: string
@@ -48,7 +48,7 @@ describe("registration", () => {
     const schema = resolve(parse("namespace t\nmodel M { 1 a: i32 }"));
     const files = getEmitter("descriptor")!.emit({ schema, company: null, includePrivate: false, options: {} });
     expect(files.map(file => file.path)).toEqual(["schema.descriptor.json"]);
-    expect(JSON.parse(files[0].contents).descriptorVersion).toBe(1);
+    expect(JSON.parse(files[0].contents).descriptorVersion).toBe(2);
   });
 });
 
@@ -103,18 +103,23 @@ describe("constraints", () => {
   });
 });
 
-describe("node models", () => {
-  it("describes one node per marked model", () => {
+describe("tables", () => {
+  it("describes one table per marked model, any number per schema", () => {
     const descriptor = describeSchema(EVENT);
-    expect(descriptor.nodes.map(node => [node.kind, node.model])).toEqual([["item", "Event"], ["container", "Calendar"]]);
+    expect(descriptor.tables.map(table => table.model)).toEqual(["Event", "Calendar"]);
   });
 
   it("puts fields without @neoworks.facet in the default facet with tag 1", () => {
-    const event = describeSchema(EVENT).nodes[0];
+    const event = describeSchema(EVENT).tables[0];
     expect(event.facets).toEqual([
       { name: "default", tag: 1, fields: [1, 2] },
       { name: "Availability", tag: facetTag("Availability"), fields: [3, 4] },
     ]);
+  });
+
+  it("keeps the default facet when every field is in a named one", () => {
+    const table = describeSchema('@neoworks.table model M { @neoworks.facet("Private") 1 a: i32 }').tables[0];
+    expect(table.facets.map(facet => [facet.name, facet.fields])).toEqual([["default", []], ["Private", [1]]]);
   });
 
   it("derives facet tags from the name, within the encodable range", () => {
@@ -127,55 +132,88 @@ describe("node models", () => {
 
   it("indexes searchable fields and the time range by ordinal", () => {
     const descriptor = describeSchema(EVENT.replace(
-      '@neoworks.node("item")',
-      '@neoworks.node("item") @neoworks.timeRange(start: "start", end: "end")',
+      "@neoworks.table\nmodel Event",
+      '@neoworks.table @neoworks.timeRange(start: "start", end: "end")\nmodel Event',
     ));
-    expect(descriptor.nodes[0].searchable).toEqual([1]);
-    expect(descriptor.nodes[0].timeRange).toEqual({ start: 3, end: 4 });
+    expect(descriptor.tables[0].searchable).toEqual([1]);
+    expect(descriptor.tables[0].timeRange).toEqual({ start: 3, end: 4 });
   });
 
-  it("leaves ordinary models out of the node list", () => {
-    expect(describeSchema("model M { 1 a: i32 }").nodes).toEqual([]);
+  it("leaves ordinary models out of the table list", () => {
+    expect(describeSchema("model M { 1 a: i32 }").tables).toEqual([]);
   });
 
   it("names the title field by ordinal", () => {
-    const [event, calendar] = describeSchema(EVENT).nodes;
+    const [event, calendar] = describeSchema(EVENT).tables;
     expect(event.title).toBeNull();
     expect(calendar.title).toBe(1);
   });
 });
 
 describe("references", () => {
-  const CONTACTS = `
-@neoworks.node("container")
-model Picture { 1 name: string }
+  const PHOTOS = `
+@neoworks.table
+model Photo { 1 caption: string }
 
-@neoworks.node("item")
-model Contact {
-  1 name: string
-  2 photo: ref<Picture>?
-  3 gallery: [ref<Picture>]?
+@neoworks.table
+model Album { 1 name: string }
+
+@neoworks.table
+model AlbumPhoto {
+  @belongsTo
+  1 album: ref<Album>
+  @onDelete("cascade")
+  2 photo: ref<Photo>
+  3 position: f64
+  4 related: [ref<Photo>]?
 }
 `;
 
-  it("describes the model of each node kind", () => {
-    const kinds = describeSchema(CONTACTS).nodes.map(node => `${node.kind}:${node.model}`);
-    expect(kinds).toEqual(["container:Picture", "item:Contact"]);
+  it("describes a reference as its own value kind naming the target table", () => {
+    const entry = describeSchema(PHOTOS).models.find(model => model.name === "AlbumPhoto")!;
+    expect(entry.fields[0].value).toEqual({ kind: "ref", model: "test.calendar.Album" });
+    expect(entry.fields[0].container).toEqual({ kind: "singular", nullable: false });
+    expect(entry.fields[3].value).toEqual({ kind: "ref", model: "test.calendar.Photo" });
+    expect(entry.fields[3].container.kind).toBe("wrapperRepeated");
   });
 
-  it("records the target of a reference on the uuid value, one level per element", () => {
-    const contact = describeSchema(CONTACTS).models.find(model => model.name === "Contact")!;
-    expect(contact.fields[1].value).toEqual({ kind: "scalar", scalar: "uuid", reference: "test.calendar.Picture" });
-    expect(contact.fields[1].container).toEqual({ kind: "singular", nullable: true });
-    expect(contact.fields[2].value).toEqual({ kind: "scalar", scalar: "uuid", reference: "test.calendar.Picture" });
-    expect(contact.fields[0].value).toEqual({ kind: "scalar", scalar: "string" });
+  it("names the field the row belongs to and the references it is deleted with", () => {
+    const entry = describeSchema(PHOTOS).tables.find(table => table.model === "AlbumPhoto")!;
+    expect(entry.belongsTo).toBe(1);
+    expect(entry.cascade).toEqual([2]);
+    const album = describeSchema(PHOTOS).tables.find(table => table.model === "Album")!;
+    expect(album.belongsTo).toBeNull();
+    expect(album.cascade).toEqual([]);
   });
 
-  it("has no asset node kind", () => {
-    expect(descriptorError('@neoworks.node("asset") model A { 1 a: i32 }').code).toBe("OSD002");
+  it("allows a row to belong to a row of its own table, or to nothing", () => {
+    const folders = describeSchema("@neoworks.table model Folder { 1 name: string  @belongsTo 2 parent: ref<Folder>? }");
+    expect(folders.tables[0].belongsTo).toBe(2);
   });
 
-  it("reports a reference to an unknown model or to a model that is not a node", () => {
+  it("rejects @belongsTo on anything but one single reference to a table of the schema", () => {
+    const repeated = "@neoworks.table model A { 1 a: i32 }\n@neoworks.table model B { @belongsTo 1 a: [ref<A>] }";
+    const twice = "@neoworks.table model A { 1 a: i32 }\n@neoworks.table model B { @belongsTo 1 a: ref<A>  @belongsTo 2 b: ref<A> }";
+    const notReference = "@neoworks.table model B { @belongsTo 1 a: uuid }";
+    const withCascade = '@neoworks.table model A { 1 a: i32 }\n@neoworks.table model B { @belongsTo @onDelete("cascade") 1 a: ref<A> }';
+    expect(descriptorError(repeated).code).toBe("OSD011");
+    expect(descriptorError(twice).code).toBe("OSD011");
+    expect(descriptorError(notReference).code).toBe("OSD011");
+    expect(descriptorError(withCascade).code).toBe("OSD011");
+  });
+
+  it("rejects @onDelete other than cascade on a reference", () => {
+    const restrict = '@neoworks.table model A { 1 a: i32 }\n@neoworks.table model B { @onDelete("restrict") 1 a: ref<A> }';
+    const notReference = '@neoworks.table model B { @onDelete("cascade") 1 a: string }';
+    expect(descriptorError(restrict).code).toBe("OSD012");
+    expect(descriptorError(notReference).code).toBe("OSD012");
+  });
+
+  it("rejects relation decorators outside a table", () => {
+    expect(descriptorError("@neoworks.table model A { 1 a: i32 }\nmodel B { @belongsTo 1 a: ref<A> }").code).toBe("OSD004");
+  });
+
+  it("reports a reference to an unknown model or to a model that is not a table", () => {
     const unknown = resolve(parse("namespace t\nmodel M { 1 photo: ref<Missing> }"));
     expect(unknown.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1003");
     const plain = resolve(parse("namespace t\nmodel Plain { 1 a: i32 }\nmodel M { 1 photo: ref<Plain> }"));
@@ -183,52 +221,47 @@ model Contact {
   });
 
   it("types a reference as a string in the generated code", () => {
-    const schema = resolve(parse(`namespace t\n${CONTACTS}`));
+    const schema = resolve(parse(`namespace t\n${PHOTOS}`));
     const files = getEmitter("codec")!.emit({ schema, company: null, includePrivate: false, options: {} });
-    expect(files[0].contents).toContain("photo?: string");
+    expect(files[0].contents).toContain("photo: string");
   });
 });
 
-describe("node decorator errors", () => {
-  it("rejects an unknown @neoworks decorator", () => {
+describe("table decorator errors", () => {
+  it("rejects an unknown @neoworks decorator and the retired node marker", () => {
     expect(descriptorError("@neoworks.history model M { 1 a: i32 }").code).toBe("OSD001");
+    expect(descriptorError('@neoworks.node("item") model M { 1 a: i32 }').code).toBe("OSD001");
   });
 
-  it("rejects an invalid node kind, including root", () => {
-    expect(descriptorError('@neoworks.node("leaf") model M { 1 a: i32 }').code).toBe("OSD002");
-    expect(descriptorError('@neoworks.node("root") model M { 1 a: i32 }').code).toBe("OSD002");
+  it("rejects a table marker with arguments", () => {
+    expect(descriptorError('@neoworks.table("item") model M { 1 a: i32 }').code).toBe("OSD002");
   });
 
   it("rejects a title that is not one single string or File field", () => {
-    expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: [string] }').code).toBe("OSD010");
-    expect(descriptorError('@neoworks.node("item") model M { @neoworks.title 1 a: string  @neoworks.title 2 b: string }').code)
+    expect(descriptorError("@neoworks.table model M { @neoworks.title 1 a: [string] }").code).toBe("OSD010");
+    expect(descriptorError("@neoworks.table model M { @neoworks.title 1 a: string  @neoworks.title 2 b: string }").code)
       .toBe("OSD010");
-    expect(descriptorError('model M { @neoworks.title 1 a: string }').code).toBe("OSD004");
+    expect(descriptorError("model M { @neoworks.title 1 a: string }").code).toBe("OSD004");
   });
 
-  it("rejects two models for the same node kind", () => {
-    expect(descriptorError('@neoworks.node("item") model A { 1 a: i32 }\n@neoworks.node("item") model B { 1 b: i32 }').code)
-      .toBe("OSD003");
-  });
-
-  it("rejects facets and indexes on a model that is not a node", () => {
+  it("rejects facets and indexes on a model that is not a table", () => {
     expect(descriptorError('model M { @neoworks.facet("Private") 1 a: i32 }').code).toBe("OSD004");
     expect(descriptorError("model M { @neoworks.searchable 1 a: string }").code).toBe("OSD004");
   });
 
   it("rejects a facet named default or with invalid characters", () => {
-    expect(descriptorError('@neoworks.node("item") model M { @neoworks.facet("Default") 1 a: i32 }').code).toBe("OSD005");
-    expect(descriptorError('@neoworks.node("item") model M { @neoworks.facet("free busy") 1 a: i32 }').code).toBe("OSD005");
+    expect(descriptorError('@neoworks.table model M { @neoworks.facet("Default") 1 a: i32 }').code).toBe("OSD005");
+    expect(descriptorError('@neoworks.table model M { @neoworks.facet("free busy") 1 a: i32 }').code).toBe("OSD005");
   });
 
   it("rejects @neoworks.searchable on a field that is not a string", () => {
-    expect(descriptorError('@neoworks.node("item") model M { @neoworks.searchable 1 a: i32 }').code).toBe("OSD007");
+    expect(descriptorError("@neoworks.table model M { @neoworks.searchable 1 a: i32 }").code).toBe("OSD007");
   });
 
   it("rejects a time range over unknown fields, non-timestamps or two facets", () => {
-    const unknownField = '@neoworks.node("item") @neoworks.timeRange(start: "from", end: "to") model M { 1 a: timestamp }';
-    const notTimestamp = '@neoworks.node("item") @neoworks.timeRange(start: "a", end: "b") model M { 1 a: string  2 b: timestamp }';
-    const twoFacets = `@neoworks.node("item") @neoworks.timeRange(start: "a", end: "b")
+    const unknownField = '@neoworks.table @neoworks.timeRange(start: "from", end: "to") model M { 1 a: timestamp }';
+    const notTimestamp = '@neoworks.table @neoworks.timeRange(start: "a", end: "b") model M { 1 a: string  2 b: timestamp }';
+    const twoFacets = `@neoworks.table @neoworks.timeRange(start: "a", end: "b")
       model M { 1 a: timestamp  @neoworks.facet("Other") 2 b: timestamp }`;
     expect(descriptorError(unknownField).code).toBe("OSD008");
     expect(descriptorError(notTimestamp).code).toBe("OSD008");

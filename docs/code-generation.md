@@ -22,8 +22,8 @@ The `codec` target generates a canonical binary encoder and decoder, and writes
 rejected constructs — see [Wire Format](./wire-format.md).
 
 The `descriptor` target writes `schema.descriptor.json`, the same wire layout as
-data for runtimes without generated code, plus the Neoworks node decorators — see
-[Descriptor target and Neoworks nodes](./descriptor.md).
+data for runtimes without generated code, plus the Neoworks table decorators — see
+[Descriptor target and Neoworks tables](./descriptor.md).
 
 The `collection` target writes `index.ts`, the module an app passes to
 `session.collection()`: the registry path and the published descriptor text — see

@@ -12,7 +12,7 @@ import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, loadLedger } from "../ledger/io.js";
-import { definesNeoworksNodes, publishedDescriptor } from "../emit/descriptor/descriptorEmitter.js";
+import { definesNeoworksTables, publishedDescriptor } from "../emit/descriptor/descriptorEmitter.js";
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { MANIFEST_FILE, parseManifest, type Manifest } from "./manifest.js";
@@ -54,7 +54,7 @@ function buildPayload(directory: string, generator: string): PublishPayload {
     targets: [],
     files: collectSchemaFiles(directory),
   };
-  const descriptor = describeNodes(schema);
+  const descriptor = describeTables(schema);
   if (descriptor !== null) payload.descriptor = descriptor;
   return payload;
 }
@@ -110,9 +110,9 @@ function checkLedger(entryPath: string, schema: ResolvedSchema, generator: strin
   }
 }
 
-/** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks nodes. */
-function describeNodes(schema: ResolvedSchema): string | null {
-  if (!definesNeoworksNodes(schema)) return null;
+/** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks tables. */
+function describeTables(schema: ResolvedSchema): string | null {
+  if (!definesNeoworksTables(schema)) return null;
   try {
     return publishedDescriptor(schema);
   } catch (error) {

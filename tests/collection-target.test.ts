@@ -93,22 +93,21 @@ describe("the collection target", () => {
     expect(generatedModule(directory)).toContain("export * from './schema.codec.ts'");
   });
 
-  it("types the content of every node model when the codec is generated too", () => {
+  it("types the content of every table when the codec is generated too", () => {
     const directory = scaffold();
     run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory);
     const module = generatedModule(directory);
 
     expect(module).toContain("readonly name: '@acme/recipes'");
-    expect(module).toMatch(/readonly containers\?: \{ \w+: \w+ \}/);
-    expect(module).toMatch(/readonly items\?: \{ \w+: \w+ \}/);
+    expect(module).toContain("readonly tables?: { Folder: Folder; Note: Note }");
     expect(module).toContain("export default collection");
   });
 
-  it("types the reference to a node and the file of a node model", () => {
+  it("types a reference to a row and the file of a table", () => {
     const directory = scaffold();
     writeFileSync(
       join(directory, "recipes.schema"),
-      'namespace acme.recipes\n@neoworks.node("container")\nmodel Book {\n  1 name: string\n}\n@neoworks.node("item")\nmodel Recipe {\n  1 title: string\n  2 book: ref<Book>?\n  3 photo: File?\n}\n',
+      'namespace acme.recipes\n@neoworks.table\nmodel Book {\n  1 name: string\n}\n@neoworks.table\nmodel Recipe {\n  1 title: string\n  2 book: ref<Book>?\n  3 photo: File?\n}\n',
     );
     expect(run(["recipes.schema", "-t", "descriptor,codec,collection", "-o", "generated"], directory).exitCode).toBe(0);
 
@@ -127,11 +126,11 @@ describe("the collection target", () => {
     expect(existsSync(join(directory, "generated", "index.ts"))).toBe(false);
   });
 
-  it("needs a schema that defines Neoworks nodes", () => {
+  it("needs a schema that defines Neoworks tables", () => {
     const directory = scaffold();
     writeFileSync(join(directory, "recipes.schema"), "namespace acme.recipes\nmodel Plain {\n  1 id: uuid\n}\n");
     const refused = run(["recipes.schema", "-t", "collection", "-o", "generated"], directory);
     expect(refused.exitCode).toBe(1);
-    expect(refused.output).toContain("@neoworks.node");
+    expect(refused.output).toContain("@neoworks.table");
   });
 });
