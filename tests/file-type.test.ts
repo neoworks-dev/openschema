@@ -16,7 +16,6 @@ model Photo {
   @neoworks.title
   1 image: File
   2 picture: File?
-  @neoworks.searchable
   3 attachments: [File]
   4 caption: string?
 }`;
@@ -70,17 +69,15 @@ describe("the File type", () => {
     expect(schema.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1003");
   });
 
-  it("names the title and the searchable fields by ordinal", () => {
-    const node = describeSchema(PHOTO).tables[0];
-    expect(node.title).toBe(1);
-    expect(node.searchable).toEqual([3]);
+  it("names the title by ordinal", () => {
+    expect(describeSchema(PHOTO).tables[0].title).toBe(1);
   });
 
-  it("allows @neoworks.searchable on a File but not a title on a repeated File", () => {
+  it("does not take a title on a repeated File, and does not index a File", () => {
     const repeatedTitle = 'namespace t\n@neoworks.table model M { @neoworks.title 1 a: [File] }';
     expect(descriptorErrorCode(repeatedTitle)).toBe("OSD010");
-    const mapSearch = 'namespace t\n@neoworks.table model M { @neoworks.searchable 1 a: {string: File} }';
-    expect(descriptorErrorCode(mapSearch)).toBe("OSD007");
+    const indexedFile = 'namespace t\n@neoworks.table model M { @neoworks.index 1 a: File }';
+    expect(descriptorErrorCode(indexedFile)).toBe("OSD013");
   });
 
   it("rejects validation decorators, which do not apply to a File", () => {

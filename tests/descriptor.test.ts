@@ -27,7 +27,6 @@ function descriptorError(body: string): DescriptorError {
 const EVENT = `
 @neoworks.table
 model Event {
-  @neoworks.searchable
   1 title: string
   2 notes: string?
   @neoworks.facet("Availability")
@@ -125,13 +124,29 @@ describe("tables", () => {
     expect(tag).toBeLessThan(536870911);
   });
 
-  it("indexes searchable fields and the time range by ordinal", () => {
-    const descriptor = describeSchema(EVENT.replace(
-      "@neoworks.table\nmodel Event",
-      '@neoworks.table @neoworks.timeRange(start: "start", end: "end")\nmodel Event',
-    ));
-    expect(descriptor.tables[0].searchable).toEqual([1]);
-    expect(descriptor.tables[0].timeRange).toEqual({ start: 3, end: 4 });
+  it("lists the sorted indexes of a table by field ordinal", () => {
+    const descriptor = describeSchema(`
+@neoworks.table
+model Album { 1 name: string }
+
+@neoworks.table
+@neoworks.index(fields: ["album", "start"])
+@neoworks.index(fields: ["start", "end"])
+model Event {
+  @belongsTo
+  1 album: ref<Album>
+  @neoworks.index
+  2 start: timestamp
+  3 end: timestamp
+}`);
+    expect(descriptor.tables[0].indexes).toEqual([]);
+    expect(descriptor.tables[1].indexes).toEqual([{ fields: [1] }, { fields: [2] }, { fields: [1, 2] }, { fields: [2, 3] }]);
+  });
+
+  it("gives the @belongsTo field an index and keeps one a schema declares again", () => {
+    const body = `@neoworks.table model A { 1 a: i32 }
+@neoworks.table model B { @belongsTo @neoworks.index 1 a: ref<A>  2 b: i32 }`;
+    expect(describeSchema(body).tables[1].indexes).toEqual([{ fields: [1] }]);
   });
 
   it("leaves ordinary models out of the table list", () => {
@@ -241,7 +256,8 @@ describe("table decorator errors", () => {
 
   it("rejects facets and indexes on a model that is not a table", () => {
     expect(descriptorError('model M { @neoworks.facet("Private") 1 a: i32 }').code).toBe("OSD004");
-    expect(descriptorError("model M { @neoworks.searchable 1 a: string }").code).toBe("OSD004");
+    expect(descriptorError("model M { @neoworks.index 1 a: string }").code).toBe("OSD004");
+    expect(descriptorError('@neoworks.index(fields: ["a"]) model M { 1 a: string }').code).toBe("OSD004");
   });
 
   it("rejects a facet named default or with invalid characters", () => {
@@ -249,17 +265,31 @@ describe("table decorator errors", () => {
     expect(descriptorError('@neoworks.table model M { @neoworks.facet("free busy") 1 a: i32 }').code).toBe("OSD005");
   });
 
-  it("rejects @neoworks.searchable on a field that is not a string", () => {
-    expect(descriptorError("@neoworks.table model M { @neoworks.searchable 1 a: i32 }").code).toBe("OSD007");
+  it("rejects an index over fields that cannot be sorted or do not exist", () => {
+    const rejected = [
+      "@neoworks.table model M { @neoworks.index 1 a: [string] }",
+      "@neoworks.table model M { @neoworks.index 1 a: bytes }",
+      "@neoworks.table model M { @neoworks.index 1 a: {string: i32} }",
+      "@neoworks.table model M { @neoworks.index 1 a: File }",
+      "@neoworks.table model M { @neoworks.index 1 a: Part }\nmodel Part { 1 x: i32 }",
+      '@neoworks.table @neoworks.index(fields: ["b"]) model M { 1 a: i32 }',
+      '@neoworks.table @neoworks.index(fields: ["a", "a"]) model M { 1 a: i32 }',
+      '@neoworks.table @neoworks.index(fields: []) model M { 1 a: i32 }',
+      '@neoworks.table @neoworks.index model M { 1 a: i32 }',
+      '@neoworks.table @neoworks.index(fields: "a") model M { 1 a: i32 }',
+      '@neoworks.table model M { @neoworks.index(fields: ["a"]) 1 a: i32 }',
+      "@neoworks.table model M { @neoworks.index @neoworks.index 1 a: i32 }",
+    ];
+    for (const body of rejected) expect(descriptorError(body).code).toBe("OSD013");
   });
 
-  it("rejects a time range over unknown fields, non-timestamps or two facets", () => {
-    const unknownField = '@neoworks.table @neoworks.timeRange(start: "from", end: "to") model M { 1 a: timestamp }';
-    const notTimestamp = '@neoworks.table @neoworks.timeRange(start: "a", end: "b") model M { 1 a: string  2 b: timestamp }';
-    const twoFacets = `@neoworks.table @neoworks.timeRange(start: "a", end: "b")
-      model M { 1 a: timestamp  @neoworks.facet("Other") 2 b: timestamp }`;
-    expect(descriptorError(unknownField).code).toBe("OSD008");
-    expect(descriptorError(notTimestamp).code).toBe("OSD008");
-    expect(descriptorError(twoFacets).code).toBe("OSD008");
+  it("names the replacement for the removed searchable and timeRange decorators", () => {
+    const searchable = descriptorError("@neoworks.table model M { @neoworks.searchable 1 a: string }");
+    const timeRange = descriptorError('@neoworks.table @neoworks.timeRange(start: "a", end: "b") model M { 1 a: timestamp  2 b: timestamp }');
+    expect(searchable.code).toBe("OSD001");
+    expect(searchable.message).toContain("was removed");
+    expect(searchable.message).toContain("contains");
+    expect(timeRange.code).toBe("OSD001");
+    expect(timeRange.message).toContain("where");
   });
 });

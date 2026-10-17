@@ -161,6 +161,9 @@ export class Parser {
   }
 
   private parseDecoratorValue(): AST.DecoratorValue {
+    if (this.at(TokenKind.LBracket)) {
+      return this.parseDecoratorList();
+    }
     // Qualified identifier value, e.g. @references(User.id).
     if (this.at(TokenKind.Ident) && this.peekAt(1).kind === TokenKind.Dot) {
       const path = this.parseQualifiedIdent();
@@ -168,6 +171,17 @@ export class Parser {
     }
     const expr = this.parseExpr();
     return this.normalizeDecoratorValue(expr);
+  }
+
+  private parseDecoratorList(): AST.DecoratorValue {
+    this.expect(TokenKind.LBracket);
+    const values: AST.DecoratorValue[] = [];
+    while (!this.at(TokenKind.RBracket) && !this.at(TokenKind.EOF)) {
+      values.push(this.parseDecoratorValue());
+      if (this.at(TokenKind.Comma)) this.advance();
+    }
+    this.expect(TokenKind.RBracket);
+    return { kind: "list", values };
   }
 
   // Collapse simple expressions into plain literal decorator values; keep

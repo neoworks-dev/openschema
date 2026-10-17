@@ -73,7 +73,7 @@ function schemaText(scope: string, name: string): string {
     "model Note {",
     "  @belongsTo",
     "  1 folder: ref<Folder>",
-    "  @neoworks.searchable @neoworks.title @minLength(1) @maxLength(200)",
+    "  @neoworks.title @minLength(1) @maxLength(200)",
     "  2 title: string",
     "  3 body: string?",
     "  4 createdAt: timestamp",

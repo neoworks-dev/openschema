@@ -47,6 +47,7 @@ export type DecoratorValue =
   | { kind: "number"; value: number }
   | { kind: "bool";   value: boolean }
   | { kind: "ident";  value: string }   // bare identifier, e.g. @compatibility(backward)
+  | { kind: "list";   values: DecoratorValue[] }  // @neoworks.index(fields: ["calendar", "start"])
   | { kind: "expr";   expr:  Expr };     // @default(gen_uuid()), @check(total >= 0)
 
 /** #suppress "R003" "intentional field removal" — a compiler instruction. */

@@ -239,8 +239,7 @@ See [Code Generation → OpenAPI](./code-generation.md#openapi).
 
 ## Neoworks decorators
 
-`@neoworks.table`, `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.title` and
-`@neoworks.timeRange` describe how a model is stored as encrypted Neoworks rows,
+`@neoworks.table`, `@neoworks.facet`, `@neoworks.title` and `@neoworks.index` describe how a model is stored as encrypted Neoworks rows,
 and `@belongsTo` and `@onDelete("cascade")` on a `ref<Table>` field describe how
 rows relate. The `descriptor` target reads them and rejects any other `@neoworks`
 decorator. See [Descriptor target and Neoworks tables](./descriptor.md).

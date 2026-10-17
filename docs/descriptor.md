@@ -34,11 +34,10 @@ The descriptor rejects every construct the codec rejects.
       { "name": "default", "tag": 1, "fields": [1, 2] },
       { "name": "Availability", "tag": 488337835, "fields": [3, 4] }
     ],
-    "searchable": [1],
     "title": null,
-    "timeRange": { "start": 3, "end": 4 },
     "belongsTo": 5,
-    "cascade": []
+    "cascade": [],
+    "indexes": [{ "fields": [5] }, { "fields": [5, 3] }]
   }]
 }
 ```
@@ -121,8 +120,8 @@ another row; a collection's name is the registry title from its manifest.
 |---|---|---|
 | `@neoworks.table` | model | The model is stored as rows. Any number of models per schema. |
 | `@neoworks.facet("Name")` | field of a table | The field is encrypted in the named facet. |
-| `@neoworks.searchable` | `string`, `[string]`, `File` or `[File]` field of a table | The client indexes the field for search; a `File` is indexed by its name. |
-| `@neoworks.timeRange(start: "a", end: "b")` | table | The client indexes rows by the interval between two `timestamp` fields in the same facet. |
+| `@neoworks.index` | one single field of a table | The client keeps a sorted index on the field; see below. |
+| `@neoworks.index(fields: ["a", "b"])` | table | The client keeps a sorted index over the fields in this order. May appear more than once. |
 | `@neoworks.title` | one single `string` or `File` field of a table | The row's display name, e.g. a calendar's name on the consent screen; for a `File`, the file's name. |
 | `@belongsTo` | one single `ref<Table>` field of a table | The row belongs to the referenced row; see below. |
 | `@onDelete("cascade")` | a `ref<Table>` or `[ref<Table>]` field of a table | Deleting the referenced row deletes this one. |
@@ -140,11 +139,10 @@ model Calendar {
 }
 
 @neoworks.table
-@neoworks.timeRange(start: "start", end: "end")
+@neoworks.index(fields: ["calendar", "start"])
 model Event {
   @belongsTo
   5 calendar: ref<Calendar>
-  @neoworks.searchable
   1 title: string
   2 notes: string?
 
@@ -223,8 +221,9 @@ variants (the codec target emits both when a schema uses `File`):
 
 In the descriptor the field's value is `{"kind": "file"}`; the message layout is
 built into the runtime, which keeps the `key` to itself: values handed to and from
-an app carry no key. `@neoworks.title` and `@neoworks.searchable` on a `File`
-field mean its `name`. Validation decorators do not apply to a `File`.
+an app carry no key. `@neoworks.title` on a `File` field means its `name`. A query
+filters and orders a `File` by its `name`, `mediaType` and `size`. Validation
+decorators do not apply to a `File`.
 
 ```openschema
 @neoworks.table
@@ -232,10 +231,36 @@ model Photo {
   @neoworks.title
   1 image: File
   2 picture: File?
-  @neoworks.searchable
   3 attachments: [File]
 }
 ```
+
+### Indexes
+
+Rows are searched on the device after decryption, so an index never leaves it and
+is not part of what the server stores. `@neoworks.index` tells the client which
+sorted indexes to keep so that a query on a large table does not read every row:
+a filter that compares the index's leading fields with `equals` and at most one
+range (`lt`, `lte`, `gt`, `gte`) after them, and an `orderBy` on its fields in one
+direction, are answered from the index. Any other query reads every row of the
+table, with the same result.
+
+- On a field it means an index of that field; on a table, `fields` lists field
+  names, most significant first, like Prisma's `@@index`.
+- A field in an index is a single `bool`, integer, float, `string`, `uuid`, `date`,
+  `time`, `timestamp`, `duration`, `decimal`, enum or `ref<Table>` value. Lists,
+  maps, messages, oneofs, `File`, `bytes`, `json` and `semver` cannot be indexed
+  (`OSD013`).
+- The `@belongsTo` field always has an index, listed first. An index that is
+  declared twice is listed once.
+- The descriptor's `indexes` hold the field ordinals, so renaming a field keeps
+  the index.
+
+Searching text and time windows need no decorator. They are queries: a text
+filter is `{ title: { contains: "stand", mode: "insensitive" } }`, a `File` is
+searched by `{ image: { name: { contains: "beach" } } }`, a list by
+`{ emails: { some: { contains: "anna@" } } }` and the events overlapping a
+window by `{ start: { lt: windowEnd }, end: { gt: windowStart } }`.
 
 ### Facets
 
@@ -265,14 +290,13 @@ refuses to move a field to another facet — including by renaming the facet —
 
 | Code | Meaning |
 |---|---|
-| `OSD001` | unknown `@neoworks` decorator, including `@neoworks.node`, which `@neoworks.table` replaces |
+| `OSD001` | unknown `@neoworks` decorator, including `@neoworks.node`, which `@neoworks.table` replaces, and `@neoworks.searchable` and `@neoworks.timeRange`, which queries replace |
 | `OSD002` | `@neoworks.table` with arguments, or more than once |
-| `OSD004` | `@neoworks.facet`, `@neoworks.searchable`, `@neoworks.timeRange`, `@neoworks.title`, `@belongsTo` or `@onDelete` on a model that is not a table |
+| `OSD004` | `@neoworks.facet`, `@neoworks.index`, `@neoworks.title`, `@belongsTo` or `@onDelete` on a model that is not a table |
 | `OSD005` | invalid or repeated facet name |
 | `OSD006` | two facets of one model derive the same tag |
-| `OSD007` | `@neoworks.searchable` on a field that is not `string`, `[string]`, `File` or `[File]` |
-| `OSD008` | invalid `@neoworks.timeRange` |
 | `OSD009` | invalid validation decorator |
 | `OSD010` | `@neoworks.title` not on exactly one single `string` or `File` field |
 | `OSD011` | `@belongsTo` not on one single `ref<Table>` field naming a table of the schema, more than one per table, or with `@onDelete` |
 | `OSD012` | `@onDelete` other than `"cascade"`, or not on a `ref<Table>` or `[ref<Table>]` field |
+| `OSD013` | invalid `@neoworks.index`: a field that cannot be indexed or does not exist, a field named twice, a table-level index without `fields`, or arguments on a field |

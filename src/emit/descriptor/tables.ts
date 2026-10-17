@@ -4,15 +4,16 @@
 // tables. A row's fields are split into facets, each encrypted under its own key
 // so a grant can cover only some of them; fields without @neoworks.facet share the
 // default facet. A `ref<Table>` field links a row to another row, and @belongsTo
-// on one of them makes the row part of its target.
+// on one of them makes the row part of its target. @neoworks.index declares the
+// sorted indexes a client keeps for queries; the @belongsTo field always has one.
 
 import { createHash } from "node:crypto";
 import type { Decorator } from "../../parser/ast.js";
 import type { ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { allDecorators, firstStringArg, namedStringArg } from "../typeMapping.js";
+import { allDecorators, firstStringArg, namedStringListArg } from "../typeMapping.js";
 import { MAX_ORDINAL } from "../codec/wireFormat.js";
 import type {
-  FacetDescriptor, FieldDescriptor, ModelDescriptor, TableDescriptor, TimeRangeDescriptor,
+  FacetDescriptor, FieldDescriptor, IndexDescriptor, ModelDescriptor, TableDescriptor,
 } from "./descriptorTypes.js";
 import { DescriptorError } from "./errors.js";
 
@@ -22,15 +23,16 @@ export const TABLE_DECORATOR = "neoworks.table";
 
 const RETIRED_NODE_DECORATOR = "neoworks.node";
 const FACET_DECORATOR = "neoworks.facet";
-const SEARCHABLE_DECORATOR = "neoworks.searchable";
-const TIME_RANGE_DECORATOR = "neoworks.timeRange";
+const INDEX_DECORATOR = "neoworks.index";
+const REMOVED_DECORATORS = new Map([
+  ["neoworks.searchable", 'filter with where instead, e.g. { title: { contains: "x", mode: "insensitive" } }'],
+  ["neoworks.timeRange", "filter the timestamps with where instead, e.g. { start: { lt: end }, end: { gt: start } }"],
+]);
 const TITLE_DECORATOR = "neoworks.title";
 const BELONGS_TO_DECORATOR = "belongsTo";
 const ON_DELETE_DECORATOR = "onDelete";
 const CASCADE = "cascade";
-const KNOWN_DECORATORS = new Set([
-  TABLE_DECORATOR, FACET_DECORATOR, SEARCHABLE_DECORATOR, TIME_RANGE_DECORATOR, TITLE_DECORATOR,
-]);
+const KNOWN_DECORATORS = new Set([TABLE_DECORATOR, FACET_DECORATOR, INDEX_DECORATOR, TITLE_DECORATOR]);
 const FACET_NAME = /^[A-Za-z][A-Za-z0-9]*$/;
 
 /** `models` must hold one descriptor per record, under the record's local name. */
@@ -81,14 +83,14 @@ export function facetNameOf(decorators: Decorator[]): string {
 
 function describeTable(record: ResolvedModel, model: ModelDescriptor, tableNames: Set<string>): TableDescriptor {
   const facetByOrdinal = assignFacets(record, model);
+  const belongsTo = belongsToField(record, model, tableNames);
   return {
     model: model.name,
     facets: groupFacets(record, model, facetByOrdinal),
-    searchable: searchableFields(record, model),
     title: titleField(record, model),
-    timeRange: describeTimeRange(record, model, facetByOrdinal),
-    belongsTo: belongsToField(record, model, tableNames),
+    belongsTo,
     cascade: cascadeFields(record, model),
+    indexes: describeIndexes(record, model, belongsTo),
   };
 }
 
@@ -111,18 +113,23 @@ function rejectUnknownDecorators(record: ResolvedModel): void {
         `@${RETIRED_NODE_DECORATOR} is replaced by @${TABLE_DECORATOR}`, decorator.span);
     }
     if (decorator.path[0] !== "neoworks" || KNOWN_DECORATORS.has(decorator.name)) continue;
-    throw new DescriptorError("OSD001", record.symbol.localName, null,
-      `unknown decorator @${decorator.name}`, decorator.span);
+    throw new DescriptorError("OSD001", record.symbol.localName, null, unknownDecoratorReason(decorator), decorator.span);
   }
+}
+
+function unknownDecoratorReason(decorator: Decorator): string {
+  const replacement = REMOVED_DECORATORS.get(decorator.name);
+  if (replacement === undefined) return `unknown decorator @${decorator.name}`;
+  return `@${decorator.name} was removed; ${replacement}`;
 }
 
 /** Facets, indexes and relations only mean something on a table; elsewhere they would be silently ignored. */
 function rejectTableOnlyDecorators(record: ResolvedModel): void {
   const misplaced = [
-    ...allDecorators(record.decorators, TIME_RANGE_DECORATOR),
+    ...allDecorators(record.decorators, INDEX_DECORATOR),
     ...record.fields.flatMap(field => [
       ...allDecorators(field.decorators, FACET_DECORATOR),
-      ...allDecorators(field.decorators, SEARCHABLE_DECORATOR),
+      ...allDecorators(field.decorators, INDEX_DECORATOR),
       ...allDecorators(field.decorators, TITLE_DECORATOR),
       ...allDecorators(field.decorators, BELONGS_TO_DECORATOR),
       ...allDecorators(field.decorators, ON_DELETE_DECORATOR),
@@ -181,21 +188,7 @@ function rejectTagCollisions(record: ResolvedModel, facets: FacetDescriptor[]): 
   }
 }
 
-// ── Indexes ───────────────────────────────────────────────────────────────────
-
-function searchableFields(record: ResolvedModel, model: ModelDescriptor): number[] {
-  const ordinals: number[] = [];
-  for (const field of model.fields) {
-    const decorators = allDecorators(decoratorsOf(record, field), SEARCHABLE_DECORATOR);
-    if (decorators.length === 0) continue;
-    if (!isTextField(field)) {
-      throw new DescriptorError("OSD007", record.symbol.localName, field.name,
-        `@${SEARCHABLE_DECORATOR} applies to string, [string], File and [File] fields only`, decorators[0].span);
-    }
-    ordinals.push(field.ordinal);
-  }
-  return ordinals;
-}
+// ── Title ─────────────────────────────────────────────────────────────────────
 
 /** The single string or File field that names the row (a File by its name), if the table marks one. */
 function titleField(record: ResolvedModel, model: ModelDescriptor): number | null {
@@ -215,43 +208,80 @@ function isTextValue(field: FieldDescriptor): boolean {
   return field.value.kind === "scalar" && field.value.scalar === "string";
 }
 
-function isTextField(field: FieldDescriptor): boolean {
-  if (!isTextValue(field)) return false;
-  return field.container.kind !== "map" && field.container.kind !== "wrapperMap";
-}
+// ── Indexes ───────────────────────────────────────────────────────────────────
 
-function describeTimeRange(
-  record: ResolvedModel,
-  model: ModelDescriptor,
-  facetByOrdinal: Map<number, string>,
-): TimeRangeDescriptor | null {
-  const decorators = allDecorators(record.decorators, TIME_RANGE_DECORATOR);
-  if (decorators.length === 0) return null;
-  const fail = (reason: string): never => {
-    throw new DescriptorError("OSD008", record.symbol.localName, null, reason, decorators[0].span);
-  };
-  if (decorators.length > 1) fail(`@${TIME_RANGE_DECORATOR} may appear once per model`);
-
-  const start = timestampField(model, namedStringArg(decorators, TIME_RANGE_DECORATOR, "start"), fail);
-  const end = timestampField(model, namedStringArg(decorators, TIME_RANGE_DECORATOR, "end"), fail);
-  if (facetByOrdinal.get(start.ordinal) !== facetByOrdinal.get(end.ordinal)) {
-    fail(`'${start.name}' and '${end.name}' must be in the same facet`);
+/**
+ * The sorted indexes of the table: the @belongsTo field's, then each field marked
+ * @neoworks.index in field order, then each table-level @neoworks.index(fields: [...])
+ * in declaration order. An index declared twice is kept once.
+ */
+function describeIndexes(record: ResolvedModel, model: ModelDescriptor, belongsTo: number | null): IndexDescriptor[] {
+  const indexes: IndexDescriptor[] = [];
+  if (belongsTo !== null) indexes.push({ fields: [belongsTo] });
+  for (const field of model.fields) {
+    if (markedWith(record, field, INDEX_DECORATOR).length === 0) continue;
+    indexes.push(fieldIndex(record, field));
   }
-  return { start: start.ordinal, end: end.ordinal };
+  for (const decorator of allDecorators(record.decorators, INDEX_DECORATOR)) {
+    indexes.push(compositeIndex(record, model, decorator));
+  }
+  return withoutRepeats(indexes);
 }
 
-function timestampField(
-  model: ModelDescriptor,
-  name: string | null,
-  fail: (reason: string) => never,
-): FieldDescriptor {
-  if (name === null) fail(`@${TIME_RANGE_DECORATOR} needs start: "<field>" and end: "<field>"`);
+function fieldIndex(record: ResolvedModel, field: FieldDescriptor): IndexDescriptor {
+  const decorators = markedWith(record, field, INDEX_DECORATOR);
+  if (decorators.length > 1 || decorators[0].args.length > 0) {
+    throw new DescriptorError("OSD013", record.symbol.localName, field.name,
+      `@${INDEX_DECORATOR} on a field takes no arguments and appears once`, decorators[0].span);
+  }
+  rejectUnindexable(record, field);
+  return { fields: [field.ordinal] };
+}
+
+function compositeIndex(record: ResolvedModel, model: ModelDescriptor, decorator: Decorator): IndexDescriptor {
+  const names = namedStringListArg(decorator, "fields");
+  if (names === null || names.length === 0 || decorator.args.length !== 1) {
+    throw new DescriptorError("OSD013", record.symbol.localName, null,
+      `@${INDEX_DECORATOR} on a table needs fields: ["<field>", ...]`, decorator.span);
+  }
+  const fields = names.map(name => indexedField(record, model, name, decorator));
+  if (new Set(fields.map(field => field.ordinal)).size !== fields.length) {
+    throw new DescriptorError("OSD013", record.symbol.localName, null,
+      `@${INDEX_DECORATOR} names a field twice`, decorator.span);
+  }
+  return { fields: fields.map(field => field.ordinal) };
+}
+
+function indexedField(record: ResolvedModel, model: ModelDescriptor, name: string, decorator: Decorator): FieldDescriptor {
   const field = model.fields.find(candidate => candidate.name === name);
-  if (field === undefined) fail(`'${name}' is not a field of ${model.name}`);
-  const singularTimestamp = field.container.kind === "singular" &&
-    field.value.kind === "scalar" && field.value.scalar === "timestamp";
-  if (!singularTimestamp) fail(`'${name}' must be a single timestamp`);
+  if (field === undefined) {
+    throw new DescriptorError("OSD013", record.symbol.localName, null,
+      `@${INDEX_DECORATOR} names '${name}', which is not a field of ${model.name}`, decorator.span);
+  }
+  rejectUnindexable(record, field);
   return field;
+}
+
+const UNINDEXABLE_SCALARS = new Set(["bytes", "json", "semver"]);
+
+/** Only a single value that has an order can be sorted: not a list, map, message, oneof or File. */
+function rejectUnindexable(record: ResolvedModel, field: FieldDescriptor): void {
+  const single = field.container.kind === "singular";
+  const comparable = field.value.kind === "enum" || field.value.kind === "decimal" || field.value.kind === "ref" ||
+    (field.value.kind === "scalar" && !UNINDEXABLE_SCALARS.has(field.value.scalar));
+  if (single && comparable) return;
+  throw new DescriptorError("OSD013", record.symbol.localName, field.name,
+    `@${INDEX_DECORATOR} applies to single scalar, decimal, enum and ref<Table> fields only`, null);
+}
+
+function withoutRepeats(indexes: IndexDescriptor[]): IndexDescriptor[] {
+  const seen = new Set<string>();
+  return indexes.filter(index => {
+    const key = index.fields.join(",");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // ── Relations ─────────────────────────────────────────────────────────────────

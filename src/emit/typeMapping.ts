@@ -147,15 +147,14 @@ export function firstStringArg(decorators: Decorator[], name: string): string | 
   return decoratorValueToString(decorator.args[0].value);
 }
 
-/** A named argument of a decorator, as a plain string, e.g. `start` in
- *  @neoworks.timeRange(start: "from", end: "to"). Returns null when absent. */
-export function namedStringArg(decorators: Decorator[], name: string, argName: string): string | null {
-  const decorator = findDecorator(decorators, name);
-  if (decorator === null) return null;
-  for (const arg of decorator.args) {
-    if (arg.name === argName) return decoratorValueToString(arg.value);
-  }
-  return null;
+/** A named list argument of a decorator whose elements are all strings or names, e.g. `fields`
+ *  in @neoworks.index(fields: ["calendar", "start"]). Returns null when absent or not such a list. */
+export function namedStringListArg(decorator: Decorator, argName: string): string[] | null {
+  const arg = decorator.args.find(candidate => candidate.name === argName);
+  if (arg === undefined || arg.value.kind !== "list") return null;
+  const strings = arg.value.values.map(decoratorValueToString);
+  if (strings.some(text => text === null)) return null;
+  return strings as string[];
 }
 
 export function decoratorValueToString(value: DecoratorValue): string | null {

@@ -471,6 +471,7 @@ A decorator has a (possibly namespaced) name and optional arguments:
 - **Namespaced name:** `@sql.type("JSONB")` — the `sql.` prefix scopes the
   decorator to the SQL generator.
 - **Expression argument:** `@check(total >= 0)`, `@default(gen_uuid())`
+- **List argument:** `@neoworks.index(fields: ["calendar", "start"])`
 
 The full list of built-in decorators and what each generator does with them is
 in the [Decorators reference](./decorators.md).

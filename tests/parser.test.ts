@@ -187,6 +187,15 @@ describe("model declaration", () => {
     expect(r.decorators[0].args[0].value).toMatchObject({ kind: "string", value: "my_table" });
   });
 
+  it("parses a list argument", () => {
+    const r = model('@neoworks.index(fields: ["calendar", start]) model Foo {}');
+    expect(r.decorators[0].args[0].name).toBe("fields");
+    expect(r.decorators[0].args[0].value).toMatchObject({
+      kind: "list",
+      values: [{ kind: "string", value: "calendar" }, { kind: "ident", value: "start" }],
+    });
+  });
+
   it("parses both model decorators", () => {
     const r = model('@compatibility(full) @table("t") model Foo {}');
     expect(r.decorators.map(d => d.name)).toEqual(["compatibility", "table"]);
