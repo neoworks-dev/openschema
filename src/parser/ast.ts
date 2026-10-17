@@ -17,7 +17,8 @@ export type ScalarKind =
   | "u8"  | "u16"  | "u32"  | "u64"
   | "f32" | "f64"
   | "string" | "bytes" | "uuid" | "json"
-  | "date"   | "time"  | "timestamp" | "duration";
+  | "date"   | "time"  | "timestamp" | "duration"
+  | "semver";
 
 // ── Compatibility mode ────────────────────────────────────────────────────────
 

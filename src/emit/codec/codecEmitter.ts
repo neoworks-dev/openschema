@@ -12,6 +12,7 @@ import { CodecUnsupportedError } from "./errors.js";
 import { planModel, type ModelPlan } from "./plan.js";
 import { FILE_VARIANT_MESSAGE_NAME, fileModelPlans, usesFile } from "./filePlan.js";
 import { CODEC_RUNTIME } from "./runtimePrelude.js";
+import { SEMVER_RUNTIME, usesSemver } from "./semverRuntime.js";
 import { emitEnum, emitInterface, emitTagSets } from "./typeGen.js";
 import { emitEncoder } from "./encoderGen.js";
 import { emitDecoder, emitOneofReaders } from "./decoderGen.js";
@@ -32,7 +33,9 @@ export const codecEmitter: Emitter = {
     rejectOverlayCompany(context);
     rejectDuplicateLocalNames(context.schema);
 
+    const plans = planModels(context);
     const blocks: string[] = [HEADER, CODEC_RUNTIME.trim()];
+    if (usesSemver(plans)) blocks.push(SEMVER_RUNTIME.trim());
 
     // Shared by oneof readers, which have no per-message retired set.
     blocks.push("const EMPTY_TAGS: ReadonlySet<number> = new Set([]);");
@@ -41,7 +44,7 @@ export const codecEmitter: Emitter = {
       blocks.push(emitEnum(symbol));
     }
 
-    for (const plan of planModels(context)) {
+    for (const plan of plans) {
       blocks.push(emitInterface(plan));
       blocks.push(emitTagSets(plan));
       blocks.push(...emitOneofReaders(plan));

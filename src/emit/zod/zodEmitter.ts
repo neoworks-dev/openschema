@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
-  firstStringArg, findDecorator, unionAliases, resolveAliasInline,
+  firstStringArg, findDecorator, unionAliases, resolveAliasInline, SEMVER_ZOD,
 } from "../typeMapping.js";
 
 const ZOD_FILE = "z.object({ objectId: z.string().uuid(), name: z.string(), mediaType: z.string(), " +
@@ -23,6 +23,7 @@ const SCALAR_ZOD: Record<ScalarKind, string> = {
   f32: "z.number()", f64: "z.number()",
   string: "z.string()", bytes: "z.instanceof(Uint8Array)", uuid: "z.string().uuid()", json: "z.unknown()",
   date: "z.string()", time: "z.string()", timestamp: "z.string()", duration: "z.string()",
+  semver: SEMVER_ZOD,
 };
 
 // @format names that map onto a built-in Zod string refinement.

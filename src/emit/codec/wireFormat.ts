@@ -10,7 +10,7 @@
 
 import type { ScalarKind, TypeExpr } from "../../parser/ast.js";
 import type { ResolvedSchema } from "../../resolver/types.js";
-import { aliasByLocalName, modelByLocalName, resolveAliasInline } from "../typeMapping.js";
+import { SEMVER_TS, aliasByLocalName, modelByLocalName, resolveAliasInline } from "../typeMapping.js";
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
 
@@ -65,6 +65,7 @@ export const SCALAR_WIRE: Record<ScalarKind, WireType> = {
   time:      WireType.Varint,
   timestamp: WireType.Varint,
   duration:  WireType.Varint,
+  semver:    WireType.Len,
 };
 
 /**
@@ -92,6 +93,7 @@ export const SCALAR_CODEC_TS: Record<ScalarKind, string> = {
   time:      "string",
   timestamp: "Date",
   duration:  "bigint",
+  semver:    SEMVER_TS,
 };
 
 /** Scalars whose runtime representation is a bigint. */
