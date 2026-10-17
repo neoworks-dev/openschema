@@ -25,8 +25,8 @@ import { buildMigrationPlan } from "../engine/migration.js";
 import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints, type Endpoints } from "../registry/urls.js";
-import { readCollectionName } from "../registry/collectionName.js";
-import { CODEC_MODULE_OPTION, COLLECTION_OPTION } from "../emit/collection/collectionEmitter.js";
+import { readCollectionIdentity } from "../registry/collectionName.js";
+import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION } from "../emit/collection/collectionEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
@@ -166,7 +166,8 @@ function isNotCollection(emitter: Emitter): boolean {
 
 function emitOptions(emitter: Emitter, schemaPath: string, codecModules: string[]): Record<string, string> {
   if (!isCollection(emitter)) return {};
-  const options: Record<string, string> = { [COLLECTION_OPTION]: readCollectionName(dirname(schemaPath)) };
+  const identity = readCollectionIdentity(dirname(schemaPath));
+  const options: Record<string, string> = { [COLLECTION_OPTION]: identity.name, [COLLECTION_VERSION_OPTION]: identity.version };
   if (codecModules.length > 0) options[CODEC_MODULE_OPTION] = codecModules[0];
   return options;
 }

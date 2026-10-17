@@ -43,9 +43,11 @@ import type { Folder, Note } from './schema.codec.ts'
 /** Pass to `Neoworks.collection`; the descriptor text is exactly what the registry publishes. */
 export const collection = {
 	name: '@acme/notes',
+	version: '1.0.0',
 	descriptor: "{\n  \"descriptorVersion\": 1, ...",
 } as {
 	readonly name: '@acme/notes'
+	readonly version: '1.0.0'
 	readonly descriptor: string
 	readonly containers?: { Folder: Folder }
 	readonly items?: { Note: Note }
@@ -56,6 +58,9 @@ export default collection
 
 - `name` is the registry path `@scope/name`, taken from the `openschema.yaml` in the
   schema's directory. Without a manifest the target fails and writes nothing.
+- `version` is the manifest's `version`. Every row an app writes records it, plain
+  and signed, so the server can refuse rows older than a finished migration and the
+  collection's owner can see which versions are still in use.
 - `descriptor` is the text `openschema publish` uploads: the `descriptor` target's
   output with no company overlay and no private fields. The registry serves the same
   bytes by hash, which is how a client verifies the descriptor it bundled.
