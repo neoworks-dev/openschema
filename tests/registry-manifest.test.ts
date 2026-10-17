@@ -54,6 +54,13 @@ describe("parseManifest", () => {
     expect(problems).toContain("tagz");
   });
 
+  it("rejects pre-release and build suffixes and parts wider than 32 bits", () => {
+    for (const version of ["1.0.0-beta.2", "1.0.0+build.5", "4294967296.0.0"]) {
+      const problems = parseManifest(MANIFEST.replace("version: 1.0.0", `version: ${version}`)).problems.join("\n");
+      expect(problems).toContain("version must");
+    }
+  });
+
   it("rejects names the registry would refuse and entries outside the directory", () => {
     const problems = parseManifest(MANIFEST
       .replace("scope: acme", "scope: Acme")

@@ -115,6 +115,6 @@ version breaks:
 | 403 | you may not publish into `@scope`: it needs the `schemas.publish` permission for the owner of `@scope` |
 | 404 | `@scope` is not a handle: pick it in the developer dashboard first |
 | 409 | `@scope` belongs to an archived organization; nobody can publish into it |
-| 409 | a version that already exists, or an incompatible schema with the [violations](./compatibility.md) listed |
+| 409 | a version that already exists, a version not above every published one, or an incompatible schema with the [violations](./compatibility.md#versions-on-the-registry) listed |
 
 Nothing is published in any of these cases.

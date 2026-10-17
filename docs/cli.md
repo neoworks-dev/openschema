@@ -157,7 +157,7 @@ repository: https://github.com/acme/recipes   # optional
 | Field | Rule |
 |---|---|
 | `scope`, `name` | lowercase letters, digits, `.`, `_`, `-`; the schema's path is `@scope/name` |
-| `version` | semantic version; a published version can never change |
+| `version` | `major.minor.patch` without a suffix, above every published version; a published version can never change ([the publish rule](./compatibility.md#versions-on-the-registry)) |
 | `title` | required, at most 80 characters; the human-readable name |
 | `description` | required, at most 500 characters |
 | `entry` | the `.schema` file to compile, in the manifest's directory |
