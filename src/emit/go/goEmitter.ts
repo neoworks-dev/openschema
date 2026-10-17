@@ -13,6 +13,7 @@ const SCALAR_GO: Record<ScalarKind, string> = {
   f32: "float32", f64: "float64",
   string: "string", bytes: "[]byte", uuid: "string", json: "any",
   date: "string", time: "string", timestamp: "string", duration: "string",
+  semver: "string",
 };
 
 export const goEmitter: Emitter = {

@@ -19,10 +19,11 @@ const SCALAR_GQL: Record<ScalarKind, string> = {
   f32: "Float", f64: "Float",
   string: "String", bytes: "Bytes", uuid: "UUID", json: "JSON",
   date: "Date", time: "Time", timestamp: "DateTime", duration: "Duration",
+  semver: "Semver",
 };
 
 const CUSTOM_SCALARS = ["scalar UUID", "scalar DateTime", "scalar Date", "scalar Time",
-  "scalar Duration", "scalar Decimal", "scalar Bytes", "scalar JSON"];
+  "scalar Duration", "scalar Semver", "scalar Decimal", "scalar Bytes", "scalar JSON"];
 
 export const graphqlEmitter: Emitter = {
   target: "graphql",

@@ -90,6 +90,7 @@ Type mapping:
 | `f64` | `DOUBLE PRECISION` |
 | `decimal(p, s)` | `NUMERIC(p, s)` |
 | `string` `uuid` `date` `time` `timestamp` `duration` | `TEXT`/`UUID`/`DATE`/`TIME`/`TIMESTAMPTZ`/`INTERVAL` |
+| `semver` | `TEXT`, as `"0.6.1"` |
 | `bytes` | `BYTEA` |
 | `json` | `JSONB` |
 | an `enum` type | a native `CREATE TYPE … AS ENUM (…)`; columns use that type |
@@ -132,6 +133,7 @@ Type mapping:
 | `bool` | `boolean` |
 | all integers, floats, `decimal` | `number` |
 | `string` `uuid` `date` `time` `timestamp` `duration` | `string` |
+| `semver` | `{ major: number; minor: number; patch: number }` |
 | `bytes` | `Uint8Array` |
 | `json` | `unknown` |
 | `[T]` | `T[]` |
@@ -180,7 +182,7 @@ Type mapping:
 | `i8`..`i64`, `u8`..`u64` | `int8`..`int64`, `uint8`..`uint64` |
 | `f32` `f64` | `float32` `float64` |
 | `decimal` | `string` (no native decimal) |
-| `string` and friends | `string` |
+| `string` and friends, `semver` | `string`; a `semver` is the text `"0.6.1"` |
 | `bytes` | `[]byte` |
 | `json` | `any` |
 | `[T]` | `[]T` |
@@ -226,6 +228,9 @@ openschema order.schema --target json-schema --out ./out
 - Validation decorators map to standard keywords: `@format` → `format`,
   `@minValue`/`@maxValue` → `minimum`/`maximum`, `@minLength`/`@maxLength` →
   `minLength`/`maxLength`, `@pattern` → `pattern`.
+- A `semver` is a string matching `major.minor.patch`, e.g. `"0.6.1"`; the
+  OpenAPI target renders it the same way. The `ts` and `zod` targets instead
+  type it as `{ major, minor, patch }`, the shape code compares.
 - Private fields are **excluded by default** (this is a public artifact). Pass
   `--include-private` to keep them.
 
@@ -275,6 +280,7 @@ Type mapping highlights:
 | `decimal` | `Decimal` (custom scalar) |
 | `uuid` | `UUID` (custom scalar) |
 | `timestamp` | `DateTime` (custom scalar) |
+| `semver` | `Semver` (custom scalar, the text `"0.6.1"`) |
 | `[T]` (non-null) | `[T!]!` |
 | `{K: V}`, unions, `oneof` | `JSON` (custom scalar) |
 | `enum` | `enum` (ordinals dropped — GraphQL enums are name-only) |

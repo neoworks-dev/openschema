@@ -57,6 +57,7 @@ not be used by a schema.
 | `time` | VARINT | `HH:MM:SS[.fffffffff]` | int64 nanoseconds since midnight |
 | `timestamp` | VARINT | `Date` | int64 milliseconds since the epoch |
 | `duration` | VARINT | `bigint` | int64 nanoseconds, signed |
+| `semver` | LEN | `{ major, minor, patch }` | exactly three varints, major then minor then patch, each a uint32 |
 | enum | VARINT | numeric enum | the variant's ordinal |
 | model | LEN | `interface` | nested message |
 | `File` | LEN | `File` | nested message with fixed fields, see [Files](./descriptor.md#files) |
@@ -68,12 +69,20 @@ not be used by a schema.
 | `{K: V}?` | LEN | `Map<K, V> \| null` | wrapper message `{1: repeated entry}` |
 
 A type is *packable* when it encodes as VARINT or I64 — every scalar except
-`string`, `bytes`, `uuid`, `json`, and `decimal`, plus enums.
+`string`, `bytes`, `uuid`, `json`, `semver` and `decimal`, plus enums.
 
 Map keys must be `string`, `uuid`, `bool`, or an integer scalar.
 
 `Map` rather than `Record` preserves `bigint` keys, avoids V8's reordering of
 integer-like object keys, and keeps `__proto__` from being an attacker-controlled key.
+
+### semver
+
+A `semver` is a LEN field whose body is three varints and nothing else, so
+`0.6.1` is the five bytes tag, length 3, `00 06 01`. Two versions compare as
+integers, major first, without parsing text. A body with fewer or more than
+three varints, or a part above `4294967295`, is rejected on decode. Pre-release
+and build suffixes such as `1.0.0-beta.2` are not part of the type.
 
 ### Why integers never use zigzag
 
