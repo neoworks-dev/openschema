@@ -154,6 +154,13 @@ describe("kotlin identifiers", () => {
     expect(models).toContain("    plain,");
   });
 
+  it("renames enum constants that clash with the members of a Kotlin enum, keeping the wire name", () => {
+    const models = emitModels("namespace t\nenum Part {\n  1 name\n  2 ordinal\n  3 plain\n}");
+    expect(models).toContain('    @kotlinx.serialization.SerialName("name") nameValue,');
+    expect(models).toContain('    @kotlinx.serialization.SerialName("ordinal") ordinalValue,');
+    expect(models).toContain("    plain,");
+  });
+
   it("refuses two types of the same Kotlin name", () => {
     const src = "namespace t\nmodel Alert {\n  1 trigger: oneof {\n    1 a: string\n  }\n}\nmodel AlertTrigger {\n  1 a: string\n}";
     expect(() => emitFiles(src)).toThrow("AlertTrigger");
