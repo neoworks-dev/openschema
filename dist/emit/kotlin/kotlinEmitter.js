@@ -6,14 +6,16 @@ import { buildDescriptor, definesNeoworksTables, publishedDescriptor } from "../
 import { COLLECTION_OPTION, COLLECTION_VERSION_OPTION } from "../collection/collectionEmitter.js";
 import { MODELS_IMPORTS, declaredTypeNames, modelsSource } from "./kotlinModels.js";
 import { packageDirectory, packageSegment } from "./kotlinNames.js";
-import { HEADER, RUNTIME_NAMES, runtimeSource } from "./kotlinRuntime.js";
+import { HEADER, IMPORTED_NAMES, MODEL_RUNTIME_NAMES, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
+import { queriesSource, queryClassNames } from "./kotlinQueries.js";
+import { rowAccessorsSource } from "./kotlinRowAccessors.js";
 import { schemaObjectName, schemaObjectSource } from "./kotlinSchemaObject.js";
+import { KotlinTargetError } from "./kotlinTargetError.js";
 export const SOURCE_ROOT = "kotlin";
 /** The context option naming the Kotlin package; without it the package follows the collection name. */
 export const PACKAGE_OPTION = "package";
 const PACKAGE_PREFIX = "dev.neoworks.schemas";
-export class KotlinTargetError extends Error {
-}
+export { KotlinTargetError };
 export const kotlinEmitter = {
     target: "kotlin",
     fileExtension: "kt",
@@ -22,10 +24,8 @@ export const kotlinEmitter = {
         rejectNameCollisions(descriptor);
         const identity = collectionIdentityOf(context);
         const packageName = packageNameOf(context, identity);
-        const files = [
-            sourceFile(packageName, "Models.kt", modelsFile(descriptor, packageName)),
-            sourceFile(packageName, "Runtime.kt", runtimeSource(packageName)),
-        ];
+        const files = [sourceFile(packageName, "Models.kt", modelsFile(descriptor, packageName))];
+        files.push(...queryFiles(descriptor, packageName));
         if (identity === null)
             return files;
         const schemaSource = schemaObjectSource(identity, publishedDescriptor(context.schema), descriptor, packageName);
@@ -37,8 +37,18 @@ function sourceFile(packageName, fileName, contents) {
     return { path: `${SOURCE_ROOT}/${packageDirectory(packageName)}/${fileName}`, contents };
 }
 function modelsFile(descriptor, packageName) {
-    const imports = MODELS_IMPORTS.map(name => `import ${name}`).join("\n");
-    return `${HEADER}\npackage ${packageName}\n\n${imports}\n\n${modelsSource(descriptor, packageName)}\n`;
+    const imports = [...importLines(SCHEMA_PACKAGE, MODEL_RUNTIME_NAMES), ...MODELS_IMPORTS.map(name => `import ${name}`)];
+    return `${HEADER}\npackage ${packageName}\n\n${imports.join("\n")}\n\n${modelsSource(descriptor, packageName)}\n`;
+}
+/** The query classes and row accessors of the tables; a schema without tables has none. */
+function queryFiles(descriptor, packageName) {
+    if (descriptor.tables.length === 0)
+        return [];
+    const files = [sourceFile(packageName, "Queries.kt", queriesSource(descriptor, packageName))];
+    const accessors = rowAccessorsSource(descriptor, packageName);
+    if (accessors !== null)
+        files.push(sourceFile(packageName, "RowAccessors.kt", accessors));
+    return files;
 }
 /** The collection the schema is published as: a schema with @neoworks.table models and a manifest. */
 function collectionIdentityOf(context) {
@@ -61,8 +71,8 @@ function packageNameOf(context, identity) {
     return context.schema.namespace.join(".");
 }
 function rejectNameCollisions(descriptor) {
-    const seen = new Set(RUNTIME_NAMES);
-    for (const name of declaredTypeNames(descriptor)) {
+    const seen = new Set(IMPORTED_NAMES);
+    for (const name of [...declaredTypeNames(descriptor), ...queryClassNames(descriptor)]) {
         if (seen.has(name)) {
             throw new KotlinTargetError(`the Kotlin type ${name} is declared twice; rename the model or enum, or the field that names a oneof`);
         }

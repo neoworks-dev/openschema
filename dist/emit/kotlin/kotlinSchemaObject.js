@@ -1,7 +1,9 @@
 // src/emit/kotlin/kotlinSchemaObject.ts
-// The object an app hands to the Kotlin SDK's `collection`: what the TypeScript `SchemaModule` holds.
+// The object an app hands to the Kotlin SDK's `collection`: what the TypeScript `SchemaModule` holds,
+// and for each table the content serializer and the query scopes the SDK runs its lambdas in.
 import { referencesOf } from "../collection/collectionEmitter.js";
-import { HEADER } from "./kotlinRuntime.js";
+import { HEADER, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
+import { includeClassName, orderByClassName, whereClassName } from "./kotlinQueries.js";
 import { pascalCase } from "./kotlinNames.js";
 /** `@neoworks/contacts` is `ContactsSchema`. */
 export function schemaObjectName(identity) {
@@ -9,44 +11,52 @@ export function schemaObjectName(identity) {
     return `${pascalCase(collection)}Schema`;
 }
 export function schemaObjectSource(identity, publishedDescriptor, descriptor, packageName) {
+    const imports = [
+        ...importLines(SCHEMA_PACKAGE, ["CollectionSchema", "TableDefinition"]),
+        "import kotlinx.serialization.serializer",
+    ];
     const lines = [
         HEADER,
         `package ${packageName}`,
         "",
-        "import kotlinx.serialization.KSerializer",
-        "import kotlinx.serialization.serializer",
+        ...imports,
         "",
-        `object ${schemaObjectName(identity)} {`,
-        "    /** The registry path of the collection. */",
-        `    const val name: String = ${kotlinString(identity.name)}`,
+        `object ${schemaObjectName(identity)} : CollectionSchema {`,
+        `    override val name: String = ${kotlinString(identity.name)}`,
         "",
-        "    /** The schema version; every row the app writes records it. */",
-        `    const val version: String = ${kotlinString(identity.version)}`,
+        `    override val version: String = ${kotlinString(identity.version)}`,
         "",
-        "    /** The descriptor text exactly as the registry publishes it. */",
-        `    val descriptor: String = ${kotlinString(publishedDescriptor)}`,
+        `    override val descriptor: String = ${kotlinString(publishedDescriptor)}`,
         "",
-        "    /** The serializer of each table's content, by model name. */",
-        ...tablesBlock(descriptor),
-        "",
-        "    /** For each table, the table each of its single reference fields points to. */",
-        ...referencesBlock(descriptor),
+        ...descriptor.tables.flatMap(table => [...tableDefinition(table.model, descriptor), ""]),
+        `    override val tables: List<TableDefinition<*, *, *, *>> = listOf(${descriptor.tables.map(table => tableDefinitionName(table.model)).join(", ")})`,
         "}",
         "",
     ];
     return lines.join("\n");
 }
-function tablesBlock(descriptor) {
-    const entries = descriptor.tables.map(table => `        ${kotlinString(table.model)} to serializer<${table.model}>(),`);
-    return ["    val tables: Map<String, KSerializer<*>> = mapOf(", ...entries, "    )"];
+/** `Contact` is `contactTable`. */
+export function tableDefinitionName(modelName) {
+    return `${modelName.charAt(0).toLowerCase()}${modelName.slice(1)}Table`;
 }
-function referencesBlock(descriptor) {
-    const entries = [];
-    for (const [table, targets] of referencesOf(descriptor)) {
-        const fields = [...targets].map(([field, target]) => `${kotlinString(field)} to ${kotlinString(target)}`);
-        entries.push(`        ${kotlinString(table)} to mapOf(${fields.join(", ")}),`);
-    }
-    return ["    val references: Map<String, Map<String, String>> = mapOf(", ...entries, "    )"];
+function tableDefinition(modelName, descriptor) {
+    return [
+        `    val ${tableDefinitionName(modelName)} = TableDefinition(`,
+        `        model = ${kotlinString(modelName)},`,
+        `        serializer = serializer<${modelName}>(),`,
+        `        createWhere = ::${whereClassName(modelName)},`,
+        `        createOrderBy = ::${orderByClassName(modelName)},`,
+        `        createInclude = ::${includeClassName(modelName)},`,
+        `        references = ${referencesExpression(modelName, descriptor)},`,
+        "    )",
+    ];
+}
+function referencesExpression(modelName, descriptor) {
+    const targets = referencesOf(descriptor).get(modelName);
+    if (targets === undefined)
+        return "emptyMap()";
+    const entries = [...targets].map(([field, target]) => `${kotlinString(field)} to ${kotlinString(target)}`);
+    return `mapOf(${entries.join(", ")})`;
 }
 /** A one-line Kotlin string literal; `$` is escaped because the descriptor holds patterns that end in it. */
 export function kotlinString(text) {

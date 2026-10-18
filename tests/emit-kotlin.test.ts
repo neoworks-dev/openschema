@@ -51,11 +51,12 @@ describe("the kotlin target", () => {
     expect(listTargets()).toContain("kotlin");
   });
 
-  it("writes models, the runtime and the schema object as a source root", () => {
+  it("writes models, query classes, row accessors and the schema object as a source root", () => {
     const files = emitFiles(RECIPES, OPTIONS);
     expect([...files.keys()]).toEqual([
       `${PACKAGE_DIRECTORY}/Models.kt`,
-      `${PACKAGE_DIRECTORY}/Runtime.kt`,
+      `${PACKAGE_DIRECTORY}/Queries.kt`,
+      `${PACKAGE_DIRECTORY}/RowAccessors.kt`,
       `${PACKAGE_DIRECTORY}/RecipesSchema.kt`,
     ]);
     expect(files.get(`${PACKAGE_DIRECTORY}/Models.kt`)).toContain("package dev.neoworks.schemas.recipes\n");
@@ -203,21 +204,156 @@ describe("kotlin schema object", () => {
 
   it("holds the name, the version and the descriptor the registry publishes", () => {
     const descriptor = getEmitter("descriptor")!.emit({ schema: resolve(parse(RECIPES)), company: null, includePrivate: false, options: {} })[0].contents;
-    expect(schemaObject).toContain("object RecipesSchema {");
-    expect(schemaObject).toContain('const val name: String = "@acme/recipes"');
-    expect(schemaObject).toContain('const val version: String = "0.1.0"');
-    expect(schemaObject).toContain(`val descriptor: String = ${kotlinString(descriptor)}`);
+    expect(schemaObject).toContain("object RecipesSchema : CollectionSchema {");
+    expect(schemaObject).toContain('override val name: String = "@acme/recipes"');
+    expect(schemaObject).toContain('override val version: String = "0.1.0"');
+    expect(schemaObject).toContain(`override val descriptor: String = ${kotlinString(descriptor)}`);
   });
 
-  it("holds the serializer of each table and the target of each single reference", () => {
-    expect(schemaObject).toContain('"Book" to serializer<Book>(),');
-    expect(schemaObject).toContain('"Recipe" to serializer<Recipe>(),');
-    expect(schemaObject).toContain('"Recipe" to mapOf("book" to "Book"),');
+  it("declares a table definition per table with its serializer, query scopes and single references", () => {
+    expect(schemaObject).toContain(
+      'val recipeTable = TableDefinition(\n' +
+      '        model = "Recipe",\n' +
+      '        serializer = serializer<Recipe>(),\n' +
+      '        createWhere = ::RecipeWhere,\n' +
+      '        createOrderBy = ::RecipeOrderBy,\n' +
+      '        createInclude = ::RecipeInclude,\n' +
+      '        references = mapOf("book" to "Book"),\n' +
+      '    )',
+    );
+    expect(schemaObject).toContain("references = emptyMap(),");
+    expect(schemaObject).toContain("override val tables: List<TableDefinition<*, *, *, *>> = listOf(bookTable, recipeTable)");
   });
 
   it("is written for a schema with tables only", () => {
     const plain = emitFiles("namespace t\nmodel Plain {\n  1 id: uuid\n}", OPTIONS);
     expect([...plain.keys()].some(path => path.endsWith("Schema.kt"))).toBe(false);
+  });
+});
+
+describe("kotlin runtime", () => {
+  it("imports the shared runtime from the SDK and writes none of its own", () => {
+    const files = emitFiles(RECIPES, OPTIONS);
+    expect([...files.keys()].some(path => path.endsWith("Runtime.kt"))).toBe(false);
+    expect(emitModels(RECIPES, OPTIONS)).toContain("import dev.neoworks.sdk.schema.TimestampSerializer\n");
+  });
+
+  it("refuses a type named like anything a generated file imports", () => {
+    expect(() => emitFiles("namespace t\n@neoworks.table\nmodel Where {\n  1 a: string\n}", OPTIONS)).toThrow("Where");
+    expect(() => emitFiles("namespace t\nmodel Row {\n  1 a: string\n}")).toThrow("Row");
+  });
+});
+
+describe("kotlin query classes", () => {
+  const SRC = `namespace t
+@neoworks.table
+model Item {
+  1 flag: bool
+  2 title: string
+  3 count: i32
+  4 big: i64?
+  5 at: timestamp
+  6 level: Level
+  7 levels: [Level]
+  8 tags: [string]
+  9 lines: [Line]
+  10 picture: File?
+  11 files: [File]
+  12 data: bytes?
+  13 extra: json?
+  14 attributes: {string: string}?
+  15 note: Line?
+  @belongsTo
+  16 parent: ref<Item>?
+}
+model Line {
+  1 text: string
+  2 inner: [string]
+  3 level: Level?
+  4 file: File?
+}
+enum Level {
+  1 low
+  2 high
+}`;
+  const files = emitFiles(SRC);
+  const queries = files.get("kotlin/t/Queries.kt")!;
+
+  it("gives a table a field handle for every type a query can filter on", () => {
+    expect(queries).toContain("class ItemWhere : Where<ItemWhere>() {");
+    expect(queries).toContain('    val flag = BooleanField(operatorsOf("flag"))');
+    expect(queries).toContain('    val title = TextField(operatorsOf("title"))');
+    expect(queries).toContain('    val count = ComparableField(operatorsOf("count"), serializer<Int>())');
+    expect(queries).toContain('    val big = ComparableField(operatorsOf("big"), Int64AsTextSerializer)');
+    expect(queries).toContain('    val at = ComparableField(operatorsOf("at"), TimestampSerializer)');
+    expect(queries).toContain('    val level = EnumField(operatorsOf("level"), serializer<Level>())');
+    expect(queries).toContain('    val parent = ReferenceField(operatorsOf("parent"))');
+    expect(queries).toContain('    val picture = FileField(operatorsOf("picture"))');
+  });
+
+  it("gives lists the handle for their element type", () => {
+    expect(queries).toContain('    val tags = ValueListField(operatorsOf("tags"), serializer<String>()) { TextField(it) }');
+    expect(queries).toContain('    val levels = ValueListField(operatorsOf("levels"), serializer<Level>()) { EnumField(it, serializer<Level>()) }');
+    expect(queries).toContain('    val lines = MessageListField(operatorsOf("lines"), ::LineWhere)');
+    expect(queries).toContain('    val files = FileListField(operatorsOf("files"))');
+  });
+
+  it("leaves out what a query cannot filter on", () => {
+    for (const name of ["data", "extra", "attributes", "note"]) {
+      expect(queries).not.toContain(`val ${name} = `);
+    }
+  });
+
+  it("filters list elements that are messages by their plain members only", () => {
+    const lineWhere = queries.slice(queries.indexOf("class LineWhere"));
+    expect(lineWhere).toContain('    val text = TextField(operatorsOf("text"))');
+    expect(lineWhere).toContain('    val level = EnumField(operatorsOf("level"), serializer<Level>())');
+    expect(lineWhere).not.toContain("val inner");
+    expect(lineWhere).not.toContain("val file ");
+  });
+
+  it("sorts by scalars, enums, references and the members of a File", () => {
+    const orderBy = queries.slice(queries.indexOf("class ItemOrderBy"), queries.indexOf("class ItemInclude"));
+    expect(orderBy).toContain('    val title = sortField("title")');
+    expect(orderBy).toContain('    val level = sortField("level")');
+    expect(orderBy).toContain('    val parent = sortField("parent")');
+    expect(orderBy).toContain('    val picture = fileSortFields("picture")');
+    for (const name of ["tags", "lines", "files", "data", "attributes"]) {
+      expect(orderBy).not.toContain(`val ${name} = `);
+    }
+  });
+
+  it("includes single references by naming them", () => {
+    expect(queries).toContain('class ItemInclude : Include() {\n    val parent: Unit\n        get() = include("parent")\n}');
+    expect(queries).toContain("class LineWhere : Where<LineWhere>() {");
+    expect(queries).not.toContain("class LineInclude");
+  });
+
+  it("writes no query classes for a schema without tables", () => {
+    const plain = emitFiles("namespace t\nmodel Plain {\n  1 id: uuid\n}");
+    expect([...plain.keys()]).toEqual(["kotlin/t/Models.kt"]);
+  });
+
+  it("refuses a field that would hide a member of the query classes", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 meta: string\n}";
+    expect(() => emitFiles(src)).toThrow("Item.meta");
+  });
+});
+
+describe("kotlin row accessors", () => {
+  it("adds an accessor per single reference, named after the table in the JVM", () => {
+    const accessors = emitFiles(RECIPES, OPTIONS).get(`${PACKAGE_DIRECTORY}/RowAccessors.kt`)!;
+    expect(accessors).toContain('@get:JvmName("recipeBook")\nval Row<Recipe>.book: Row<Book>?\n    get() = included<Book>("book")');
+  });
+
+  it("writes none for a schema without references", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 title: string\n}";
+    expect([...emitFiles(src).keys()].some(path => path.endsWith("RowAccessors.kt"))).toBe(false);
+  });
+
+  it("refuses a reference that a member of Row would hide", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Parent {\n  1 a: string\n}\n@neoworks.table\nmodel Child {\n  @belongsTo\n  1 id: ref<Parent>\n}";
+    expect(() => emitFiles(src)).toThrow("Child.id");
   });
 });
 
@@ -245,7 +381,7 @@ describe("the kotlin target through the CLI", () => {
     expect(generate(directory).exitCode).toBe(0);
 
     const schemaObject = join(directory, "generated", PACKAGE_DIRECTORY, "RecipesSchema.kt");
-    expect(readFileSync(schemaObject, "utf8")).toContain('const val name: String = "@acme/recipes"');
+    expect(readFileSync(schemaObject, "utf8")).toContain('override val name: String = "@acme/recipes"');
   });
 
   it("writes the models alone when there is no manifest", () => {
