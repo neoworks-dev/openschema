@@ -10,6 +10,7 @@ const SCALAR_SURREAL = {
     f32: "float", f64: "float",
     string: "string", bytes: "bytes", uuid: "uuid", json: "object",
     date: "datetime", time: "datetime", timestamp: "datetime", duration: "duration",
+    semver: "string",
 };
 export function tableNameFor(record) {
     const explicit = firstStringArg(record.decorators, "table");

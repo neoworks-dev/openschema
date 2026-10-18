@@ -1,6 +1,9 @@
 // src/emit/zod/zodEmitter.ts
 // Emits Zod schemas (and inferred TypeScript types) from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, firstStringArg, findDecorator, unionAliases, resolveAliasInline, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, firstStringArg, findDecorator, unionAliases, resolveAliasInline, SEMVER_ZOD, } from "../typeMapping.js";
+const ZOD_FILE = "z.object({ objectId: z.string().uuid(), name: z.string(), mediaType: z.string(), " +
+    "size: z.number().int().nonnegative(), " +
+    "variants: z.record(z.string(), z.object({ objectId: z.string().uuid(), size: z.number().int().nonnegative() })) })";
 // Base Zod expression for each scalar. String-shaped temporal/uuid scalars mirror
 // the TypeScript emitter, which renders them as `string`.
 const SCALAR_ZOD = {
@@ -11,6 +14,7 @@ const SCALAR_ZOD = {
     f32: "z.number()", f64: "z.number()",
     string: "z.string()", bytes: "z.instanceof(Uint8Array)", uuid: "z.string().uuid()", json: "z.unknown()",
     date: "z.string()", time: "z.string()", timestamp: "z.string()", duration: "z.string()",
+    semver: SEMVER_ZOD,
 };
 // @format names that map onto a built-in Zod string refinement.
 const FORMAT_METHOD = {
@@ -157,6 +161,7 @@ function mapType(type, schema) {
         case "map": return `z.record(${mapType(type.key, schema)}, ${mapType(type.value, schema)})`;
         case "nullable": return `${mapType(type.inner, schema)}.nullish()`;
         case "null": return "z.null()";
+        case "file": return ZOD_FILE;
         case "union": return `z.union([${type.variants.map(v => mapType(v, schema)).join(", ")}])`;
         case "oneof": return mapOneof(type.variants, schema);
     }

@@ -33,6 +33,7 @@ export declare const enum TokenKind {
     Time = "time",
     Timestamp = "timestamp",
     Duration = "duration",
+    Semver = "semver",
     Null = "null",
     Extends = "extends",
     Private = "private",

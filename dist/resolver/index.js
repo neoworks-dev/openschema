@@ -97,6 +97,7 @@ export function resolveModules(modules) {
     schema.hasErrors = diagnostics.items.some(d => d.severity === "error");
     return schema;
 }
+const BUILT_IN_FILE_TYPE = "File";
 function registerModuleSymbols(module, namespace, byQualified, diagnostics) {
     const ownByLocal = new Map();
     for (const decl of module.program.declarations) {
@@ -104,6 +105,10 @@ function registerModuleSymbols(module, namespace, byQualified, diagnostics) {
         if (kind === undefined)
             continue;
         const named = decl;
+        if (named.name === BUILT_IN_FILE_TYPE) {
+            diagnostics.error("OS1018", `'${named.name}' is a built-in type and cannot be declared`, named.span);
+            continue;
+        }
         if (ownByLocal.has(named.name)) {
             diagnostics.error("OS1001", `Duplicate declaration '${named.name}'`, named.span);
             continue;
@@ -217,6 +222,10 @@ function declTypeParams(decl) {
     return new Set();
 }
 function checkNamedReference(type, typeParams, byLocal, byQualified, diagnostics) {
+    if (type.kind === "scalar" && type.reference !== undefined) {
+        checkReferenceTarget(type.reference, type.span, byLocal, byQualified, diagnostics);
+        return;
+    }
     if (type.kind !== "named")
         return;
     if (type.path.length === 1 && typeParams.has(type.path[0]))
@@ -224,6 +233,19 @@ function checkNamedReference(type, typeParams, byLocal, byQualified, diagnostics
     if (resolveName(type.path, byLocal, byQualified))
         return;
     diagnostics.error("OS1003", `Undefined type '${type.path.join(".")}'`, type.span);
+}
+/** `ref<Model>` names a row, so the model must exist and be marked @neoworks.table. */
+function checkReferenceTarget(path, span, byLocal, byQualified, diagnostics) {
+    const target = resolveName(path, byLocal, byQualified);
+    if (target === null) {
+        diagnostics.error("OS1003", `Undefined type '${path.join(".")}'`, span);
+        return;
+    }
+    const isTable = target.decl.kind === "model" &&
+        target.decl.decorators.some(decorator => decorator.name === "neoworks.table");
+    if (!isTable) {
+        diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.table`, span);
+    }
 }
 function resolveName(path, byLocal, byQualified) {
     if (path.length === 1) {
@@ -475,6 +497,7 @@ function walkOneofs(type, scopeLabel, diagnostics) {
             return;
         case "scalar":
         case "decimal":
+        case "file":
             return;
     }
 }

@@ -26,7 +26,7 @@ import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetch
 import { snapshotVersions, writeVersionSnapshot } from "../registry/versionSnapshots.js";
 import { getAccessToken, login } from "../registry/auth.js";
 import { resolveEndpoints, type Endpoints } from "../registry/urls.js";
-import { readCollectionIdentity, readManifestVersion } from "../registry/collectionName.js";
+import { findCollectionIdentity, readCollectionIdentity, readManifestVersion } from "../registry/collectionName.js";
 import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERSIONS_MODULE_OPTION } from "../emit/collection/collectionEmitter.js";
 import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
@@ -127,6 +127,7 @@ function cmdGenerate(schemaPath: string, opts: GenerateOptions): void {
   mkdirSync(opts.out, { recursive: true });
   for (const file of files) {
     const fullPath = join(opts.out, file.path);
+    mkdirSync(dirname(fullPath), { recursive: true });
     writeFileSync(fullPath, file.contents, "utf8");
     console.log(chalk.green(`✓ ${fullPath}`));
   }
@@ -180,12 +181,20 @@ function recordModules(emitter: Emitter, emitted: OutputFile[], modules: Emitted
 
 function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModules): Record<string, string> {
   if (emitter.target === "versions") return versionsOptions(schemaPath, modules);
+  if (emitter.target === "kotlin") return kotlinOptions(schemaPath);
   if (emitter.target !== "collection") return {};
   const identity = readCollectionIdentity(dirname(schemaPath));
   const options: Record<string, string> = { [COLLECTION_OPTION]: identity.name, [COLLECTION_VERSION_OPTION]: identity.version };
   if (modules.codec.length > 0) options[CODEC_MODULE_OPTION] = modules.codec[0];
   if (modules.versions.length > 0) options[VERSIONS_MODULE_OPTION] = modules.versions[0];
   return options;
+}
+
+/** The Kotlin target writes the schema object only for a schema with a manifest beside it. */
+function kotlinOptions(schemaPath: string): Record<string, string> {
+  const identity = findCollectionIdentity(dirname(schemaPath));
+  if (identity === null) return {};
+  return { [COLLECTION_OPTION]: identity.name, [COLLECTION_VERSION_OPTION]: identity.version };
 }
 
 function versionsOptions(schemaPath: string, modules: EmittedModules): Record<string, string> {

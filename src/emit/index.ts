@@ -13,6 +13,7 @@ import { zodEmitter } from "./zod/zodEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
 import { descriptorEmitter } from "./descriptor/descriptorEmitter.js";
 import { collectionEmitter } from "./collection/collectionEmitter.js";
+import { kotlinEmitter } from "./kotlin/kotlinEmitter.js";
 import { versionsEmitter } from "./versions/versionsEmitter.js";
 
 export type { Emitter, EmitContext, OutputFile } from "./types.js";
@@ -31,6 +32,7 @@ const EMITTERS: Record<string, Emitter> = {
   [descriptorEmitter.target]: descriptorEmitter,
   [collectionEmitter.target]: collectionEmitter,
   [versionsEmitter.target]: versionsEmitter,
+  [kotlinEmitter.target]: kotlinEmitter,
 };
 
 export function getEmitter(target: string): Emitter | null {

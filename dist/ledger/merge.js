@@ -3,6 +3,7 @@
 //
 // One function serves validation, update, and CI, so the checker and the writer
 // can never drift apart: `check` reports what `update` would write.
+import { majorOf, majorPrecedes, nextMajorVersion } from "./major.js";
 import { LOCKFILE_VERSION, } from "./types.js";
 export function reconcileLedger(spaces, current, options) {
     const diagnostics = [];
@@ -20,11 +21,17 @@ export function reconcileLedger(spaces, current, options) {
     let changed = current === null;
     // Built from `current` before any reconciliation, so it reflects what was
     // spent BEFORE this run's own retirements.
-    const spent = buildSpentIndex(spaces, current);
+    const major = currentMajor(options);
+    const context = {
+        spent: buildSpentIndex(spaces, current, major),
+        major,
+        nextMajor: nextMajorOf(options),
+        timestamp,
+    };
     for (const space of spaces) {
         // nextSpaces holds a deep clone; reconcileSpace mutates entries in place,
         // and must never reach the caller's ledger.
-        const result = reconcileSpace(space, nextSpaces[space.id], spent, timestamp, diagnostics);
+        const result = reconcileSpace(space, nextSpaces[space.id], context, diagnostics);
         nextSpaces[space.id] = result.space;
         if (result.changed)
             changed = true;
@@ -63,31 +70,33 @@ function describeMissingLedger(options) {
         message: "No ordinal ledger found — ordinal-reuse protection is disabled.",
     };
 }
+function currentMajor(options) {
+    if (options.version === undefined || options.version === null)
+        return null;
+    return majorOf(options.version);
+}
+function nextMajorOf(options) {
+    if (options.version === undefined || options.version === null)
+        return null;
+    return nextMajorVersion(options.version);
+}
 // ── Per-space reconciliation ──────────────────────────────────────────────────
-function reconcileSpace(space, stored, spent, timestamp, diagnostics) {
+function reconcileSpace(space, stored, context, diagnostics) {
     const ordinals = stored?.ordinals ?? {};
     let changed = stored === undefined;
+    if (recordMissingMajors(ordinals, context.major))
+        changed = true;
     const declaredOrdinals = new Set();
     for (const declared of space.declared) {
         declaredOrdinals.add(declared.ordinal);
-        if (reportReuse(space, declared, spent, diagnostics))
+        if (reportReuse(space, declared, context, diagnostics))
             continue;
-        const existing = ordinals[String(declared.ordinal)];
-        if (existing === undefined) {
-            ordinals[String(declared.ordinal)] = newEntry(declared, timestamp);
-            changed = true;
-            continue;
-        }
-        if (reportEncodingChange(space, declared, existing, diagnostics))
-            continue;
-        if (reportFacetChange(space, declared, existing, diagnostics))
-            continue;
-        if (updateEntry(existing, declared))
+        if (reconcileDeclared(space, declared, ordinals, context, diagnostics))
             changed = true;
     }
-    if (retireMissing(ordinals, declaredOrdinals, timestamp))
+    if (retireMissing(ordinals, declaredOrdinals, context))
         changed = true;
-    if (absorbReserved(ordinals, space.reserved, timestamp))
+    if (absorbReserved(ordinals, space.reserved, context.timestamp))
         changed = true;
     return {
         space: {
@@ -99,27 +108,52 @@ function reconcileSpace(space, stored, spent, timestamp, diagnostics) {
         changed,
     };
 }
+/** Records a declared ordinal in the space; returns whether the ledger changed. */
+function reconcileDeclared(space, declared, ordinals, context, diagnostics) {
+    const key = String(declared.ordinal);
+    const existing = ordinals[key];
+    if (existing === undefined || isFreed(existing, context.major)) {
+        ordinals[key] = newEntry(declared, context);
+        return true;
+    }
+    if (reportEncodingChange(space, declared, existing, context, diagnostics))
+        return false;
+    if (reportFacetChange(space, declared, existing, diagnostics))
+        return false;
+    const adopted = adoptEncoding(existing, declared, context);
+    return updateEntry(existing, declared) || adopted;
+}
 /** OS2007: the ordinal is retired or reserved here, or in a base record's space. */
-function reportReuse(space, declared, spent, diagnostics) {
-    const state = spent.stateOf(space, declared.ordinal);
+function reportReuse(space, declared, context, diagnostics) {
+    const state = context.spent.stateOf(space, declared.ordinal);
     if (state === null)
         return false;
     diagnostics.push({
         code: "OS2007", severity: "error", span: declared.span,
         message: `Ordinal ${declared.ordinal} is ${state} in '${space.id}' and cannot be reused by ` +
-            `'${declared.name}'. Existing encoded data still carries this tag.`,
+            `'${declared.name}'. Existing encoded data still carries this tag.` +
+            describeNextMajor(state, context),
     });
     return true;
+}
+/** A retired ordinal is free again on the next major; a reserved one never is. */
+function describeNextMajor(state, context) {
+    if (state === "reserved" || context.nextMajor === null)
+        return "";
+    return ` A release from ${context.nextMajor} on frees it.`;
 }
 /**
  * OS2010: the layout at a live ordinal changed. Catches the case the
  * compatibility checker calls safe — `[T]` becoming `[T]?` keeps wire type LEN
- * but moves from repeated-at-tag-N to a LEN wrapper at tag N.
+ * but moves from repeated-at-tag-N to a LEN wrapper at tag N. A later major may
+ * change it, since rows of the earlier major decode with their own schema.
  */
-function reportEncodingChange(space, declared, existing, diagnostics) {
+function reportEncodingChange(space, declared, existing, context, diagnostics) {
     if (existing.encoding === null || declared.encoding === null)
         return false;
     if (existing.encoding === declared.encoding)
+        return false;
+    if (precedesCurrentMajor(existing, context.major))
         return false;
     diagnostics.push({
         code: "OS2010", severity: "error", span: declared.span,
@@ -128,17 +162,55 @@ function reportEncodingChange(space, declared, existing, diagnostics) {
     });
     return true;
 }
-function newEntry(declared, timestamp) {
+function newEntry(declared, context) {
     const entry = {
         state: "active",
         name: declared.name,
         type: declared.type,
         encoding: declared.encoding,
-        since: timestamp,
+        since: context.timestamp,
     };
     if (declared.facet !== null)
         entry.facet = declared.facet;
+    if (context.major !== null)
+        entry.major = context.major;
     return entry;
+}
+/** The entry took its state in an earlier major than the one being generated. */
+function precedesCurrentMajor(entry, major) {
+    if (major === null || entry.major === undefined)
+        return false;
+    return majorPrecedes(entry.major, major);
+}
+/** A retired ordinal whose retirement lies in an earlier major is free to reuse. */
+function isFreed(entry, major) {
+    return entry.state === "retired" && precedesCurrentMajor(entry, major);
+}
+/** The first change of encoding in a later major is recorded as that major's. */
+function adoptEncoding(entry, declared, context) {
+    if (entry.encoding === null || declared.encoding === null)
+        return false;
+    if (entry.encoding === declared.encoding || context.major === null)
+        return false;
+    entry.encoding = declared.encoding;
+    entry.major = context.major;
+    return true;
+}
+/**
+ * Entries recorded without a major are taken to have their state in the major
+ * being generated, so they free up from the next major on and never earlier.
+ */
+function recordMissingMajors(ordinals, major) {
+    if (major === null)
+        return false;
+    let changed = false;
+    for (const entry of Object.values(ordinals)) {
+        if (entry.state === "reserved" || entry.major !== undefined)
+            continue;
+        entry.major = major;
+        changed = true;
+    }
+    return changed;
 }
 /**
  * OS2013: the field moved to another @neoworks.facet, or its facet was renamed.
@@ -173,7 +245,7 @@ function updateEntry(entry, declared) {
     delete entry.retiredAt;
     return true;
 }
-function retireMissing(ordinals, declared, timestamp) {
+function retireMissing(ordinals, declared, context) {
     let changed = false;
     for (const [key, entry] of Object.entries(ordinals)) {
         if (entry.state !== "active")
@@ -181,10 +253,19 @@ function retireMissing(ordinals, declared, timestamp) {
         if (declared.has(Number(key)))
             continue;
         entry.state = "retired";
-        entry.retiredAt = timestamp;
+        entry.retiredAt = context.timestamp;
+        setMajor(entry, context.major);
         changed = true;
     }
     return changed;
+}
+/** An entry retired without a version must not keep the major it was introduced in. */
+function setMajor(entry, major) {
+    if (major === null) {
+        delete entry.major;
+        return;
+    }
+    entry.major = major;
 }
 /**
  * A source `reserved` line is absorbed into the ledger, so the ordinal stays
@@ -207,12 +288,12 @@ function absorbReserved(ordinals, reserved, timestamp) {
  * spent ordinals: the flattened record is what gets encoded, so a base's retired
  * tag must not be re-claimed by a derived record.
  */
-function buildSpentIndex(spaces, current) {
+function buildSpentIndex(spaces, current, major) {
     const bySpace = new Map();
     for (const [id, space] of Object.entries(current?.spaces ?? {})) {
         const spent = new Map();
         for (const [key, entry] of Object.entries(space.ordinals)) {
-            if (entry.state === "active")
+            if (entry.state === "active" || isFreed(entry, major))
                 continue;
             spent.set(Number(key), entry.state);
         }

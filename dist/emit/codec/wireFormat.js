@@ -7,7 +7,7 @@
 // check would be validating a format the codec does not actually write.
 //
 // The normative prose version is docs/wire-format.md.
-import { aliasByLocalName, modelByLocalName, resolveAliasInline } from "../typeMapping.js";
+import { SEMVER_TS, aliasByLocalName, modelByLocalName, resolveAliasInline } from "../typeMapping.js";
 // ── Tags ──────────────────────────────────────────────────────────────────────
 /** Wire tags are `ordinal * 8 + wireType`; ordinals above this overflow int32. */
 export const MAX_ORDINAL = 536870911;
@@ -57,6 +57,7 @@ export const SCALAR_WIRE = {
     time: WireType.Varint,
     timestamp: WireType.Varint,
     duration: WireType.Varint,
+    semver: WireType.Len,
 };
 /**
  * The TypeScript type the codec uses for each scalar. Deliberately diverges from
@@ -81,8 +82,9 @@ export const SCALAR_CODEC_TS = {
     json: "unknown",
     date: "string",
     time: "string",
-    timestamp: "string",
+    timestamp: "Date",
     duration: "bigint",
+    semver: SEMVER_TS,
 };
 /** Scalars whose runtime representation is a bigint. */
 export const BIGINT_SCALARS = new Set(["i64", "u64", "duration"]);
@@ -125,6 +127,8 @@ function singularSignature(type, schema) {
     if (type.kind === "decimal")
         return "singular:len";
     if (type.kind === "oneof")
+        return "singular:len";
+    if (type.kind === "file")
         return "singular:len";
     if (type.kind === "union")
         return "unencodable";

@@ -6,6 +6,14 @@ import { applyLink, resolveAliasInline, unwrapNullable } from "../typeMapping.js
 import { CodecUnsupportedError } from "./errors.js";
 import { MAX_ORDINAL, SCALAR_CODEC_TS, SCALAR_WIRE, WireType, classifyNamed, isPackable, mapKeyScalar, ordinalProblem, } from "./wireFormat.js";
 export const UNKNOWN_PROPERTY = "$unknown";
+/** The message a `File` value is encoded as; see filePlan.ts. */
+export const FILE_MESSAGE_NAME = "File";
+/**
+ * A `ref<Model>` value is the message `Ref { 1 id: uuid, 2 key: bytes? }`. The
+ * key is the target record's key, which only the Neoworks core writes and reads;
+ * in generated code a reference is its id alone.
+ */
+export const REF_MESSAGE_NAME = "Ref";
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export function planModel(model, fields, schema) {
     const name = model.symbol.localName;
@@ -88,12 +96,29 @@ function planMap(model, field, keyType, valueType, nullable, schema) {
     return { container: nullable ? { kind: "wrapperMap", key } : { kind: "map", key }, value };
 }
 // ── Values ────────────────────────────────────────────────────────────────────
+/** The qualified name of the model a `ref<...>` names, as the resolver checked it. */
+function referenceTargetOf(path, schema) {
+    const joined = path.join(".");
+    if (schema.symbols.has(joined))
+        return joined;
+    const localName = path[path.length - 1];
+    for (const symbol of schema.symbols.values()) {
+        if (symbol.localName === localName)
+            return symbol.qualifiedName;
+    }
+    return joined;
+}
 function planValue(model, field, type, schema) {
     const resolved = resolveAliasInline(unwrapNullable(type).inner, schema);
+    if (resolved.kind === "scalar" && resolved.reference !== undefined) {
+        return { kind: "ref", model: referenceTargetOf(resolved.reference, schema) };
+    }
     if (resolved.kind === "scalar")
         return { kind: "scalar", scalar: resolved.scalar };
     if (resolved.kind === "decimal")
         return { kind: "decimal", precision: resolved.precision, scale: resolved.scale };
+    if (resolved.kind === "file")
+        return { kind: "file" };
     if (resolved.kind === "oneof") {
         return {
             kind: "oneof",
@@ -160,8 +185,10 @@ function arrayElement(rendered) {
 export function valueTsType(value) {
     switch (value.kind) {
         case "scalar": return SCALAR_CODEC_TS[value.scalar];
+        case "ref": return "string";
         case "enum": return value.name;
         case "message": return value.name;
+        case "file": return FILE_MESSAGE_NAME;
         case "decimal": return "string";
         case "oneof": return oneofTsType(value.variants);
     }
@@ -177,8 +204,10 @@ function oneofTsType(variants) {
 export function wireTypeOf(value) {
     switch (value.kind) {
         case "scalar": return SCALAR_WIRE[value.scalar];
+        case "ref": return WireType.Len;
         case "enum": return WireType.Varint;
         case "message": return WireType.Len;
+        case "file": return WireType.Len;
         case "decimal": return WireType.Len;
         case "oneof": return WireType.Len;
     }

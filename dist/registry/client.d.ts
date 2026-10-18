@@ -28,6 +28,8 @@ export declare function resolveRegistry(explicit?: string, endpoints?: Endpoints
 export declare function parseSchemaRef(input: string): SchemaRef;
 /** Fetch a schema version's source files from the registry. */
 export declare function fetchSchema(registry: string, ref: SchemaRef): Promise<ResolvedSchema>;
+/** Every published version of a schema, as the registry lists them. */
+export declare function listVersions(registry: string, scope: string, name: string): Promise<string[]>;
 export interface PublishPayload {
     scope: string;
     name: string;

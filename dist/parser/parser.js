@@ -30,6 +30,7 @@ const SCALAR_KINDS = new Map([
     ["time" /* TokenKind.Time */, "time"],
     ["timestamp" /* TokenKind.Timestamp */, "timestamp"],
     ["duration" /* TokenKind.Duration */, "duration"],
+    ["semver" /* TokenKind.Semver */, "semver"],
 ]);
 // ── Parser ────────────────────────────────────────────────────────────────────
 export class Parser {
@@ -133,6 +134,9 @@ export class Parser {
         return { name: null, value, span };
     }
     parseDecoratorValue() {
+        if (this.at("[" /* TokenKind.LBracket */)) {
+            return this.parseDecoratorList();
+        }
         // Qualified identifier value, e.g. @references(User.id).
         if (this.at("Ident" /* TokenKind.Ident */) && this.peekAt(1).kind === "." /* TokenKind.Dot */) {
             const path = this.parseQualifiedIdent();
@@ -140,6 +144,17 @@ export class Parser {
         }
         const expr = this.parseExpr();
         return this.normalizeDecoratorValue(expr);
+    }
+    parseDecoratorList() {
+        this.expect("[" /* TokenKind.LBracket */);
+        const values = [];
+        while (!this.at("]" /* TokenKind.RBracket */) && !this.at("EOF" /* TokenKind.EOF */)) {
+            values.push(this.parseDecoratorValue());
+            if (this.at("," /* TokenKind.Comma */))
+                this.advance();
+        }
+        this.expect("]" /* TokenKind.RBracket */);
+        return { kind: "list", values };
     }
     // Collapse simple expressions into plain literal decorator values; keep
     // genuine expressions (calls, comparisons) as { kind: "expr" }.
@@ -581,12 +596,35 @@ export class Parser {
             this.expect(")" /* TokenKind.RParen */);
             return inner;
         }
+        if (tok.kind === "Ident" /* TokenKind.Ident */ && this.isReferenceType()) {
+            return this.parseReferenceType(span);
+        }
+        if (tok.kind === "Ident" /* TokenKind.Ident */ && this.isFileType()) {
+            this.advance();
+            return { kind: "file", span };
+        }
         if (tok.kind === "Ident" /* TokenKind.Ident */) {
             const path = this.parseQualifiedIdent();
             const typeArgs = this.parseTypeArgs();
             return { kind: "named", path, typeArgs, span };
         }
         throw new ParseError("Expected a type expression", tok);
+    }
+    /** A bare `File`: a qualified name such as `acme.File` stays a named type. */
+    isFileType() {
+        const next = this.peekAt(1).kind;
+        return this.peek().value === "File" && next !== "." /* TokenKind.Dot */ && next !== "<" /* TokenKind.Lt */;
+    }
+    isReferenceType() {
+        return this.peek().value === "ref" && this.peekAt(1).kind === "<" /* TokenKind.Lt */;
+    }
+    /** `ref<Model>`: the id of a node of that model, stored as a uuid. */
+    parseReferenceType(span) {
+        this.advance(); // ref
+        this.expect("<" /* TokenKind.Lt */);
+        const reference = this.parseQualifiedIdent();
+        this.expect(">" /* TokenKind.Gt */);
+        return { kind: "scalar", scalar: "uuid", reference, span };
     }
     // ── Expressions ──────────────────────────────────────────────────────────────
     //

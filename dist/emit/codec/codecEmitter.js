@@ -7,7 +7,9 @@
 import { baseFieldsToEmit, overlayFieldsToEmit } from "../typeMapping.js";
 import { CodecUnsupportedError } from "./errors.js";
 import { planModel } from "./plan.js";
+import { FILE_VARIANT_MESSAGE_NAME, fileModelPlans, usesFile } from "./filePlan.js";
 import { CODEC_RUNTIME } from "./runtimePrelude.js";
+import { SEMVER_RUNTIME, usesSemver } from "./semverRuntime.js";
 import { emitEnum, emitInterface, emitTagSets } from "./typeGen.js";
 import { emitEncoder } from "./encoderGen.js";
 import { emitDecoder, emitOneofReaders } from "./decoderGen.js";
@@ -24,13 +26,16 @@ export const codecEmitter = {
     emit(context) {
         rejectOverlayCompany(context);
         rejectDuplicateLocalNames(context.schema);
+        const plans = planModels(context);
         const blocks = [HEADER, CODEC_RUNTIME.trim()];
+        if (usesSemver(plans))
+            blocks.push(SEMVER_RUNTIME.trim());
         // Shared by oneof readers, which have no per-message retired set.
         blocks.push("const EMPTY_TAGS: ReadonlySet<number> = new Set([]);");
         for (const symbol of context.schema.enums.values()) {
             blocks.push(emitEnum(symbol));
         }
-        for (const plan of planModels(context)) {
+        for (const plan of plans) {
             blocks.push(emitInterface(plan));
             blocks.push(emitTagSets(plan));
             blocks.push(...emitOneofReaders(plan));
@@ -49,7 +54,19 @@ function planModels(context) {
         const fields = baseFieldsToEmit(record, context);
         plans.push(planModel(record, fields, context.schema));
     }
+    if (usesFile(plans)) {
+        rejectFileVariantModel(context.schema);
+        plans.push(...fileModelPlans());
+    }
     return plans;
+}
+/** `File` is encoded as a `File` message holding `FileVariant` messages, so a model of that name would collide. */
+function rejectFileVariantModel(schema) {
+    for (const record of schema.records.values()) {
+        if (record.symbol.localName !== FILE_VARIANT_MESSAGE_NAME)
+            continue;
+        throw new CodecUnsupportedError("OSC008", FILE_VARIANT_MESSAGE_NAME, null, `'${FILE_VARIANT_MESSAGE_NAME}' is the message a File's variants are encoded as; rename the model`, record.symbol.span);
+    }
 }
 /**
  * Overlay ordinals live in their own space and start at 1, so a base field and

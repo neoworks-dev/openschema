@@ -1,6 +1,6 @@
 // src/emit/typescript/typescriptEmitter.ts
 // Emits TypeScript interfaces and enums from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, unionAliases, resolveAliasInline, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS, } from "../typeMapping.js";
 const SCALAR_TS = {
     bool: "boolean",
     i8: "number", i16: "number", i32: "number", i64: "number",
@@ -8,6 +8,7 @@ const SCALAR_TS = {
     f32: "number", f64: "number",
     string: "string", bytes: "Uint8Array", uuid: "string", json: "unknown",
     date: "string", time: "string", timestamp: "string", duration: "string",
+    semver: SEMVER_TS,
 };
 export const typescriptEmitter = {
     target: "ts",
@@ -75,6 +76,7 @@ function mapType(type, schema) {
         case "map": return `Record<${mapType(type.key, schema)}, ${mapType(type.value, schema)}>`;
         case "nullable": return `${mapType(type.inner, schema)} | null`;
         case "null": return "null";
+        case "file": return FILE_TS;
         case "union": return type.variants.map(v => mapType(v, schema)).join(" | ");
         case "oneof": return mapOneof(type.variants, schema);
     }

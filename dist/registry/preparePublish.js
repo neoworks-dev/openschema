@@ -9,7 +9,7 @@ import { loadProject, resolveModules } from "../resolver/index.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, loadLedger } from "../ledger/io.js";
-import { definesNeoworksNodes, publishedDescriptor } from "../emit/descriptor/descriptorEmitter.js";
+import { definesNeoworksTables, publishedDescriptor } from "../emit/descriptor/descriptorEmitter.js";
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { MANIFEST_FILE, parseManifest } from "./manifest.js";
@@ -33,7 +33,7 @@ function buildPayload(directory, generator) {
     const manifest = readManifest(directory);
     const entryPath = join(directory, manifest.entry);
     const schema = resolveEntry(entryPath);
-    checkLedger(entryPath, schema, generator);
+    checkLedger(entryPath, schema, generator, manifest.version);
     const payload = {
         scope: manifest.scope,
         name: manifest.name,
@@ -45,7 +45,7 @@ function buildPayload(directory, generator) {
         targets: [],
         files: collectSchemaFiles(directory),
     };
-    const descriptor = describeNodes(schema);
+    const descriptor = describeTables(schema);
     if (descriptor !== null)
         payload.descriptor = descriptor;
     return payload;
@@ -83,7 +83,7 @@ function resolveEntry(entryPath) {
     return schema;
 }
 /** The lockfile must exist and already record this schema: publishing never writes it. */
-function checkLedger(entryPath, schema, generator) {
+function checkLedger(entryPath, schema, generator, version) {
     const lockPath = defaultLockPath(entryPath);
     const loaded = loadLedger(lockPath);
     if (loaded.integrityError !== null)
@@ -94,15 +94,16 @@ function checkLedger(entryPath, schema, generator) {
         staleSeverity: "error",
         now: () => new Date().toISOString(),
         generator,
+        version,
     });
     const errors = result.diagnostics.filter(diagnostic => diagnostic.severity === "error");
     if (errors.length > 0) {
         throw new PublishRefused(errors.map(diagnostic => `${diagnostic.code} ${diagnostic.message}`));
     }
 }
-/** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks nodes. */
-function describeNodes(schema) {
-    if (!definesNeoworksNodes(schema))
+/** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks tables. */
+function describeTables(schema) {
+    if (!definesNeoworksTables(schema))
         return null;
     try {
         return publishedDescriptor(schema);

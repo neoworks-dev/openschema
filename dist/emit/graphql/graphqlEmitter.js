@@ -10,9 +10,10 @@ const SCALAR_GQL = {
     f32: "Float", f64: "Float",
     string: "String", bytes: "Bytes", uuid: "UUID", json: "JSON",
     date: "Date", time: "Time", timestamp: "DateTime", duration: "Duration",
+    semver: "Semver",
 };
 const CUSTOM_SCALARS = ["scalar UUID", "scalar DateTime", "scalar Date", "scalar Time",
-    "scalar Duration", "scalar Decimal", "scalar Bytes", "scalar JSON"];
+    "scalar Duration", "scalar Semver", "scalar Decimal", "scalar Bytes", "scalar JSON"];
 export const graphqlEmitter = {
     target: "graphql",
     fileExtension: "graphql",
@@ -193,6 +194,7 @@ function renderInner(type, inputMode, schema) {
         case "map": return "JSON";
         case "union": return "JSON";
         case "oneof": return "JSON";
+        case "file": return "JSON";
         case "nullable": return renderInner(type.inner, inputMode, schema);
         // Reached only for a bare `null`; `T | null` is handled in renderType.
         case "null": return "JSON";

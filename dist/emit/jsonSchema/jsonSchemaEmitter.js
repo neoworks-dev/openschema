@@ -1,6 +1,6 @@
 // src/emit/jsonSchema/jsonSchemaEmitter.ts
 // Emits a JSON Schema document (draft 2020-12) from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, firstStringArg, findDecorator, unionAliases, resolveAliasInline, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
 const SCALAR_JSON = {
     bool: { type: "boolean" },
     i8: { type: "integer" }, i16: { type: "integer" }, i32: { type: "integer" }, i64: { type: "integer" },
@@ -12,6 +12,7 @@ const SCALAR_JSON = {
     json: {},
     date: { type: "string", format: "date" }, time: { type: "string", format: "time" },
     timestamp: { type: "string", format: "date-time" }, duration: { type: "string", format: "duration" },
+    semver: { type: "string", pattern: SEMVER_PATTERN },
 };
 export const jsonSchemaEmitter = {
     target: "json-schema",
@@ -101,6 +102,7 @@ function mapType(type) {
         case "map": return { type: "object", additionalProperties: mapType(type.value) };
         case "nullable": return mapType(type.inner);
         case "null": return { type: "null" };
+        case "file": return structuredClone(FILE_JSON_SCHEMA);
         case "union": return { anyOf: type.variants.map(mapType) };
         case "oneof": return { oneOf: type.variants.map(v => mapType(v.type)) };
     }

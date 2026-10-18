@@ -2,15 +2,28 @@ import type { ScalarKind, Span } from "../../parser/ast.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
 import { WireType } from "./wireFormat.js";
 export declare const UNKNOWN_PROPERTY = "$unknown";
+/** The message a `File` value is encoded as; see filePlan.ts. */
+export declare const FILE_MESSAGE_NAME = "File";
+/**
+ * A `ref<Model>` value is the message `Ref { 1 id: uuid, 2 key: bytes? }`. The
+ * key is the target record's key, which only the Neoworks core writes and reads;
+ * in generated code a reference is its id alone.
+ */
+export declare const REF_MESSAGE_NAME = "Ref";
 export type ValueShape = {
     kind: "scalar";
     scalar: ScalarKind;
+} | {
+    kind: "ref";
+    model: string;
 } | {
     kind: "enum";
     name: string;
 } | {
     kind: "message";
     name: string;
+} | {
+    kind: "file";
 } | {
     kind: "decimal";
     precision: number;

@@ -1,6 +1,47 @@
 import type { Decorator, DecoratorValue, TypeExpr, TypeAlias } from "../parser/ast.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../resolver/types.js";
 import type { EmitContext } from "./types.js";
+export declare const FILE_TS: string;
+export declare const FILE_JSON_SCHEMA: {
+    type: string;
+    required: string[];
+    properties: {
+        objectId: {
+            type: string;
+            format: string;
+        };
+        name: {
+            type: string;
+        };
+        mediaType: {
+            type: string;
+        };
+        size: {
+            type: string;
+            minimum: number;
+        };
+        variants: {
+            type: string;
+            additionalProperties: {
+                type: string;
+                required: string[];
+                properties: {
+                    objectId: {
+                        type: string;
+                        format: string;
+                    };
+                    size: {
+                        type: string;
+                        minimum: number;
+                    };
+                };
+            };
+        };
+    };
+};
+export declare const SEMVER_TS = "{ major: number; minor: number; patch: number }";
+export declare const SEMVER_ZOD: string;
+export declare const SEMVER_PATTERN = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$";
 /** Base-record fields an emitter should render, honouring includePrivate. */
 export declare function baseFieldsToEmit(record: ResolvedModel, context: EmitContext): ResolvedField[];
 /** The selected company's overlay fields for this record, or []. */
@@ -27,9 +68,9 @@ export declare function allDecorators(decorators: Decorator[], name: string): De
 export declare function positionalStringArgs(decorator: Decorator): string[];
 /** First positional argument value of a decorator, as a plain string. */
 export declare function firstStringArg(decorators: Decorator[], name: string): string | null;
-/** A named argument of a decorator, as a plain string, e.g. `start` in
- *  @neoworks.timeRange(start: "from", end: "to"). Returns null when absent. */
-export declare function namedStringArg(decorators: Decorator[], name: string, argName: string): string | null;
+/** A named list argument of a decorator whose elements are all strings or names, e.g. `fields`
+ *  in @neoworks.index(fields: ["calendar", "start"]). Returns null when absent or not such a list. */
+export declare function namedStringListArg(decorator: Decorator, argName: string): string[] | null;
 export declare function decoratorValueToString(value: DecoratorValue): string | null;
 /** Strip a single nullable wrapper, returning the inner type and a flag. */
 export declare function unwrapNullable(type: TypeExpr): {

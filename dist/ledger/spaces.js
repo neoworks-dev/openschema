@@ -166,6 +166,7 @@ function walkOneofs(type, owner, fieldOrdinal, into) {
             return;
         case "scalar":
         case "decimal":
+        case "file":
             return;
     }
 }

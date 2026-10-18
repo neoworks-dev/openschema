@@ -58,6 +58,13 @@ export async function fetchSchema(registry, ref) {
     const files = [...versionRow.files].sort((a, b) => a.ordinal - b.ordinal);
     return { scope: ref.scope, name: ref.name, version, files };
 }
+/** Every published version of a schema, as the registry lists them. */
+export async function listVersions(registry, scope, name) {
+    const detail = await getJson(`${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`, `schema @${scope}/${name} not found in the registry`);
+    if (detail.versions === null)
+        return [];
+    return detail.versions.map(entry => entry.version);
+}
 /** The registry refused the version because it breaks versions published before it. */
 export class IncompatibleSchemaError extends Error {
     constructor(message, violations) {

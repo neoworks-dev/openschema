@@ -1,0 +1,1 @@
+{"version":3,"file":"kotlinEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/kotlin/kotlinEmitter.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAe,OAAO,EAAc,MAAM,aAAa,CAAC;AAOpE,eAAO,MAAM,WAAW,WAAW,CAAC;AAEpC,wGAAwG;AACxG,eAAO,MAAM,cAAc,YAAY,CAAC;AAIxC,qBAAa,iBAAkB,SAAQ,KAAK;CAAG;AAE/C,eAAO,MAAM,aAAa,EAAE,OAkB3B,CAAC"}

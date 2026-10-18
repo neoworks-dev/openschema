@@ -1,5 +1,5 @@
 import type { Span } from "../../parser/ast.js";
-export type DescriptorErrorCode = "OSD001" | "OSD002" | "OSD003" | "OSD004" | "OSD005" | "OSD006" | "OSD007" | "OSD008" | "OSD009" | "OSD010";
+export type DescriptorErrorCode = "OSD001" | "OSD002" | "OSD004" | "OSD005" | "OSD006" | "OSD009" | "OSD010" | "OSD011" | "OSD012" | "OSD013";
 export declare class DescriptorError extends Error {
     readonly code: DescriptorErrorCode;
     readonly model: string;

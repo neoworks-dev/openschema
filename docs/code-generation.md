@@ -14,7 +14,7 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--include-private` | include the schema's own `private` fields | off |
 
 Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `codec`, `descriptor`, `collection`, `versions`. Pass several at once
+`surrealdb`, `codec`, `descriptor`, `collection`, `kotlin`, `versions`. Pass several at once
 with a comma: `-t ts,zod,sql`. The `versions` target writes the types of every
 published version of a collection ([Types per version](./collection.md#types-per-version)).
 
@@ -29,6 +29,16 @@ data for runtimes without generated code, plus the Neoworks table decorators —
 The `collection` target writes `index.ts`, the module an app passes to
 `session.collection()`: the registry path and the published descriptor text — see
 [Collection target and project setup](./collection.md).
+
+The `kotlin` target writes a Gradle source root below the output directory,
+`kotlin/<package>/`, with `Models.kt` (`@Serializable` enums, data classes and sealed
+interfaces for oneofs), `Runtime.kt` (the serializers they share) and, for a collection,
+`<Name>Schema.kt`. The classes follow the descriptor's JSON mapping: enums by name,
+maps as objects, a oneof as `{variant: value}`, a reference as the id of its row, 64-bit
+integers as decimal text, timestamps as ISO 8601 with milliseconds and bytes as unpadded
+base64url. Read and write them with `Json { encodeDefaults = true; explicitNulls = false;
+ignoreUnknownKeys = true }`. The package is `dev.neoworks.schemas.<name>` for a
+collection with an `openschema.yaml`, and the schema's namespace otherwise.
 
 The command parses the entry file, follows its `import`s, resolves the whole
 graph, reports any semantic errors (and stops on them), then writes the output.

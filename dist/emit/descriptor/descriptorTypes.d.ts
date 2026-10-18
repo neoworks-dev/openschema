@@ -1,11 +1,11 @@
 import type { Container, ValueShape } from "../codec/plan.js";
-export declare const DESCRIPTOR_VERSION = 1;
+export declare const DESCRIPTOR_VERSION = 2;
 export interface SchemaDescriptor {
     descriptorVersion: number;
     namespace: string;
     enums: EnumDescriptor[];
     models: ModelDescriptor[];
-    nodes: NodeDescriptor[];
+    tables: TableDescriptor[];
 }
 export interface EnumDescriptor {
     name: string;
@@ -38,28 +38,33 @@ export interface ValueConstraints {
     pattern?: string;
     format?: string;
 }
-/** Roots carry no content, so only containers and items have a node model. */
-export type NodeKind = "container" | "item";
-/** A model stored as the content of a Neoworks node of one kind. */
-export interface NodeDescriptor {
-    kind: NodeKind;
+/**
+ * A model stored as rows of a Neoworks collection, marked @neoworks.table. Every
+ * row names its table inside each facet's plaintext, so one collection holds rows
+ * of any number of tables.
+ */
+export interface TableDescriptor {
     model: string;
     facets: FacetDescriptor[];
-    /** Ordinals of string fields the client indexes for search. */
-    searchable: number[];
-    /** Ordinal of the string field that names the node, from @neoworks.title. */
+    /** Ordinal of the string or File field that names the row, from @neoworks.title. */
     title: number | null;
-    timeRange: TimeRangeDescriptor | null;
+    /** Ordinal of the @belongsTo reference the row's key is wrapped under; null for rows under the collection root. */
+    belongsTo: number | null;
+    /** Ordinals of the references marked @onDelete("cascade"): deleting the target deletes the row. */
+    cascade: number[];
+    /** Sorted indexes a client keeps on its device: the @belongsTo field's, and those from @neoworks.index. */
+    indexes: IndexDescriptor[];
 }
-/** A separately encrypted group of a node model's fields. */
-export interface FacetDescriptor {
-    name: string;
-    /** The facet's tag in the node content message and its key derivation input. */
-    tag: number;
+/** A sorted index over single values: queries use it for equality and range filters on its leading fields and for ordering by them. */
+export interface IndexDescriptor {
+    /** Field ordinals, leading field first. */
     fields: number[];
 }
-export interface TimeRangeDescriptor {
-    start: number;
-    end: number;
+/** A separately encrypted group of a table's fields. */
+export interface FacetDescriptor {
+    name: string;
+    /** The facet's tag in the row content message and its key derivation input. */
+    tag: number;
+    fields: number[];
 }
 //# sourceMappingURL=descriptorTypes.d.ts.map

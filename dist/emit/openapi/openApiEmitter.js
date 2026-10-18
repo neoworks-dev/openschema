@@ -6,7 +6,7 @@
 //   @route("/users/{id}")                     sets the path and path params
 // Request bodies use input visibility (create/update/query); responses use
 // output visibility (read) — see @visibility in the docs.
-import { findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink, isVisibleInInput, isVisibleInOutput, isInputModel, unionAliases, resolveAliasInline, } from "../typeMapping.js";
+import { findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink, isVisibleInInput, isVisibleInOutput, isInputModel, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
 const SCALAR_JSON = {
     bool: { type: "boolean" },
     i8: { type: "integer", format: "int32" }, i16: { type: "integer", format: "int32" },
@@ -19,6 +19,7 @@ const SCALAR_JSON = {
     json: {},
     date: { type: "string", format: "date" }, time: { type: "string", format: "time" },
     timestamp: { type: "string", format: "date-time" }, duration: { type: "string", format: "duration" },
+    semver: { type: "string", pattern: SEMVER_PATTERN },
 };
 const HTTP_METHODS = ["get", "post", "put", "delete", "patch"];
 export const openApiEmitter = {
@@ -129,6 +130,7 @@ function mapType(type, inputMode, schema) {
         case "map": return { type: "object", additionalProperties: mapType(type.value, inputMode, schema) };
         case "nullable": return mapType(type.inner, inputMode, schema);
         case "null": return { type: "null" };
+        case "file": return structuredClone(FILE_JSON_SCHEMA);
         case "union": return { oneOf: type.variants.map(v => mapType(v, inputMode, schema)) };
         case "oneof": return { oneOf: type.variants.map(v => mapType(v.type, inputMode, schema)) };
     }

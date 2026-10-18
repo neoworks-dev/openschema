@@ -1,5 +1,38 @@
 // src/emit/typeMapping.ts
 // Shared helpers for reading decorators and inspecting types across emitters.
+// ── File ──────────────────────────────────────────────────────────────────────
+//
+// The built-in `File` type as the API-surface targets render it. The codec and
+// descriptor targets describe the same value on the wire (see codec/filePlan.ts).
+export const FILE_TS = "{ objectId: string; name: string; mediaType: string; size: number; " +
+    "variants: Record<string, { objectId: string; size: number }> }";
+const FILE_OBJECT_ID = { type: "string", format: "uuid" };
+export const FILE_JSON_SCHEMA = {
+    type: "object",
+    required: ["objectId", "name", "mediaType", "size"],
+    properties: {
+        objectId: FILE_OBJECT_ID,
+        name: { type: "string" },
+        mediaType: { type: "string" },
+        size: { type: "integer", minimum: 0 },
+        variants: {
+            type: "object",
+            additionalProperties: {
+                type: "object",
+                required: ["objectId", "size"],
+                properties: { objectId: FILE_OBJECT_ID, size: { type: "integer", minimum: 0 } },
+            },
+        },
+    },
+};
+// ── semver ────────────────────────────────────────────────────────────────────
+//
+// In code a `semver` is three numbers, compared as integers. Its JSON form is
+// the text "major.minor.patch", without pre-release or build suffixes.
+export const SEMVER_TS = "{ major: number; minor: number; patch: number }";
+export const SEMVER_ZOD = "z.object({ major: z.number().int().nonnegative(), " +
+    "minor: z.number().int().nonnegative(), patch: z.number().int().nonnegative() })";
+export const SEMVER_PATTERN = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$";
 /** Base-record fields an emitter should render, honouring includePrivate. */
 export function baseFieldsToEmit(record, context) {
     if (context.includePrivate)
@@ -91,17 +124,16 @@ export function firstStringArg(decorators, name) {
         return null;
     return decoratorValueToString(decorator.args[0].value);
 }
-/** A named argument of a decorator, as a plain string, e.g. `start` in
- *  @neoworks.timeRange(start: "from", end: "to"). Returns null when absent. */
-export function namedStringArg(decorators, name, argName) {
-    const decorator = findDecorator(decorators, name);
-    if (decorator === null)
+/** A named list argument of a decorator whose elements are all strings or names, e.g. `fields`
+ *  in @neoworks.index(fields: ["calendar", "start"]). Returns null when absent or not such a list. */
+export function namedStringListArg(decorator, argName) {
+    const arg = decorator.args.find(candidate => candidate.name === argName);
+    if (arg === undefined || arg.value.kind !== "list")
         return null;
-    for (const arg of decorator.args) {
-        if (arg.name === argName)
-            return decoratorValueToString(arg.value);
-    }
-    return null;
+    const strings = arg.value.values.map(decoratorValueToString);
+    if (strings.some(text => text === null))
+        return null;
+    return strings;
 }
 export function decoratorValueToString(value) {
     if (value.kind === "string")

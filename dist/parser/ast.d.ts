@@ -2,7 +2,7 @@ export interface Span {
     line: number;
     col: number;
 }
-export type ScalarKind = "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "string" | "bytes" | "uuid" | "json" | "date" | "time" | "timestamp" | "duration";
+export type ScalarKind = "bool" | "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "string" | "bytes" | "uuid" | "json" | "date" | "time" | "timestamp" | "duration" | "semver";
 export type CompatMode = "backward" | "forward" | "full" | "none";
 /** @sql.type("JSONB"), @minValue(0), @check(total >= 0), @deprecated */
 export interface Decorator {
@@ -29,6 +29,9 @@ export type DecoratorValue = {
     kind: "ident";
     value: string;
 } | {
+    kind: "list";
+    values: DecoratorValue[];
+} | {
     kind: "expr";
     expr: Expr;
 };
@@ -38,11 +41,23 @@ export interface Directive {
     args: string[];
     span: Span;
 }
-export type TypeExpr = ScalarTypeExpr | DecimalTypeExpr | NamedTypeExpr | ArrayTypeExpr | MapTypeExpr | NullableTypeExpr | NullTypeExpr | UnionTypeExpr | OneofTypeExpr;
-/** Primitive scalar — bool, i32, string, uuid, etc. */
+export type TypeExpr = ScalarTypeExpr | DecimalTypeExpr | NamedTypeExpr | ArrayTypeExpr | MapTypeExpr | NullableTypeExpr | NullTypeExpr | UnionTypeExpr | OneofTypeExpr | FileTypeExpr;
+/**
+ * Primitive scalar — bool, i32, string, uuid, etc. `ref<Model>` is a uuid that
+ * names a node of that model: `reference` is the model's (possibly qualified) name.
+ */
 export interface ScalarTypeExpr {
     kind: "scalar";
     scalar: ScalarKind;
+    reference?: string[];
+    span: Span;
+}
+/**
+ * `File` — a file in object storage, described by a name, a media type, a size
+ * and named variants. Built in: a model or enum cannot be called `File`.
+ */
+export interface FileTypeExpr {
+    kind: "file";
     span: Span;
 }
 /**

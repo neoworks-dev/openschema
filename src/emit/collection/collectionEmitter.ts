@@ -67,7 +67,7 @@ interface Typing {
 }
 
 /** Only tables with a single `ref<T>` field appear; the core includes single references only. */
-function referencesOf(descriptor: SchemaDescriptor): Map<string, Map<string, string>> {
+export function referencesOf(descriptor: SchemaDescriptor): Map<string, Map<string, string>> {
   const references = new Map<string, Map<string, string>>();
   for (const table of descriptor.tables) {
     const targets = referenceTargetsOf(descriptor, table.model);

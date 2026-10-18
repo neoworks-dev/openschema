@@ -13,10 +13,17 @@ export interface CollectionIdentity {
 
 /** Throws with the reason when the directory has no valid manifest. */
 export function readCollectionIdentity(directory: string): CollectionIdentity {
-  const path = join(directory, MANIFEST_FILE);
-  if (!existsSync(path)) {
-    throw new Error(`the collection target takes the registry path from ${path}, which does not exist; run \`openschema init\``);
+  const identity = findCollectionIdentity(directory);
+  if (identity === null) {
+    throw new Error(`the collection target takes the registry path from ${join(directory, MANIFEST_FILE)}, which does not exist; run \`openschema init\``);
   }
+  return identity;
+}
+
+/** Null when the directory has no manifest; throws with the reason when the manifest is invalid. */
+export function findCollectionIdentity(directory: string): CollectionIdentity | null {
+  const path = join(directory, MANIFEST_FILE);
+  if (!existsSync(path)) return null;
   const parsed = parseManifest(readFileSync(path, "utf8"));
   if (parsed.manifest === null) {
     throw new Error(parsed.problems.join("\n"));

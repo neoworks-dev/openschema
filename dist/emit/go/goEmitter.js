@@ -8,6 +8,7 @@ const SCALAR_GO = {
     f32: "float32", f64: "float64",
     string: "string", bytes: "[]byte", uuid: "string", json: "any",
     date: "string", time: "string", timestamp: "string", duration: "string",
+    semver: "string",
 };
 export const goEmitter = {
     target: "go",
@@ -63,6 +64,7 @@ function mapType(type, schema) {
         case "nullable": return `*${mapType(type.inner, schema)}`;
         // Go has no null type; a `T | null` union already renders as interface{}.
         case "null": return "interface{}";
+        case "file": return "map[string]interface{}";
         case "union": return "interface{}";
         case "oneof": return "interface{}";
     }

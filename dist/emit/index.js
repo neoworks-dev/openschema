@@ -11,6 +11,8 @@ import { zodEmitter } from "./zod/zodEmitter.js";
 import { codecEmitter } from "./codec/codecEmitter.js";
 import { descriptorEmitter } from "./descriptor/descriptorEmitter.js";
 import { collectionEmitter } from "./collection/collectionEmitter.js";
+import { kotlinEmitter } from "./kotlin/kotlinEmitter.js";
+import { versionsEmitter } from "./versions/versionsEmitter.js";
 const EMITTERS = {
     [sqlEmitter.target]: sqlEmitter,
     [typescriptEmitter.target]: typescriptEmitter,
@@ -23,6 +25,8 @@ const EMITTERS = {
     [codecEmitter.target]: codecEmitter,
     [descriptorEmitter.target]: descriptorEmitter,
     [collectionEmitter.target]: collectionEmitter,
+    [versionsEmitter.target]: versionsEmitter,
+    [kotlinEmitter.target]: kotlinEmitter,
 };
 export function getEmitter(target) {
     return EMITTERS[target] ?? null;

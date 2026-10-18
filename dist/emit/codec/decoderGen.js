@@ -5,7 +5,7 @@
 // verbatim so an older client's read-edit-write cannot destroy fields a newer
 // client added. Unknown enum and oneof variants are preserved as-is rather than
 // rejected, for the same reason.
-import { UNKNOWN_PROPERTY, valueTsType, wireTypeOf } from "./plan.js";
+import { FILE_MESSAGE_NAME, UNKNOWN_PROPERTY, valueTsType, wireTypeOf } from "./plan.js";
 import { indent } from "./encoderGen.js";
 import { SCALAR_CODEC_TS, WireType } from "./wireFormat.js";
 function collectOneofNames(plan) {
@@ -196,7 +196,9 @@ function readValue(value, reader, wire, path, oneofs) {
         case "scalar": return scalarRead(value.scalar, reader, wire, path);
         case "enum": return `readUnsignedField(${reader}, ${wire}, ${path}) as ${value.name}`;
         case "decimal": return `canonicalDecimal(readStringField(${reader}, ${wire}, ${path}), ${value.precision}, ${value.scale}, ${path})`;
+        case "ref": return `readRef(${subMessage(reader, wire, path)}, ${path})`;
         case "message": return `read${value.name}(${subMessage(reader, wire, path)}, ${path})`;
+        case "file": return readValue({ kind: "message", name: FILE_MESSAGE_NAME }, reader, wire, path, oneofs);
         case "oneof": return `${oneofs.get(value)}(${subMessage(reader, wire, path)}, ${path})`;
     }
 }
@@ -245,6 +247,7 @@ function scalarRead(scalar, reader, wire, path) {
         case "bytes": return `readBytesField(${reader}, ${wire}, ${path})`;
         case "uuid": return `bytesToUuid(readBytesField(${reader}, ${wire}, ${path}), ${path})`;
         case "json": return `parseJson(readStringField(${reader}, ${wire}, ${path}), ${path})`;
+        case "semver": return `readSemverField(${reader}, ${wire}, ${path})`;
         default: {
             const value = { kind: "scalar", scalar };
             const raw = `${FIELD_READER[varintFamily(value)]}(${reader}, ${wire}, ${path})`;
@@ -264,7 +267,7 @@ function fromVarint(value, source, path) {
         case "duration": return `toSigned(${source})`;
         case "date": return `daysToDate(${source}, ${path})`;
         case "time": return `nanosToTime(${source}, ${path})`;
-        case "timestamp": return `millisToTimestamp(${source}, ${path})`;
+        case "timestamp": return `millisToDate(${source}, ${path})`;
         default: return source;
     }
 }

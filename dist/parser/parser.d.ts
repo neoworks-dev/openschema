@@ -17,6 +17,7 @@ export declare class Parser {
     private parseDecorator;
     private parseDecoratorArg;
     private parseDecoratorValue;
+    private parseDecoratorList;
     private normalizeDecoratorValue;
     private parseDirective;
     private parseNamespace;
@@ -43,6 +44,11 @@ export declare class Parser {
     private parseNullableType;
     private parsePrimaryType;
     private parsePrimaryTypeInner;
+    /** A bare `File`: a qualified name such as `acme.File` stays a named type. */
+    private isFileType;
+    private isReferenceType;
+    /** `ref<Model>`: the id of a node of that model, stored as a uuid. */
+    private parseReferenceType;
     private parseExpr;
     private parseOrExpr;
     private parseAndExpr;

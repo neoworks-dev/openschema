@@ -10,6 +10,12 @@ export interface LedgerOptions {
     staleSeverity: DiagnosticSeverity;
     now: () => string;
     generator: string;
+    /**
+     * The schema version being generated or published, from openschema.yaml. A
+     * retired ordinal may be reused, and an encoding changed, from the next major
+     * on; without a version nothing is ever freed.
+     */
+    version?: string | null;
 }
 export interface LedgerResult {
     diagnostics: Diagnostic[];

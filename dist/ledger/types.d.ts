@@ -16,6 +16,15 @@ export interface OrdinalEntry {
     facet?: string;
     since: string;
     retiredAt?: string;
+    /**
+     * The major (see `majorOf`) in which the entry took its current state: the
+     * major that introduced or last changed the encoding of an active ordinal, or
+     * retired it. From a later major on, a retired ordinal may be reused and an
+     * encoding may change, because rows written by the earlier major carry their
+     * version and decode with that version's schema. Absent in entries written
+     * without a schema version, which stay spent for good.
+     */
+    major?: string;
 }
 export interface LedgerSpace {
     kind: SpaceKind;

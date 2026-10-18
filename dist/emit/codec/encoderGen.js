@@ -4,7 +4,7 @@
 // Canonical means: known fields strictly ascending by ordinal, unknown fields
 // interleaved into that order rather than appended, absent fields omitted, and
 // present fields always written — including 0, "", and false.
-import { UNKNOWN_PROPERTY, wireTypeOf } from "./plan.js";
+import { FILE_MESSAGE_NAME, UNKNOWN_PROPERTY, wireTypeOf } from "./plan.js";
 import { WireType } from "./wireFormat.js";
 export function emitEncoder(plan) {
     const body = plan.fields.map(field => encodeField(plan, field)).join("\n\n");
@@ -135,10 +135,13 @@ function wrapperMapWriter(field, keyScalar, source, path) {
 // ── Values ────────────────────────────────────────────────────────────────────
 function writeValue(target, value, source, path) {
     switch (value.kind) {
-        case "scalar": return `${target}.${scalarWriteCall(value.scalar, source, path)};`;
+        case "scalar": return scalarWriter(target, value.scalar, source, path);
+        case "ref": return `writeRef(${target}, ${source}, ${path});`;
         case "enum": return `${target}.varintNumber(${source});`;
         case "decimal":
             return `${target}.string(canonicalDecimal(${source}, ${value.precision}, ${value.scale}, ${path}));`;
+        case "file":
+            return writeValue(target, { kind: "message", name: FILE_MESSAGE_NAME }, source, path);
         case "message":
             // A block, not a closure: a closure per present message field was the
             // single largest cost in the encode profile.
@@ -173,6 +176,12 @@ function oneofWriter(target, value, source, path) {
         `}`,
     ].join("\n");
 }
+function scalarWriter(target, scalar, source, path) {
+    if (scalar === "semver")
+        return `writeSemver(${target}, ${source}, ${path});`;
+    return `${target}.${scalarWriteCall(scalar, source, path)};`;
+}
+/** A Writer method call; `semver` is written by scalarWriter. */
 function scalarWriteCall(scalar, source, path) {
     switch (scalar) {
         case "bool": return `varintNumber(${source} ? 1 : 0)`;
@@ -192,7 +201,7 @@ function scalarWriteCall(scalar, source, path) {
         case "json": return `string(canonicalJson(${source}))`;
         case "date": return `varintNumber(dateToDays(${source}, ${path}))`;
         case "time": return `varintNumber(timeToNanos(${source}, ${path}))`;
-        case "timestamp": return `varintNumber(timestampToMillis(${source}, ${path}))`;
+        case "timestamp": return `varintNumber(dateToMillis(${source}, ${path}))`;
         case "duration": return `varint(${source})`;
     }
 }

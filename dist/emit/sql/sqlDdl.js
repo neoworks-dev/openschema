@@ -9,6 +9,7 @@ export const SCALAR_SQL = {
     f32: "REAL", f64: "DOUBLE PRECISION",
     string: "TEXT", bytes: "BYTEA", uuid: "UUID", json: "JSONB",
     date: "DATE", time: "TIME", timestamp: "TIMESTAMPTZ", duration: "INTERVAL",
+    semver: "TEXT",
 };
 export function tableNameFor(record) {
     const explicit = firstStringArg(record.decorators, "table");
