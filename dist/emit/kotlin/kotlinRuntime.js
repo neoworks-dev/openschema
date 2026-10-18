@@ -13,7 +13,8 @@ export const MODEL_RUNTIME_NAMES = [
 /** The names of the SDK's query package the generated query classes use. */
 export const QUERY_RUNTIME_NAMES = [
     "BooleanField", "ComparableField", "EnumField", "FileField", "FileListField", "FileSortFields", "Include",
-    "MessageListField", "OrderBy", "ReferenceField", "SortField", "TextField", "ValueListField", "Where",
+    "MessageField", "MessageListField", "OrderBy", "ReferenceField", "SortField", "SortFields", "SortScope", "TextField",
+    "ValueListField", "Where",
 ];
 /** Names the SDK's schema package provides to the schema object and the row accessors. */
 export const SCHEMA_OBJECT_RUNTIME_NAMES = ["CollectionSchema", "TableDefinition", "Row", "Update"];

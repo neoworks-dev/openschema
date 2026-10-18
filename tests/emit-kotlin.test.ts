@@ -304,17 +304,25 @@ enum Level {
   });
 
   it("leaves out what a query cannot filter on", () => {
-    for (const name of ["data", "extra", "attributes", "note"]) {
+    for (const name of ["data", "extra"]) {
       expect(queries).not.toContain(`val ${name} = `);
     }
   });
 
-  it("filters list elements that are messages by their plain members only", () => {
-    const lineWhere = queries.slice(queries.indexOf("class LineWhere"));
+  it("filters an embedded message through a nested where class", () => {
+    expect(queries).toContain('    val note = MessageField(operatorsOf("note"), ::LineWhere)');
+  });
+
+  it("gives a map the handle for its value type, like a list", () => {
+    expect(queries).toContain('    val attributes = ValueListField(operatorsOf("attributes"), serializer<String>()) { TextField(it) }');
+  });
+
+  it("filters the values of lists and maps of messages by every field they can filter on", () => {
+    const lineWhere = queries.slice(queries.indexOf("class LineWhere"), queries.indexOf("class LineSortFields"));
     expect(lineWhere).toContain('    val text = TextField(operatorsOf("text"))');
     expect(lineWhere).toContain('    val level = EnumField(operatorsOf("level"), serializer<Level>())');
-    expect(lineWhere).not.toContain("val inner");
-    expect(lineWhere).not.toContain("val file ");
+    expect(lineWhere).toContain('    val inner = ValueListField(operatorsOf("inner"), serializer<String>()) { TextField(it) }');
+    expect(lineWhere).toContain('    val file = FileField(operatorsOf("file"))');
   });
 
   it("sorts by scalars, enums, references and the members of a File", () => {
@@ -328,10 +336,72 @@ enum Level {
     }
   });
 
+  it("sorts through singular messages with a sort fields class per message", () => {
+    const orderBy = queries.slice(queries.indexOf("class ItemOrderBy"), queries.indexOf("class ItemInclude"));
+    expect(orderBy).toContain('    val note: LineSortFields\n        get() = sortFields("note", ::LineSortFields)');
+    const lineSortFields = queries.slice(queries.indexOf("class LineSortFields"));
+    expect(lineSortFields).toContain("class LineSortFields(scope: SortScope) : SortFields(scope) {");
+    expect(lineSortFields).toContain('    val text = sortField("text")');
+    expect(lineSortFields).toContain('    val file = fileSortFields("file")');
+    expect(lineSortFields).not.toContain("val inner");
+  });
+
   it("includes single references by naming them", () => {
     expect(queries).toContain('class ItemInclude : Include() {\n    val parent: Unit\n        get() = include("parent")\n}');
     expect(queries).toContain("class LineWhere : Where<LineWhere>() {");
     expect(queries).not.toContain("class LineInclude");
+  });
+
+  describe("nested messages", () => {
+    const nested = emitFiles(`namespace t
+@neoworks.table
+model Contact {
+  1 card: Card?
+}
+model Card {
+  1 name: Name?
+  2 emails: {string: Email}
+  3 nicknames: {string: string}
+  4 photo: File?
+  5 parent: Card?
+}
+model Name {
+  1 full: string?
+  2 given: string?
+}
+model Email {
+  1 address: string
+  2 labels: [string]
+  3 owner: Name?
+}`).get("kotlin/t/Queries.kt")!;
+
+    it("generates a where class for every message at any depth", () => {
+      for (const className of ["Card", "Name", "Email"]) {
+        expect(nested).toContain(`class ${className}Where : Where<${className}Where>() {`);
+      }
+      expect(nested).toContain('    val card = MessageField(operatorsOf("card"), ::CardWhere)');
+      expect(nested).toContain('    val name = MessageField(operatorsOf("name"), ::NameWhere)');
+    });
+
+    it("gives maps of messages some, every and none, and the values their own nested fields", () => {
+      expect(nested).toContain('    val emails = MessageListField(operatorsOf("emails"), ::EmailWhere)');
+      expect(nested).toContain('    val owner = MessageField(operatorsOf("owner"), ::NameWhere)');
+      expect(nested).toContain('    val labels = ValueListField(operatorsOf("labels"), serializer<String>()) { TextField(it) }');
+    });
+
+    it("gives maps of plain values the value handle, which has has", () => {
+      expect(nested).toContain('    val nicknames = ValueListField(operatorsOf("nicknames"), serializer<String>()) { TextField(it) }');
+    });
+
+    it("sorts through messages that contain themselves without building them eagerly", () => {
+      expect(nested).toContain('class ContactOrderBy : OrderBy() {\n    val card: CardSortFields\n        get() = sortFields("card", ::CardSortFields)\n}');
+      expect(nested).toContain('    val parent: CardSortFields\n        get() = sortFields("parent", ::CardSortFields)');
+      expect(nested).toContain('    val photo = fileSortFields("photo")');
+    });
+
+    it("does not sort through lists or maps", () => {
+      expect(nested).not.toContain("class EmailSortFields");
+    });
   });
 
   it("writes no query classes for a schema without tables", () => {
@@ -342,6 +412,16 @@ enum Level {
   it("refuses a field that would hide a member of the query classes", () => {
     const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 meta: string\n}";
     expect(() => emitFiles(src)).toThrow("Item.meta");
+  });
+
+  it("refuses a field of an embedded message that would hide a member of its query classes", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 card: Card\n}\nmodel Card {\n  1 sortFields: string\n}";
+    expect(() => emitFiles(src)).toThrow("Card.sortFields");
+  });
+
+  it("refuses a message model whose sort fields class is named like another type", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 card: Card\n}\nmodel Card {\n  1 name: string\n}\nmodel CardSortFields {\n  1 a: string\n}";
+    expect(() => emitFiles(src)).toThrow("CardSortFields");
   });
 });
 

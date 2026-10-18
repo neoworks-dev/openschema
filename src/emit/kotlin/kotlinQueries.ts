@@ -11,19 +11,19 @@ import { QUERY_PACKAGE, QUERY_RUNTIME_NAMES, SCHEMA_PACKAGE, HEADER, importLines
 import { KotlinTargetError } from "./kotlinTargetError.js";
 import { UNQUALIFIED, valueSerializer } from "./kotlinTypes.js";
 
-/** Members of the query base classes that a field of the same name would hide. */
-const RESERVED_FIELD_NAMES: ReadonlySet<string> = new Set([
-  "AND", "OR", "NOT", "meta", "createScope", "operatorsOf", "sortField", "fileSortFields", "include",
-]);
+/** Members of `Where` and `SortFields`, which every message model's query classes inherit. */
+const MESSAGE_RESERVED_FIELD_NAMES: readonly string[] = [
+  "AND", "OR", "NOT", "createScope", "operatorsOf", "sortField", "fileSortFields", "sortFields",
+];
+
+/** Members of the query base classes that a field of a table of the same name would hide. */
+const TABLE_RESERVED_FIELD_NAMES: ReadonlySet<string> = new Set([...MESSAGE_RESERVED_FIELD_NAMES, "meta", "include"]);
 
 const NUMBER_SCALARS: ReadonlySet<string> = new Set([
   "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "duration", "timestamp",
 ]);
 
 const TEXT_SCALARS: ReadonlySet<string> = new Set(["string", "uuid", "date", "time"]);
-
-/** Where a field sits: a table filters on Files and lists, a list element only on plain values. */
-type Position = "table" | "element";
 
 export function whereClassName(modelName: string): string {
   return `${modelName}Where`;
@@ -37,12 +37,17 @@ export function includeClassName(modelName: string): string {
   return `${modelName}Include`;
 }
 
+export function sortFieldsClassName(modelName: string): string {
+  return `${modelName}SortFields`;
+}
+
 /** The names of the query classes a schema declares, for collision checks. */
 export function queryClassNames(descriptor: SchemaDescriptor): string[] {
   const names = descriptor.tables.flatMap(table => [
     whereClassName(table.model), orderByClassName(table.model), includeClassName(table.model),
   ]);
-  names.push(...elementModelNames(descriptor).map(whereClassName));
+  names.push(...whereOnlyModelNames(descriptor).map(whereClassName));
+  names.push(...sortModelNames(descriptor).map(sortFieldsClassName));
   return names;
 }
 
@@ -55,12 +60,10 @@ export function queriesSource(descriptor: SchemaDescriptor, packageName: string)
   const blocks = [`${HEADER}\npackage ${packageName}\n\n${imports.join("\n")}`];
   for (const table of descriptor.tables) {
     const model = modelNamed(descriptor, table.model);
-    rejectReservedFields(model);
-    blocks.push(whereClass(model, "table"), orderByClass(model), includeClass(model, descriptor));
+    rejectReservedFields(model, TABLE_RESERVED_FIELD_NAMES);
+    blocks.push(whereClass(model), orderByClass(model), includeClass(model, descriptor));
   }
-  for (const elementName of elementModelNames(descriptor)) {
-    blocks.push(whereClass(modelNamed(descriptor, elementName), "element"));
-  }
+  blocks.push(...embeddedBlocks(descriptor));
   return `${blocks.join("\n\n")}\n`;
 }
 
@@ -70,33 +73,80 @@ function modelNamed(descriptor: SchemaDescriptor, modelName: string): ModelDescr
   return model;
 }
 
-function rejectReservedFields(model: ModelDescriptor): void {
+function embeddedBlocks(descriptor: SchemaDescriptor): string[] {
+  const messageReserved: ReadonlySet<string> = new Set(MESSAGE_RESERVED_FIELD_NAMES);
+  const blocks: string[] = [];
+  for (const modelName of whereOnlyModelNames(descriptor)) {
+    const model = modelNamed(descriptor, modelName);
+    rejectReservedFields(model, messageReserved);
+    blocks.push(whereClass(model));
+  }
+  for (const modelName of sortModelNames(descriptor)) {
+    const model = modelNamed(descriptor, modelName);
+    rejectReservedFields(model, messageReserved);
+    blocks.push(sortFieldsClass(model));
+  }
+  return blocks;
+}
+
+function rejectReservedFields(model: ModelDescriptor, reserved: ReadonlySet<string>): void {
   for (const field of model.fields) {
-    if (!RESERVED_FIELD_NAMES.has(field.name)) continue;
+    if (!reserved.has(field.name)) continue;
     throw new KotlinTargetError(`the field ${model.name}.${field.name} would hide a member of the Kotlin query classes; rename it`);
   }
 }
 
-function isListContainer(field: FieldDescriptor): boolean {
+/** A list or a map: the values of the field are filtered with `some`, `every` and `none`. */
+function isCollectionContainer(field: FieldDescriptor): boolean {
   const kind = field.container.kind;
-  return kind === "repeatedPacked" || kind === "repeatedLen" || kind === "wrapperRepeated";
+  return kind === "repeatedPacked" || kind === "repeatedLen" || kind === "wrapperRepeated" || kind === "map" || kind === "wrapperMap";
 }
 
-/** The message models a table filters on through a list: `emails.some { value.endsWith(...) }`. */
-function elementModelNames(descriptor: SchemaDescriptor): string[] {
-  const names = new Set<string>();
-  for (const table of descriptor.tables) {
-    for (const field of modelNamed(descriptor, table.model).fields) {
-      if (isListContainer(field) && field.value.kind === "message") names.add(field.value.name);
+/** The model of the message a field of any container holds, or null. */
+function messageOf(field: FieldDescriptor): string | null {
+  if (field.value.kind !== "message") return null;
+  return field.value.name;
+}
+
+function singularMessageOf(field: FieldDescriptor): string | null {
+  if (field.container.kind !== "singular") return null;
+  return messageOf(field);
+}
+
+/** The models of the messages the tables reach through the fields [messageOfField] names, at any depth. */
+function reachableModelNames(
+  descriptor: SchemaDescriptor,
+  messageOfField: (field: FieldDescriptor) => string | null,
+): string[] {
+  const reached = new Set<string>();
+  const pending = descriptor.tables.map(table => table.model);
+  while (pending.length > 0) {
+    const model = modelNamed(descriptor, pending.shift()!);
+    for (const field of model.fields) {
+      const name = messageOfField(field);
+      if (name === null || reached.has(name)) continue;
+      reached.add(name);
+      pending.push(name);
     }
   }
-  return [...names];
+  return [...reached];
 }
 
-function whereClass(model: ModelDescriptor, position: Position): string {
+/** The message models a query filters inside of and that are not tables, so they get no table classes. */
+function whereOnlyModelNames(descriptor: SchemaDescriptor): string[] {
+  const tableModels = new Set(descriptor.tables.map(table => table.model));
+  return reachableModelNames(descriptor, messageOf).filter(name => !tableModels.has(name));
+}
+
+/** The message models a query sorts through: singular messages, at any depth. */
+function sortModelNames(descriptor: SchemaDescriptor): string[] {
+  return reachableModelNames(descriptor, singularMessageOf);
+}
+
+function whereClass(model: ModelDescriptor): string {
   const className = whereClassName(model.name);
   const handles = model.fields.flatMap(field => {
-    const handle = whereHandle(field, position);
+    const handle = whereHandle(field);
     if (handle === null) return [];
     return [`    val ${identifier(field.name)} = ${handle}`];
   });
@@ -107,14 +157,26 @@ function whereClass(model: ModelDescriptor, position: Position): string {
 }
 
 function orderByClass(model: ModelDescriptor): string {
-  const keys = model.fields.flatMap(field => {
-    const key = sortKey(field);
-    if (key === null) return [];
-    return [`    val ${identifier(field.name)} = ${key}`];
-  });
   const className = orderByClassName(model.name);
-  if (keys.length === 0) return `class ${className} : OrderBy()`;
-  return `class ${className} : OrderBy() {\n${keys.join("\n")}\n}`;
+  const members = sortMembers(model);
+  if (members.length === 0) return `class ${className} : OrderBy()`;
+  return `class ${className} : OrderBy() {\n${members.join("\n")}\n}`;
+}
+
+function sortFieldsClass(model: ModelDescriptor): string {
+  const className = sortFieldsClassName(model.name);
+  const header = `class ${className}(scope: SortScope) : SortFields(scope)`;
+  const members = sortMembers(model);
+  if (members.length === 0) return header;
+  return `${header} {\n${members.join("\n")}\n}`;
+}
+
+function sortMembers(model: ModelDescriptor): string[] {
+  return model.fields.flatMap(field => {
+    const member = sortMember(field);
+    if (member === null) return [];
+    return [member];
+  });
 }
 
 function includeClass(model: ModelDescriptor, descriptor: SchemaDescriptor): string {
@@ -130,20 +192,21 @@ function referenceProperty(fieldName: string): string {
 }
 
 /** The handle of a field in a `where` lambda, or null when a query cannot filter on it. */
-function whereHandle(field: FieldDescriptor, position: Position): string | null {
+function whereHandle(field: FieldDescriptor): string | null {
   const sink = `operatorsOf(${JSON.stringify(field.name)})`;
-  if (field.container.kind === "singular") return singularHandle(field.value, sink, position);
-  if (position === "element" || !isListContainer(field)) return null;
-  return listHandle(field.value, sink);
+  if (field.container.kind === "singular") return singularHandle(field.value, sink);
+  if (!isCollectionContainer(field)) return null;
+  return collectionHandle(field.value, sink);
 }
 
-function singularHandle(value: ValueShape, sink: string, position: Position): string | null {
-  if (value.kind !== "file") return plainHandle(value, sink);
-  if (position === "element") return null;
-  return `FileField(${sink})`;
+function singularHandle(value: ValueShape, sink: string): string | null {
+  if (value.kind === "file") return `FileField(${sink})`;
+  if (value.kind === "message") return `MessageField(${sink}, ::${whereClassName(value.name)})`;
+  return plainHandle(value, sink);
 }
 
-function listHandle(value: ValueShape, sink: string): string | null {
+/** The handle of a list or a map, which filter their values alike. */
+function collectionHandle(value: ValueShape, sink: string): string | null {
   if (value.kind === "file") return `FileListField(${sink})`;
   if (value.kind === "message") return `MessageListField(${sink}, ::${whereClassName(value.name)})`;
   const elementHandle = plainHandle(value, "it");
@@ -163,11 +226,19 @@ function plainHandle(value: ValueShape, sink: string): string | null {
   return null;
 }
 
-/** The sort key of a field in an `orderBy` lambda, or null when a query cannot sort by it. */
-function sortKey(field: FieldDescriptor): string | null {
+/** The member of an `orderBy` class that sorts by a field, or null when a query cannot sort by it. */
+function sortMember(field: FieldDescriptor): string | null {
   if (field.container.kind !== "singular") return null;
+  const name = identifier(field.name);
   const fieldName = JSON.stringify(field.name);
-  if (field.value.kind === "file") return `fileSortFields(${fieldName})`;
+  if (field.value.kind === "file") return `    val ${name} = fileSortFields(${fieldName})`;
+  if (field.value.kind === "message") return messageSortMember(name, fieldName, field.value.name);
   if (plainHandle(field.value, "") === null) return null;
-  return `sortField(${fieldName})`;
+  return `    val ${name} = sortField(${fieldName})`;
+}
+
+/** A getter, so a message that contains itself does not build its sort keys forever. */
+function messageSortMember(name: string, fieldName: string, modelName: string): string {
+  const className = sortFieldsClassName(modelName);
+  return `    val ${name}: ${className}\n        get() = sortFields(${fieldName}, ::${className})`;
 }
