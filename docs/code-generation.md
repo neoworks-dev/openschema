@@ -34,9 +34,12 @@ The `kotlin` target writes a Gradle source root below the output directory,
 `kotlin/<package>/`. `Models.kt` holds the `@Serializable` enums, data classes and sealed
 interfaces for oneofs, and a schema with `@neoworks.table` models also gets `Queries.kt`
 (the `where`, `orderBy` and `include` scopes of each table, with a field handle per field
-a query can use), `RowAccessors.kt` (`row.addressBook` for each single reference) and,
+a query can use), `Updates.kt` (the class each table's `update { }` block runs in, with a
+property per field), `RowAccessors.kt` (`row.addressBook` for each single reference) and,
 for a collection, `<Name>Schema.kt` (a `CollectionSchema` with one `TableDefinition` per
-table). The classes follow the descriptor's JSON mapping: enums by name, maps as objects, a
+table) and `<Name>Collection.kt` (the class `neoworks.collection(<Name>Schema)` returns, with
+a `TableResource` property per table named in the plural: `Photo` is `photos`, `AlbumPhoto`
+is `albumPhotos`). The classes follow the descriptor's JSON mapping: enums by name, maps as objects, a
 oneof as `{variant: value}`, a reference as the id of its row, 64-bit integers as decimal
 text, timestamps as ISO 8601 with milliseconds and bytes as unpadded base64url. The
 serializers, `File`, `Semver`, `Row` and the query builders the generated code uses come

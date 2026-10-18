@@ -84,6 +84,29 @@ export function fieldType(field, oneofName) {
         return `${type}?`;
     return type;
 }
+/** The type of a field as a plain property declares it, without serialization annotations. */
+export function plainFieldType(field, oneofName) {
+    const element = plainValueType(field.value, oneofName, UNQUALIFIED);
+    const type = containerType(field.container, element);
+    if (isAbsentWhenUnset(field.container))
+        return `${type}?`;
+    return type;
+}
+/** The Kotlin expression of the serializer for a whole field: the container around the element, nullable when the field is optional. */
+export function fieldSerializer(field, oneofName) {
+    const element = valueSerializer(field.value, oneofName, UNQUALIFIED);
+    const container = field.container;
+    let serializer = element;
+    if (container.kind === "map" || container.kind === "wrapperMap") {
+        serializer = `MapSerializer(serializer<${mapKeyType(container.key)}>(), ${element})`;
+    }
+    else if (container.kind !== "singular") {
+        serializer = `ListSerializer(${element})`;
+    }
+    if (isAbsentWhenUnset(container))
+        return `${serializer}.nullable`;
+    return serializer;
+}
 function containerType(container, element) {
     if (container.kind === "singular")
         return element;

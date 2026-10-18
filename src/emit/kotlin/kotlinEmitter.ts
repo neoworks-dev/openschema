@@ -13,6 +13,8 @@ import { HEADER, IMPORTED_NAMES, MODEL_RUNTIME_NAMES, SCHEMA_PACKAGE, importLine
 import type { CollectionIdentity } from "../../registry/collectionName.js";
 import { queriesSource, queryClassNames } from "./kotlinQueries.js";
 import { rowAccessorsSource } from "./kotlinRowAccessors.js";
+import { collectionClassName, collectionSource } from "./kotlinCollection.js";
+import { updateClassNames, updatesSource } from "./kotlinUpdates.js";
 import { schemaObjectName, schemaObjectSource } from "./kotlinSchemaObject.js";
 import { KotlinTargetError } from "./kotlinTargetError.js";
 
@@ -31,14 +33,16 @@ export const kotlinEmitter: Emitter = {
 
   emit(context: EmitContext): OutputFile[] {
     const descriptor = buildDescriptor({ ...context, company: null });
-    rejectNameCollisions(descriptor);
     const identity = collectionIdentityOf(context);
+    rejectNameCollisions(descriptor, identity);
     const packageName = packageNameOf(context, identity);
     const files = [sourceFile(packageName, "Models.kt", modelsFile(descriptor, packageName))];
     files.push(...queryFiles(descriptor, packageName));
     if (identity === null) return files;
     const schemaSource = schemaObjectSource(identity, publishedDescriptor(context.schema), descriptor, packageName);
     files.push(sourceFile(packageName, `${schemaObjectName(identity)}.kt`, schemaSource));
+    const collectionFile = `${collectionClassName(identity)}.kt`;
+    files.push(sourceFile(packageName, collectionFile, collectionSource(identity, descriptor, packageName)));
     return files;
   },
 };
@@ -56,6 +60,7 @@ function modelsFile(descriptor: SchemaDescriptor, packageName: string): string {
 function queryFiles(descriptor: SchemaDescriptor, packageName: string): OutputFile[] {
   if (descriptor.tables.length === 0) return [];
   const files = [sourceFile(packageName, "Queries.kt", queriesSource(descriptor, packageName))];
+  files.push(sourceFile(packageName, "Updates.kt", updatesSource(descriptor, packageName)));
   const accessors = rowAccessorsSource(descriptor, packageName);
   if (accessors !== null) files.push(sourceFile(packageName, "RowAccessors.kt", accessors));
   return files;
@@ -78,9 +83,11 @@ function packageNameOf(context: EmitContext, identity: CollectionIdentity | null
   return context.schema.namespace.join(".");
 }
 
-function rejectNameCollisions(descriptor: SchemaDescriptor): void {
+function rejectNameCollisions(descriptor: SchemaDescriptor, identity: CollectionIdentity | null): void {
   const seen = new Set<string>(IMPORTED_NAMES);
-  for (const name of [...declaredTypeNames(descriptor), ...queryClassNames(descriptor)]) {
+  const generatedNames = [...declaredTypeNames(descriptor), ...queryClassNames(descriptor), ...updateClassNames(descriptor)];
+  if (identity !== null) generatedNames.push(collectionClassName(identity), schemaObjectName(identity));
+  for (const name of generatedNames) {
     if (seen.has(name)) {
       throw new KotlinTargetError(`the Kotlin type ${name} is declared twice; rename the model or enum, or the field that names a oneof`);
     }

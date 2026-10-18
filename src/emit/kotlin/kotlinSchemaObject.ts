@@ -5,9 +5,11 @@
 import type { CollectionIdentity } from "../../registry/collectionName.js";
 import { referencesOf } from "../collection/collectionEmitter.js";
 import type { SchemaDescriptor } from "../descriptor/descriptorTypes.js";
-import { HEADER, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
+import { COLLECTIONS_PACKAGE, HEADER, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
 import { includeClassName, orderByClassName, whereClassName } from "./kotlinQueries.js";
+import { updateClassName } from "./kotlinUpdates.js";
 import { pascalCase } from "./kotlinNames.js";
+import { collectionClassName } from "./kotlinCollection.js";
 
 /** `@neoworks/contacts` is `ContactsSchema`. */
 export function schemaObjectName(identity: CollectionIdentity): string {
@@ -23,6 +25,7 @@ export function schemaObjectSource(
 ): string {
   const imports = [
     ...importLines(SCHEMA_PACKAGE, ["CollectionSchema", "TableDefinition"]),
+    ...importLines(COLLECTIONS_PACKAGE, ["CollectionTables"]),
     "import kotlinx.serialization.serializer",
   ];
   const lines = [
@@ -31,7 +34,7 @@ export function schemaObjectSource(
     "",
     ...imports,
     "",
-    `object ${schemaObjectName(identity)} : CollectionSchema {`,
+    `object ${schemaObjectName(identity)} : CollectionSchema<${collectionClassName(identity)}> {`,
     `    override val name: String = ${kotlinString(identity.name)}`,
     "",
     `    override val version: String = ${kotlinString(identity.version)}`,
@@ -39,7 +42,9 @@ export function schemaObjectSource(
     `    override val descriptor: String = ${kotlinString(publishedDescriptor)}`,
     "",
     ...descriptor.tables.flatMap(table => [...tableDefinition(table.model, descriptor), ""]),
-    `    override val tables: List<TableDefinition<*, *, *, *>> = listOf(${descriptor.tables.map(table => tableDefinitionName(table.model)).join(", ")})`,
+    `    override val tables: List<TableDefinition<*, *, *, *, *>> = listOf(${descriptor.tables.map(table => tableDefinitionName(table.model)).join(", ")})`,
+    "",
+    `    override fun open(tables: CollectionTables): ${collectionClassName(identity)} = ${collectionClassName(identity)}(tables)`,
     "}",
     "",
   ];
@@ -59,6 +64,7 @@ function tableDefinition(modelName: string, descriptor: SchemaDescriptor): strin
     `        createWhere = ::${whereClassName(modelName)},`,
     `        createOrderBy = ::${orderByClassName(modelName)},`,
     `        createInclude = ::${includeClassName(modelName)},`,
+    `        createUpdate = ::${updateClassName(modelName)},`,
     `        references = ${referencesExpression(modelName, descriptor)},`,
     "    )",
   ];

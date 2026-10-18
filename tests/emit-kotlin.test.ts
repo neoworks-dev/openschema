@@ -9,6 +9,7 @@ import { parse } from "../src/index";
 import { resolve } from "../src/resolver";
 import { getEmitter, listTargets } from "../src/emit";
 import { kotlinString } from "../src/emit/kotlin/kotlinSchemaObject";
+import { pluralize } from "../src/emit/kotlin/kotlinCollection";
 
 const PACKAGE_DIRECTORY = "kotlin/dev/neoworks/schemas/recipes";
 const OPTIONS = { collection: "@acme/recipes", collectionVersion: "0.1.0" };
@@ -51,13 +52,15 @@ describe("the kotlin target", () => {
     expect(listTargets()).toContain("kotlin");
   });
 
-  it("writes models, query classes, row accessors and the schema object as a source root", () => {
+  it("writes models, query classes, update classes, row accessors, the schema object and the collection class as a source root", () => {
     const files = emitFiles(RECIPES, OPTIONS);
     expect([...files.keys()]).toEqual([
       `${PACKAGE_DIRECTORY}/Models.kt`,
       `${PACKAGE_DIRECTORY}/Queries.kt`,
+      `${PACKAGE_DIRECTORY}/Updates.kt`,
       `${PACKAGE_DIRECTORY}/RowAccessors.kt`,
       `${PACKAGE_DIRECTORY}/RecipesSchema.kt`,
+      `${PACKAGE_DIRECTORY}/RecipesCollection.kt`,
     ]);
     expect(files.get(`${PACKAGE_DIRECTORY}/Models.kt`)).toContain("package dev.neoworks.schemas.recipes\n");
   });
@@ -204,7 +207,7 @@ describe("kotlin schema object", () => {
 
   it("holds the name, the version and the descriptor the registry publishes", () => {
     const descriptor = getEmitter("descriptor")!.emit({ schema: resolve(parse(RECIPES)), company: null, includePrivate: false, options: {} })[0].contents;
-    expect(schemaObject).toContain("object RecipesSchema : CollectionSchema {");
+    expect(schemaObject).toContain("object RecipesSchema : CollectionSchema<RecipesCollection> {");
     expect(schemaObject).toContain('override val name: String = "@acme/recipes"');
     expect(schemaObject).toContain('override val version: String = "0.1.0"');
     expect(schemaObject).toContain(`override val descriptor: String = ${kotlinString(descriptor)}`);
@@ -218,11 +221,13 @@ describe("kotlin schema object", () => {
       '        createWhere = ::RecipeWhere,\n' +
       '        createOrderBy = ::RecipeOrderBy,\n' +
       '        createInclude = ::RecipeInclude,\n' +
+      '        createUpdate = ::RecipeUpdate,\n' +
       '        references = mapOf("book" to "Book"),\n' +
       '    )',
     );
     expect(schemaObject).toContain("references = emptyMap(),");
-    expect(schemaObject).toContain("override val tables: List<TableDefinition<*, *, *, *>> = listOf(bookTable, recipeTable)");
+    expect(schemaObject).toContain("override val tables: List<TableDefinition<*, *, *, *, *>> = listOf(bookTable, recipeTable)");
+    expect(schemaObject).toContain("override fun open(tables: CollectionTables): RecipesCollection = RecipesCollection(tables)");
   });
 
   it("is written for a schema with tables only", () => {
@@ -354,6 +359,53 @@ describe("kotlin row accessors", () => {
   it("refuses a reference that a member of Row would hide", () => {
     const src = "namespace t\n@neoworks.table\nmodel Parent {\n  1 a: string\n}\n@neoworks.table\nmodel Child {\n  @belongsTo\n  1 id: ref<Parent>\n}";
     expect(() => emitFiles(src)).toThrow("Child.id");
+  });
+});
+
+describe("kotlin update classes", () => {
+  const updates = emitFiles(RECIPES, OPTIONS).get(`${PACKAGE_DIRECTORY}/Updates.kt`)!;
+
+  it("declares a recording property per field, nullable exactly when the field is optional", () => {
+    expect(updates).toContain("class RecipeUpdate : Update() {");
+    expect(updates).toContain('var title: String by updateField("title", serializer<String>())');
+    expect(updates).toContain('var tags: List<String>? by updateField("tags", ListSerializer(serializer<String>()).nullable)');
+    expect(updates).toContain('var nutrition: Map<String, Double>? by updateField("nutrition", MapSerializer(serializer<String>(), serializer<Double>()).nullable)');
+    expect(updates).toContain('var cookedAt: Instant? by updateField("cookedAt", TimestampSerializer.nullable)');
+    expect(updates).toContain('var difficulty: Difficulty? by updateField("difficulty", serializer<Difficulty>().nullable)');
+  });
+
+  it("refuses a field that would call itself instead of the SDK's update function", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Item {\n  1 updateField: string\n}";
+    expect(() => emitFiles(src)).toThrow("Item.updateField");
+  });
+});
+
+describe("kotlin collection class", () => {
+  const collection = emitFiles(RECIPES, OPTIONS).get(`${PACKAGE_DIRECTORY}/RecipesCollection.kt`)!;
+
+  it("has a resource property per table, named in the plural as the TypeScript SDK names its resources", () => {
+    expect(collection).toContain("class RecipesCollection internal constructor(tables: CollectionTables) {");
+    expect(collection).toContain("val books: TableResource<Book, BookWhere, BookOrderBy, BookInclude, BookUpdate> = tables.table(RecipesSchema.bookTable)");
+    expect(collection).toContain("val recipes: TableResource<Recipe, RecipeWhere, RecipeOrderBy, RecipeInclude, RecipeUpdate> = tables.table(RecipesSchema.recipeTable)");
+  });
+
+  it("pluralizes like the TypeScript SDK", () => {
+    expect(pluralize("memory")).toBe("memories");
+    expect(pluralize("address")).toBe("addresses");
+    expect(pluralize("albumPhoto")).toBe("albumPhotos");
+    expect(pluralize("day")).toBe("days");
+    expect(pluralize("box")).toBe("boxes");
+    expect(pluralize("dish")).toBe("dishes");
+    expect(pluralize("church")).toBe("churches");
+  });
+
+  it("refuses two tables that become the same property", () => {
+    const src = "namespace t\n@neoworks.table\nmodel Box {\n  1 a: string\n}\n@neoworks.table\nmodel Boxe {\n  1 a: string\n}";
+    expect(() => emitFiles(src, OPTIONS)).toThrow("boxes");
+  });
+
+  it("is not written without a collection", () => {
+    expect([...emitFiles(RECIPES).keys()].some(path => path.endsWith("Collection.kt"))).toBe(false);
   });
 });
 

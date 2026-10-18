@@ -2,9 +2,11 @@
 // The object an app hands to the Kotlin SDK's `collection`: what the TypeScript `SchemaModule` holds,
 // and for each table the content serializer and the query scopes the SDK runs its lambdas in.
 import { referencesOf } from "../collection/collectionEmitter.js";
-import { HEADER, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
+import { COLLECTIONS_PACKAGE, HEADER, SCHEMA_PACKAGE, importLines } from "./kotlinRuntime.js";
 import { includeClassName, orderByClassName, whereClassName } from "./kotlinQueries.js";
+import { updateClassName } from "./kotlinUpdates.js";
 import { pascalCase } from "./kotlinNames.js";
+import { collectionClassName } from "./kotlinCollection.js";
 /** `@neoworks/contacts` is `ContactsSchema`. */
 export function schemaObjectName(identity) {
     const collection = identity.name.slice(identity.name.indexOf("/") + 1);
@@ -13,6 +15,7 @@ export function schemaObjectName(identity) {
 export function schemaObjectSource(identity, publishedDescriptor, descriptor, packageName) {
     const imports = [
         ...importLines(SCHEMA_PACKAGE, ["CollectionSchema", "TableDefinition"]),
+        ...importLines(COLLECTIONS_PACKAGE, ["CollectionTables"]),
         "import kotlinx.serialization.serializer",
     ];
     const lines = [
@@ -21,7 +24,7 @@ export function schemaObjectSource(identity, publishedDescriptor, descriptor, pa
         "",
         ...imports,
         "",
-        `object ${schemaObjectName(identity)} : CollectionSchema {`,
+        `object ${schemaObjectName(identity)} : CollectionSchema<${collectionClassName(identity)}> {`,
         `    override val name: String = ${kotlinString(identity.name)}`,
         "",
         `    override val version: String = ${kotlinString(identity.version)}`,
@@ -29,7 +32,9 @@ export function schemaObjectSource(identity, publishedDescriptor, descriptor, pa
         `    override val descriptor: String = ${kotlinString(publishedDescriptor)}`,
         "",
         ...descriptor.tables.flatMap(table => [...tableDefinition(table.model, descriptor), ""]),
-        `    override val tables: List<TableDefinition<*, *, *, *>> = listOf(${descriptor.tables.map(table => tableDefinitionName(table.model)).join(", ")})`,
+        `    override val tables: List<TableDefinition<*, *, *, *, *>> = listOf(${descriptor.tables.map(table => tableDefinitionName(table.model)).join(", ")})`,
+        "",
+        `    override fun open(tables: CollectionTables): ${collectionClassName(identity)} = ${collectionClassName(identity)}(tables)`,
         "}",
         "",
     ];
@@ -47,6 +52,7 @@ function tableDefinition(modelName, descriptor) {
         `        createWhere = ::${whereClassName(modelName)},`,
         `        createOrderBy = ::${orderByClassName(modelName)},`,
         `        createInclude = ::${includeClassName(modelName)},`,
+        `        createUpdate = ::${updateClassName(modelName)},`,
         `        references = ${referencesExpression(modelName, descriptor)},`,
         "    )",
     ];
