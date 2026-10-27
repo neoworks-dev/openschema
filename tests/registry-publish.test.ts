@@ -11,26 +11,36 @@ const payload: PublishPayload = {
   files: [{ path: "songs.schema", contents: "namespace example.songs" }],
 };
 
-function stubSite(status: number, body: unknown): void {
+function stubRegistry(status: number, body: unknown): void {
   globalThis.fetch = (async () => Response.json(body, { status })) as unknown as typeof fetch;
 }
 
-test("publish succeeds on a 2xx", async () => {
-  stubSite(200, { ok: true });
-  await publish("https://site.example", "token", payload);
+test("publish posts the version to the schema's versions endpoint", async () => {
+  let requestedUrl = "";
+  let sentBody: Record<string, unknown> = {};
+  globalThis.fetch = (async (url: string, init: RequestInit) => {
+    requestedUrl = url;
+    sentBody = JSON.parse(String(init.body));
+    return Response.json({}, { status: 201 });
+  }) as unknown as typeof fetch;
+  await publish("https://api.example/", "token", payload);
+  expect(requestedUrl).toBe("https://api.example/api/v1/schemas/example/songs/versions");
+  expect(sentBody.version).toBe("0.2.0");
+  expect(sentBody.scope).toBeUndefined();
+  expect(sentBody.name).toBeUndefined();
 });
 
 test("a 409 with violations throws them", async () => {
   const violations = [{ rule: "field_ordinal_reused", path: "models.Song.fields[2]", message: "field number 2 was \"artist\" and is now \"performer\"" }];
-  stubSite(409, { error: "the schema version is incompatible with earlier versions", violations });
-  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  stubRegistry(409, { error: "incompatible_schema", message: "the schema version is incompatible with earlier versions", violations });
+  const failure = await publish("https://api.example", "token", payload).catch((error) => error);
   expect(failure).toBeInstanceOf(IncompatibleSchemaError);
   expect(failure.violations).toEqual(violations);
 });
 
 test("other failures keep their message", async () => {
-  stubSite(409, { error: "that version is already published and cannot change" });
-  await expect(publish("https://site.example", "token", payload)).rejects.toThrow("that version is already published and cannot change");
+  stubRegistry(409, { error: "version_exists", message: "that version is already published and cannot change" });
+  await expect(publish("https://api.example", "token", payload)).rejects.toThrow("that version is already published and cannot change");
 });
 
 test("violations are printed with their rule, path and message", () => {
@@ -43,35 +53,36 @@ test("violations are printed with their rule, path and message", () => {
 });
 
 test("a 403 names the scope and the permission it lacks", async () => {
-  stubSite(403, { error: "this needs the schemas.publish permission", code: "missing_permission", permission: "schemas.publish" });
-  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  stubRegistry(403, { error: "missing_permission", message: "this needs the schemas.publish permission", permission: "schemas.publish" });
+  const failure = await publish("https://api.example", "token", payload).catch((error) => error);
   expect(failure).toBeInstanceOf(PublishRefusedError);
   expect(failure.status).toBe(403);
+  expect(failure.code).toBe("missing_permission");
   expect(failure.message).toBe("you may not publish into @example: it needs the schemas.publish permission for the owner of @example");
 });
 
 test("a 404 says the scope is not a handle yet", async () => {
-  stubSite(404, { error: "not found", code: "not_found" });
-  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  stubRegistry(404, { error: "not_found", message: "not found" });
+  const failure = await publish("https://api.example", "token", payload).catch((error) => error);
   expect(failure).toBeInstanceOf(PublishRefusedError);
   expect(failure.message).toContain("@example is not a handle");
 });
 
 test("a 409 for an archived organization is not mistaken for an existing version", async () => {
-  stubSite(409, { error: "the organization is archived", code: "archived" });
-  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  stubRegistry(409, { error: "archived", message: "the organization is archived" });
+  const failure = await publish("https://api.example", "token", payload).catch((error) => error);
   expect(failure).toBeInstanceOf(PublishRefusedError);
   expect(failure.message).toBe("@example belongs to an archived organization; nobody can publish into it");
 });
 
 test("a 401 asks for a login", async () => {
-  stubSite(401, { error: "authentication required" });
-  await expect(publish("https://site.example", "token", payload)).rejects.toThrow("run `openschema login`");
+  stubRegistry(401, { error: "unauthorized", message: "authentication required" });
+  await expect(publish("https://api.example", "token", payload)).rejects.toThrow("run `openschema login`");
 });
 
 test("a refusal with a null body still explains the status", async () => {
-  stubSite(500, null);
-  const failure = await publish("https://site.example", "token", payload).catch((error) => error);
+  stubRegistry(500, null);
+  const failure = await publish("https://api.example", "token", payload).catch((error) => error);
   expect(failure).toBeInstanceOf(PublishRefusedError);
   expect(failure.message).toBe("publish failed (500)");
 });

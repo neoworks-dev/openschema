@@ -440,11 +440,7 @@ async function cmdLogin(opts: EndpointOptions): Promise<void> {
   }
 }
 
-interface PublishOptions extends EndpointOptions {
-  site?: string;
-}
-
-async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
+async function cmdPublish(dir: string, opts: EndpointOptions): Promise<void> {
   const prepared = preparePublish(dir, GENERATOR);
   if (prepared.payload === null) {
     for (const problem of prepared.problems) console.error(chalk.red(`error: ${problem}`));
@@ -456,7 +452,7 @@ async function cmdPublish(dir: string, opts: PublishOptions): Promise<void> {
 
   try {
     const token = await getAccessToken(endpoints);
-    await publish(publishSite(opts, endpoints), token, payload);
+    await publish(endpoints.api, token, payload);
   } catch (error) {
     reportPublishFailure(payload, error);
     process.exit(1);
@@ -511,11 +507,6 @@ function reportPublishFailure(payload: PublishPayload, error: unknown): void {
   }
   console.error(chalk.red(`error: ${describeError(error)}`));
   if (error instanceof PublishRefusedError) console.error(chalk.dim("  nothing was published"));
-}
-
-function publishSite(opts: PublishOptions, endpoints: Endpoints): string {
-  if (opts.site) return opts.site;
-  return endpoints.site;
 }
 
 function describeError(error: unknown): string {
@@ -1169,8 +1160,7 @@ program
 
 program
   .command("publish [dir]")
-  .description("Publish the schema described by [dir]/openschema.yaml to the registry (submitted to the org's server)")
-  .option("--site <url>", "openschema site base (default: production)")
+  .description("Publish the schema described by [dir]/openschema.yaml to the registry")
   .option("--base-port <port>", BASE_PORT_HELP)
   .action((dir, opts) => cmdPublish(dir ?? ".", opts));
 

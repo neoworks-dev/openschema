@@ -1,8 +1,8 @@
 // src/registry/urls.ts
 // Every neoworks service URL derives from one base domain (prod: neoworks.dev,
 // dev: neoworks.localhost) and, for a dev stack behind a proxy, one base port,
-// mirroring the SDK's neoworksUrls(). The CLI resolves the registry (api),
-// oauth, and the openschema site from that base.
+// mirroring the SDK's neoworksUrls(). The CLI resolves the registry (api) and
+// oauth from that base.
 
 const DEFAULT_BASE_DOMAIN = 'neoworks.dev';
 const DEFAULT_SCHEME = 'https';
@@ -12,8 +12,6 @@ export interface Endpoints {
   api: string;
   /** OAuth server (authorize + token). */
   oauth: string;
-  /** The openschema site (hosts the /publish endpoint). */
-  site: string;
 }
 
 export interface EndpointOverrides {
@@ -68,7 +66,6 @@ export function resolveEndpoints(overrides: EndpointOverrides = {}): Endpoints {
   const at = (subdomain: string) => `${scheme}://${subdomain}.${base}${suffix}`;
   return {
     api: process.env.OPENSCHEMA_REGISTRY || at('api'),
-    oauth: process.env.OPENSCHEMA_OAUTH_URL || at('oauth'),
-    site: process.env.OPENSCHEMA_SITE_URL || at('openschema')
+    oauth: process.env.OPENSCHEMA_OAUTH_URL || at('oauth')
   };
 }

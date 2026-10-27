@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { resolveEndpoints } from "../src/registry/urls";
 
-const variables = ["OPENSCHEMA_BASE_DOMAIN", "OPENSCHEMA_SCHEME", "OPENSCHEMA_BASE_PORT", "OPENSCHEMA_REGISTRY", "OPENSCHEMA_OAUTH_URL", "OPENSCHEMA_SITE_URL"];
+const variables = ["OPENSCHEMA_BASE_DOMAIN", "OPENSCHEMA_SCHEME", "OPENSCHEMA_BASE_PORT", "OPENSCHEMA_REGISTRY", "OPENSCHEMA_OAUTH_URL"];
 const saved = new Map(variables.map(name => [name, process.env[name]]));
 
 function clearEnvironment(): void {
@@ -19,7 +19,7 @@ describe("resolveEndpoints", () => {
   test("defaults to production without a port", () => {
     clearEnvironment();
     expect(resolveEndpoints()).toEqual({
-      api: "https://api.neoworks.dev", oauth: "https://oauth.neoworks.dev", site: "https://openschema.neoworks.dev",
+      api: "https://api.neoworks.dev", oauth: "https://oauth.neoworks.dev",
     });
   });
 
@@ -28,7 +28,6 @@ describe("resolveEndpoints", () => {
     expect(resolveEndpoints({ baseDomain: "neoworks.localhost", port: "8443" })).toEqual({
       api: "https://api.neoworks.localhost:8443",
       oauth: "https://oauth.neoworks.localhost:8443",
-      site: "https://openschema.neoworks.localhost:8443",
     });
   });
 

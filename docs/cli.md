@@ -181,7 +181,6 @@ published.
 
 | Flag | Meaning |
 |---|---|
-| `--site <url>` | openschema site base (default: production) |
 | `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) |
 
 A refused publish says why (not signed in, no `schemas.publish` permission, the scope is

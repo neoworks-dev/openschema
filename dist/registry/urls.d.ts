@@ -3,8 +3,6 @@ export interface Endpoints {
     api: string;
     /** OAuth server (authorize + token). */
     oauth: string;
-    /** The openschema site (hosts the /publish endpoint). */
-    site: string;
 }
 export interface EndpointOverrides {
     baseDomain?: string;

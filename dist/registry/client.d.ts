@@ -58,10 +58,11 @@ export declare class IncompatibleSchemaError extends Error {
     readonly violations: Violation[];
     constructor(message: string, violations: Violation[]);
 }
+/** The api's error body. */
 interface PublishResponseBody {
+    /** The error code, e.g. `missing_permission` or `archived`. */
     error?: string;
-    /** The api's error code, e.g. `missing_permission` or `archived`. */
-    code?: string;
+    message?: string;
     /** For `missing_permission`: the permission the caller lacks. */
     permission?: string;
     violations?: Violation[];
@@ -78,12 +79,13 @@ export declare class PublishRefusedError extends Error {
  */
 export declare function describePublishRefusal(payload: Pick<PublishPayload, "scope">, status: number, body: PublishResponseBody): string;
 /**
- * Submit a schema to the openschema site's /publish endpoint. The site (the org's
- * server) authenticates the bearer token and writes the org-owned registry rows.
- * A 409 that lists violations throws an IncompatibleSchemaError; a 401, 403, 404
- * or other refusal throws a PublishRefusedError that says what to do about it.
+ * Submit a schema version to the registry. The api checks the token's
+ * schemas:publish scope and the caller's schemas.publish permission for the
+ * owner of the scope. A 409 that lists violations throws an
+ * IncompatibleSchemaError; a 401, 403, 404 or other refusal throws a
+ * PublishRefusedError that says what to do about it.
  */
-export declare function publish(site: string, token: string, payload: PublishPayload): Promise<void>;
+export declare function publish(registry: string, token: string, payload: PublishPayload): Promise<void>;
 /** The lines the CLI prints for a refused publish: one header, then each violation. */
 export declare function describeViolations(payload: Pick<PublishPayload, "scope" | "name" | "version">, violations: Violation[]): string[];
 export {};

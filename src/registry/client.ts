@@ -135,10 +135,11 @@ export class IncompatibleSchemaError extends Error {
   }
 }
 
+/** The api's error body. */
 interface PublishResponseBody {
+  /** The error code, e.g. `missing_permission` or `archived`. */
   error?: string;
-  /** The api's error code, e.g. `missing_permission` or `archived`. */
-  code?: string;
+  message?: string;
   /** For `missing_permission`: the permission the caller lacks. */
   permission?: string;
   violations?: Violation[];
@@ -175,26 +176,29 @@ export function describePublishRefusal(
   if (status === 404) {
     return `${scope} is not a handle: pick it in the developer dashboard (as your own handle, or by creating an organization) before publishing into it`;
   }
-  if (status === 409 && body.code === "archived") {
+  if (status === 409 && body.error === "archived") {
     return `${scope} belongs to an archived organization; nobody can publish into it`;
   }
-  if (body.error) {
-    return body.error;
+  if (body.message) {
+    return body.message;
   }
   return `publish failed (${status})`;
 }
 
 /**
- * Submit a schema to the openschema site's /publish endpoint. The site (the org's
- * server) authenticates the bearer token and writes the org-owned registry rows.
- * A 409 that lists violations throws an IncompatibleSchemaError; a 401, 403, 404
- * or other refusal throws a PublishRefusedError that says what to do about it.
+ * Submit a schema version to the registry. The api checks the token's
+ * schemas:publish scope and the caller's schemas.publish permission for the
+ * owner of the scope. A 409 that lists violations throws an
+ * IncompatibleSchemaError; a 401, 403, 404 or other refusal throws a
+ * PublishRefusedError that says what to do about it.
  */
-export async function publish(site: string, token: string, payload: PublishPayload): Promise<void> {
-  const response = await fetch(`${site.replace(/\/+$/, "")}/publish`, {
+export async function publish(registry: string, token: string, payload: PublishPayload): Promise<void> {
+  const { scope, name, ...version } = payload;
+  const versionsUrl = `${registry.replace(/\/+$/, "")}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}/versions`;
+  const response = await fetch(versionsUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(version),
   });
   const body = await readPublishResponse(response);
   if (response.ok) {
@@ -204,7 +208,7 @@ export async function publish(site: string, token: string, payload: PublishPaylo
   if (response.status === 409 && Array.isArray(body.violations) && body.violations.length > 0) {
     throw new IncompatibleSchemaError(message, body.violations);
   }
-  throw new PublishRefusedError(message, response.status, body.code);
+  throw new PublishRefusedError(message, response.status, body.error);
 }
 
 /** The response body as an object; an empty, non-JSON or non-object body (such as `null`) reads as {}. */

@@ -370,7 +370,7 @@ async function cmdPublish(dir, opts) {
     const endpoints = endpointsOrExit(opts);
     try {
         const token = await getAccessToken(endpoints);
-        await publish(publishSite(opts, endpoints), token, payload);
+        await publish(endpoints.api, token, payload);
     }
     catch (error) {
         reportPublishFailure(payload, error);
@@ -419,11 +419,6 @@ function reportPublishFailure(payload, error) {
     console.error(chalk.red(`error: ${describeError(error)}`));
     if (error instanceof PublishRefusedError)
         console.error(chalk.dim("  nothing was published"));
-}
-function publishSite(opts, endpoints) {
-    if (opts.site)
-        return opts.site;
-    return endpoints.site;
 }
 function describeError(error) {
     if (error instanceof Error)
@@ -919,8 +914,7 @@ program
 // ── publish ─────────────────────────────────────────────────────────────────────
 program
     .command("publish [dir]")
-    .description("Publish the schema described by [dir]/openschema.yaml to the registry (submitted to the org's server)")
-    .option("--site <url>", "openschema site base (default: production)")
+    .description("Publish the schema described by [dir]/openschema.yaml to the registry")
     .option("--base-port <port>", BASE_PORT_HELP)
     .action((dir, opts) => cmdPublish(dir ?? ".", opts));
 // ── init ──────────────────────────────────────────────────────────────────────

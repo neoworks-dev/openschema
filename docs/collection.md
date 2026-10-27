@@ -127,8 +127,7 @@ const steps = {
 
 ## Publishing to a development stack
 
-By default the CLI talks to production (`api.`, `oauth.` and `openschema.` under
-`neoworks.dev`). Point it at another stack with the base domain, scheme and port the
+By default the CLI talks to production (`api.` and `oauth.` under `neoworks.dev`). Point it at another stack with the base domain, scheme and port the
 services share, mirroring `neoworksUrls()` in the SDK:
 
 | Variable | Flag | Meaning |
@@ -139,8 +138,7 @@ services share, mirroring `neoworksUrls()` in the SDK:
 
 The port is left out of the URLs when it is the scheme's default (443 or 80). The flag
 exists on `login`, `publish` and `add` and wins over the variable. The per-service
-variables `OPENSCHEMA_REGISTRY`, `OPENSCHEMA_OAUTH_URL` and `OPENSCHEMA_SITE_URL` still
-override a single URL.
+variables `OPENSCHEMA_REGISTRY` and `OPENSCHEMA_OAUTH_URL` still override a single URL.
 
 ```sh
 OPENSCHEMA_BASE_DOMAIN=neoworks.localhost openschema login --base-port 8443

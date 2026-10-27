@@ -2,8 +2,8 @@
 // CLI authentication for publishing. The openschema client is public, so the CLI
 // uses a loopback authorization-code + PKCE flow (no client secret on the user's
 // machine). Tokens are cached under ~/.config/openschema/credentials.json. The
-// token (scope schemas:publish) authenticates the user to the openschema site's
-// /publish endpoint, which forwards it to the api; the user becomes the owner.
+// token (scope schemas:publish) authenticates the user to the api's registry,
+// which checks the user's schemas.publish permission for the scope's owner.
 import { spawn } from "child_process";
 import { createHash, randomBytes } from "crypto";
 import { createServer } from "http";
