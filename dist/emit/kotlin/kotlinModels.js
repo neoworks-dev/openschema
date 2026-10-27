@@ -18,8 +18,15 @@ export function modelsSource(descriptor, packageName) {
     }
     return blocks.join("\n\n");
 }
+/** Constants with these names would clash with the members every Kotlin enum has. */
+const ENUM_MEMBER_NAMES = new Set(["name", "ordinal"]);
+function enumEntry(variantName) {
+    if (!ENUM_MEMBER_NAMES.has(variantName))
+        return `    ${identifier(variantName)},`;
+    return `    @kotlinx.serialization.SerialName("${variantName}") ${variantName}Value,`;
+}
 function emitEnum(enumDescriptor) {
-    const entries = enumDescriptor.variants.map(variant => `    ${identifier(variant.name)},`);
+    const entries = enumDescriptor.variants.map(variant => enumEntry(variant.name));
     return `@Serializable\nenum class ${enumDescriptor.name} {\n${entries.join("\n")}\n}`;
 }
 function emitModel(model) {
