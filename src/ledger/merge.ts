@@ -438,5 +438,11 @@ function buildLedger(
     baseline: current === null,
     digest: "",   // filled in by serializeLedger
     spaces,
+    dependencies: lockedDependenciesOf(current),
   };
+}
+
+function lockedDependenciesOf(current: OrdinalLedger | null): OrdinalLedger["dependencies"] {
+  if (current === null) return {};
+  return { ...current.dependencies };
 }

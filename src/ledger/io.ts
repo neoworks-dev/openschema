@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEFAULT_LOCKFILE_NAME, LOCKFILE_VERSION, type LedgerSpace, type OrdinalLedger } from "./types.js";
+import { PACKAGE_SPECIFIER } from "../registry/manifest.js";
 
 /**
  * The lockfile sits beside the entry schema. There is deliberately no
@@ -46,6 +47,8 @@ export function loadLedger(path: string): LoadedLedger {
     };
   }
 
+  // Written only when there are dependencies.
+  if (parsed.dependencies === undefined) parsed.dependencies = {};
   return { ledger: parsed, integrityError: null };
 }
 
@@ -55,6 +58,21 @@ function structuralProblem(ledger: OrdinalLedger): string | null {
     return `unsupported lockfileVersion ${ledger.lockfileVersion}, expected ${LOCKFILE_VERSION}`;
   }
   if (typeof ledger.spaces !== "object" || ledger.spaces === null) return "missing 'spaces'";
+  if (ledger.dependencies === undefined) return null;
+  if (typeof ledger.dependencies !== "object" || ledger.dependencies === null) return "'dependencies' is not an object";
+  return lockedDependencyProblem(ledger.dependencies);
+}
+
+function lockedDependencyProblem(dependencies: OrdinalLedger["dependencies"]): string | null {
+  for (const [name, locked] of Object.entries(dependencies)) {
+    if (!PACKAGE_SPECIFIER.test(name)) return `dependency '${name}' is not a schema name such as @scope/name`;
+    if (typeof locked?.version !== "string" || !/^\d+\.\d+\.\d+$/.test(locked.version)) {
+      return `dependency '${name}' has no exact version`;
+    }
+    if (typeof locked.integrity !== "string" || !/^sha256-[0-9a-f]{64}$/.test(locked.integrity)) {
+      return `dependency '${name}' has no sha256 integrity`;
+    }
+  }
   return null;
 }
 
@@ -66,7 +84,7 @@ export function serializeLedger(ledger: OrdinalLedger): string {
   const spaces = sortSpaces(ledger.spaces);
   const withDigest: OrdinalLedger = { ...ledger, spaces, digest: computeDigest(spaces) };
 
-  const ordered = {
+  const ordered: Record<string, unknown> = {
     lockfileVersion: withDigest.lockfileVersion,
     generator:       withDigest.generator,
     createdAt:       withDigest.createdAt,
@@ -75,7 +93,17 @@ export function serializeLedger(ledger: OrdinalLedger): string {
     digest:          withDigest.digest,
     spaces:          withDigest.spaces,
   };
+  // Left out when empty, so a schema without dependencies keeps the same lockfile.
+  if (Object.keys(ledger.dependencies).length > 0) ordered.dependencies = sortDependencies(ledger.dependencies);
   return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+function sortDependencies(dependencies: OrdinalLedger["dependencies"]): OrdinalLedger["dependencies"] {
+  const sorted: OrdinalLedger["dependencies"] = {};
+  for (const name of Object.keys(dependencies).sort()) {
+    sorted[name] = { version: dependencies[name].version, integrity: dependencies[name].integrity };
+  }
+  return sorted;
 }
 
 /**

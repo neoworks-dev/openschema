@@ -136,6 +136,42 @@ describe("defaultLockPath", () => {
   });
 });
 
+describe("locked dependencies", () => {
+  const SHARED = { version: "1.2.0", integrity: `sha256-${"a".repeat(64)}` };
+  const UNITS = { version: "0.3.1", integrity: `sha256-${"b".repeat(64)}` };
+
+  it("leaves the section out of a lockfile without dependencies", () => {
+    const contents = serializeLedger(build(SRC));
+    expect(contents).not.toContain("dependencies");
+    expect(loadLedger(writeLedger("no-dependencies.lock", contents)).ledger?.dependencies).toEqual({});
+  });
+
+  it("round-trips dependencies sorted by name, outside the digest", () => {
+    const ledger = build(SRC);
+    const withDependencies = { ...ledger, dependencies: { "@neoworks/units": UNITS, "@neoworks/shared": SHARED } };
+    const contents = serializeLedger(withDependencies);
+    const loaded = loadLedger(writeLedger("dependencies.lock", contents));
+
+    expect(loaded.integrityError).toBeNull();
+    expect(Object.keys(loaded.ledger!.dependencies)).toEqual(["@neoworks/shared", "@neoworks/units"]);
+    expect(loaded.ledger!.digest).toBe(serialized(ledger).digest);
+  });
+
+  it("keeps the dependencies when the ordinals are updated", () => {
+    const current = { ...build(SRC), dependencies: { "@neoworks/shared": SHARED } };
+    const next = build("namespace t\nmodel M { 1 id: uuid  2 phone: string  3 email: string }\nenum S { 1 a  2 b }", current);
+    expect(next.dependencies).toEqual({ "@neoworks/shared": SHARED });
+  });
+
+  it("refuses a locked dependency without an exact version or integrity", () => {
+    const ledger = serialized(build(SRC));
+    for (const locked of [{ version: "^1.2.0", integrity: SHARED.integrity }, { version: "1.2.0", integrity: "md5-x" }]) {
+      const path = writeLedger("bad-dependency.lock", JSON.stringify({ ...ledger, dependencies: { "@neoworks/shared": locked } }));
+      expect(loadLedger(path).integrityError).toContain("@neoworks/shared");
+    }
+  });
+});
+
 /** The ledger as it exists on disk, i.e. after serialization fills the digest. */
 function serialized(ledger: OrdinalLedger): OrdinalLedger {
   return JSON.parse(serializeLedger(ledger)) as OrdinalLedger;
