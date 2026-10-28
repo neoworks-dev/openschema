@@ -32,6 +32,13 @@ export function parseVersionRange(text: string): VersionRange | null {
   return range;
 }
 
+/** A plain major.minor.patch version, or null for anything else, such as an old pre-release. */
+export function parseVersion(text: string): Version | null {
+  const partial = parsePartialVersion(text);
+  if (partial === null || partial.minor === null || partial.patch === null) return null;
+  return [partial.major, partial.minor, partial.patch];
+}
+
 export function rangeIncludes(range: VersionRange, version: Version): boolean {
   if (range.lowest !== null && compareVersions(version, range.lowest) < 0) return false;
   if (range.below !== null && compareVersions(version, range.below) >= 0) return false;
