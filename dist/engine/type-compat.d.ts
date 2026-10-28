@@ -10,6 +10,10 @@ export type TypeRelation = "same" | "widened" | "narrowed" | "incompatible";
  *   "same"         → no change
  */
 export declare function compareTypes(oldType: TypeExpr, newType: TypeExpr): TypeRelation;
-/** Produces a canonical string description of a type — used for set operations. */
-export declare function describeType(t: TypeExpr): string;
+/**
+ * Produces a canonical string description of a type — used for set operations.
+ * A reference is its scalar (`uuid`) unless `showReferences` asks for `ref<A>`:
+ * the ordinal ledger records this text, so its default must not change.
+ */
+export declare function describeType(t: TypeExpr, showReferences?: boolean): string;
 //# sourceMappingURL=type-compat.d.ts.map

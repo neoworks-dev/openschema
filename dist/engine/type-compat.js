@@ -69,9 +69,16 @@ function compareInner(oldType, newType) {
         return compareTypes(oldType, newType);
     }
     // ── Scalar ─────────────────────────────────────────────────────────────────
+    //  `ref<Model>` is a uuid scalar with a reference, so its target is compared too.
     if (oldType.kind === "scalar" && newType.kind === "scalar") {
-        return scalarRelation(oldType.scalar, newType.scalar);
+        return merge(scalarRelation(oldType.scalar, newType.scalar), referenceRelation(oldType.reference, newType.reference));
     }
+    // ── File and null ──────────────────────────────────────────────────────────
+    //  Built-in types without parameters: the same kind is the same type.
+    if (oldType.kind === "file" && newType.kind === "file")
+        return "same";
+    if (oldType.kind === "null" && newType.kind === "null")
+        return "same";
     // ── Decimal ────────────────────────────────────────────────────────────────
     //  Larger (precision, scale) = widened if both dimensions grow.
     //  Mixed = incompatible (changing scale changes the value space).
@@ -118,11 +125,26 @@ function compareInner(oldType, newType) {
     // ── Mixed kinds ────────────────────────────────────────────────────────────
     return "incompatible";
 }
+// ── Reference comparison ─────────────────────────────────────────────────────
+//  uuid → ref<A>    narrowed: only ids of A rows are accepted now
+//  ref<A> → uuid    widened:  any id is accepted now
+//  ref<A> → ref<B>  incompatible: readers expect A rows and get B rows
+function referenceRelation(oldReference, newReference) {
+    if (oldReference === undefined && newReference === undefined)
+        return "same";
+    if (oldReference === undefined)
+        return "narrowed";
+    if (newReference === undefined)
+        return "widened";
+    if (oldReference.join(".") === newReference.join("."))
+        return "same";
+    return "incompatible";
+}
 // ── Union comparison ─────────────────────────────────────────────────────────
 function compareUnions(oldVariants, newVariants) {
     // Represent variants as description strings for cheap set membership checks.
-    const oldSet = new Set(oldVariants.map(describeType));
-    const newSet = new Set(newVariants.map(describeType));
+    const oldSet = new Set(oldVariants.map(variant => describeType(variant, true)));
+    const newSet = new Set(newVariants.map(variant => describeType(variant, true)));
     const added = [...newSet].some(t => !oldSet.has(t));
     const removed = [...oldSet].some(t => !newSet.has(t));
     if (!added && !removed)
@@ -158,24 +180,33 @@ function numericCompare(a, b) {
         return "same";
     return a < b ? "widened" : "narrowed";
 }
-/** Produces a canonical string description of a type — used for set operations. */
-export function describeType(t) {
+/**
+ * Produces a canonical string description of a type — used for set operations.
+ * A reference is its scalar (`uuid`) unless `showReferences` asks for `ref<A>`:
+ * the ordinal ledger records this text, so its default must not change.
+ */
+export function describeType(t, showReferences = false) {
+    const describe = (inner) => describeType(inner, showReferences);
     switch (t.kind) {
-        case "scalar": return t.scalar;
+        case "scalar": {
+            if (showReferences && t.reference !== undefined)
+                return `ref<${t.reference.join(".")}>`;
+            return t.scalar;
+        }
         case "decimal": return `decimal(${t.precision},${t.scale})`;
         case "named": {
             const base = t.path.join(".");
             if (t.typeArgs.length === 0)
                 return base;
-            return `${base}<${t.typeArgs.map(describeType).join(",")}>`;
+            return `${base}<${t.typeArgs.map(describe).join(",")}>`;
         }
-        case "array": return `[${describeType(t.element)}]`;
-        case "map": return `{${describeType(t.key)}:${describeType(t.value)}}`;
-        case "nullable": return `${describeType(t.inner)}?`;
+        case "array": return `[${describe(t.element)}]`;
+        case "map": return `{${describe(t.key)}:${describe(t.value)}}`;
+        case "nullable": return `${describe(t.inner)}?`;
         case "null": return "null";
         case "file": return "File";
-        case "union": return t.variants.map(describeType).join("|");
-        case "oneof": return `oneof{${t.variants.map(v => `${v.ordinal}:${describeType(v.type)}`).join(",")}}`;
+        case "union": return t.variants.map(describe).join("|");
+        case "oneof": return `oneof{${t.variants.map(v => `${v.ordinal}:${describe(v.type)}`).join(",")}}`;
     }
 }
 //# sourceMappingURL=type-compat.js.map

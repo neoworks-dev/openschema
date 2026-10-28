@@ -146,8 +146,8 @@ export class Differ {
         const sev = typeRelationToSeverity(rel);
         this.emit(pair.newName, T.TYPE_ALIAS_CHANGED, "type_alias_changed", sev,
           `Type alias '${pair.newName}' changed: ${typeRelationRationale(rel)}.`,
-          describeType(pair.oldDecl.type),
-          describeType(pair.newDecl.type));
+          describeType(pair.oldDecl.type, true),
+          describeType(pair.newDecl.type, true));
       }
     }
   }
@@ -309,8 +309,8 @@ export class Differ {
     newField: AST.FieldDecl
   ): void {
     const rel     = compareTypes(oldField.type, newField.type);
-    const oldDesc = describeType(oldField.type);
-    const newDesc = describeType(newField.type);
+    const oldDesc = describeType(oldField.type, true);
+    const newDesc = describeType(newField.type, true);
 
     switch (rel) {
       case "same": return; // no change
@@ -494,7 +494,7 @@ function indexBy<K, V>(items: V[], key: (v: V) => K): Map<K, V> {
 function describeField(f: AST.FieldDecl): string {
   const ordinal = f.ordinal != null ? `${f.ordinal} ` : "";
   const access  = f.private ? "private " : "";
-  return `${ordinal}${access}${f.name}: ${describeType(f.type)}`;
+  return `${ordinal}${access}${f.name}: ${describeType(f.type, true)}`;
 }
 
 function hasDecorator(field: AST.FieldDecl, name: string): boolean {

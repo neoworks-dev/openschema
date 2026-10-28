@@ -119,7 +119,7 @@ export class Differ {
             const rel = compareTypes(pair.oldDecl.type, pair.newDecl.type);
             if (rel !== "same") {
                 const sev = typeRelationToSeverity(rel);
-                this.emit(pair.newName, T.TYPE_ALIAS_CHANGED, "type_alias_changed", sev, `Type alias '${pair.newName}' changed: ${typeRelationRationale(rel)}.`, describeType(pair.oldDecl.type), describeType(pair.newDecl.type));
+                this.emit(pair.newName, T.TYPE_ALIAS_CHANGED, "type_alias_changed", sev, `Type alias '${pair.newName}' changed: ${typeRelationRationale(rel)}.`, describeType(pair.oldDecl.type, true), describeType(pair.newDecl.type, true));
             }
         }
     }
@@ -212,8 +212,8 @@ export class Differ {
     // ── Field type change ──────────────────────────────────────────────────────
     diffFieldTypes(path, oldField, newField) {
         const rel = compareTypes(oldField.type, newField.type);
-        const oldDesc = describeType(oldField.type);
-        const newDesc = describeType(newField.type);
+        const oldDesc = describeType(oldField.type, true);
+        const newDesc = describeType(newField.type, true);
         switch (rel) {
             case "same": return; // no change
             case "widened":
@@ -340,7 +340,7 @@ function indexBy(items, key) {
 function describeField(f) {
     const ordinal = f.ordinal != null ? `${f.ordinal} ` : "";
     const access = f.private ? "private " : "";
-    return `${ordinal}${access}${f.name}: ${describeType(f.type)}`;
+    return `${ordinal}${access}${f.name}: ${describeType(f.type, true)}`;
 }
 function hasDecorator(field, name) {
     return field.decorators.some(d => d.name === name);
