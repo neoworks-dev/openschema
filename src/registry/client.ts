@@ -74,7 +74,10 @@ async function getJson<T>(url: string, notFoundMessage: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Fetch a schema version's source files from the registry. */
+/**
+ * Fetch a schema version's source files from the registry. The read is marked
+ * `download=1`, so the registry counts it as a download of that version.
+ */
 export async function fetchSchema(registry: string, ref: SchemaRef): Promise<ResolvedSchema> {
   const schemaUrl = `${registry}/api/v1/schemas/${encodeURIComponent(ref.scope)}/${encodeURIComponent(ref.name)}`;
   let version = ref.version;
@@ -87,7 +90,7 @@ export async function fetchSchema(registry: string, ref: SchemaRef): Promise<Res
   }
 
   const versionRow = await getJson<{ files: RegistryFile[] }>(
-    `${schemaUrl}/versions/${encodeURIComponent(version)}`,
+    `${schemaUrl}/versions/${encodeURIComponent(version)}?download=1`,
     `version ${version} of @${ref.scope}/${ref.name} not found`,
   );
   const files = [...versionRow.files].sort((a, b) => a.ordinal - b.ordinal);

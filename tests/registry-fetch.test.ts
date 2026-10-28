@@ -18,11 +18,11 @@ function stubRegistry(routes: Record<string, unknown>): string[] {
   return requested;
 }
 
-test("fetchSchema resolves latest and orders files by ordinal", async () => {
+test("fetchSchema resolves latest, marks the read as a download and orders files by ordinal", async () => {
   const base = "https://api.example/api/v1/schemas/acme/commerce";
   stubRegistry({
     [base]: { schema: { latestVersion: "1.2.0" } },
-    [`${base}/versions/1.2.0`]: {
+    [`${base}/versions/1.2.0?download=1`]: {
       files: [
         { path: "b.schema", contents: "b", ordinal: 1 },
         { path: "a.schema", contents: "a", ordinal: 0 },
