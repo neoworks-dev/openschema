@@ -4,13 +4,10 @@
 // Each download keeps its manifest, which names the entry file.
 
 import { dirname, join } from "path";
-import { MANIFEST_FILE, parseManifest } from "../registry/manifest.js";
+import { MANIFEST_FILE, PACKAGE_SPECIFIER, parseManifest } from "../registry/manifest.js";
 import type { ReadFileOrNull } from "./moduleGraph.js";
 
 export const DEPENDENCIES_DIRECTORY = join(".openschema", "dependencies");
-
-// The registry's scope and name rules, which also keep `..` out of the path.
-const PACKAGE_SPECIFIER = /^@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}$/;
 
 /** The entry file of a downloaded package, or null when it is not downloaded. */
 export type LocatePackage = (specifier: string) => string | null;

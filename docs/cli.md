@@ -155,6 +155,8 @@ description: Recipes and the folders they are kept in.
 entry: recipes.schema
 license: MIT                                  # optional
 repository: https://github.com/acme/recipes   # optional
+dependencies:                                 # optional
+  "@neoworks/shared": ^1.2.0
 ```
 
 | Field | Rule |
@@ -166,6 +168,7 @@ repository: https://github.com/acme/recipes   # optional
 | `entry` | the `.schema` file to compile, in the manifest's directory |
 | `license` | optional |
 | `repository` | optional http(s) URL |
+| `dependencies` | optional map from `@scope/name` to a version range with Cargo's meaning: `1.2` is `^1.2`, and `~`, `=`, `<`, `>`, `*` and comma-joined comparators work too. Quote a key, since YAML reserves a leading `@`, and quote a range that is only a number |
 
 Unknown keys are an error. Before anything is uploaded, `publish` checks that:
 

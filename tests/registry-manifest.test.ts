@@ -73,6 +73,26 @@ describe("parseManifest", () => {
   it("reports YAML that does not parse", () => {
     expect(parseManifest("title: [unclosed").problems[0]).toContain("not valid YAML");
   });
+
+  it("accepts dependencies with version ranges", () => {
+    const parsed = parseManifest(`${MANIFEST}dependencies:\n  "@neoworks/shared": ^1.2.0\n  "@acme/units": "0.3"\n`);
+    expect(parsed.problems).toEqual([]);
+    expect(parsed.manifest?.dependencies).toEqual({ "@neoworks/shared": "^1.2.0", "@acme/units": "0.3" });
+  });
+
+  it("rejects dependency names, ranges and unquoted numbers it cannot read", () => {
+    const problems = parseManifest(
+      `${MANIFEST}dependencies:\n  shared: ^1.0.0\n  "@acme/units": ^1.x\n  "@acme/money": 1.2\n`,
+    ).problems.join("\n");
+    expect(problems).toContain("must be a schema name such as @scope/name");
+    expect(problems).toContain("@acme/units must be a version range");
+    expect(problems).toContain("@acme/money must be a quoted version range");
+  });
+
+  it("rejects a schema that depends on itself", () => {
+    const problems = parseManifest(`${MANIFEST}dependencies:\n  "@acme/recipes": ^1.0.0\n`).problems;
+    expect(problems).toEqual(["openschema.yaml: dependencies must not list the schema itself"]);
+  });
 });
 
 describe("preparePublish", () => {
