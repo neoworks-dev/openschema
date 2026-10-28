@@ -40,7 +40,7 @@ function packageContaining(dependenciesRoot: string, path: string): string | nul
 }
 
 /** The nearest directory at or above `startDirectory` that holds an openschema.yaml. */
-function findProjectRoot(startDirectory: string, readFileOrNull: ReadFileOrNull): string | null {
+export function findProjectRoot(startDirectory: string, readFileOrNull: ReadFileOrNull): string | null {
   let directory = startDirectory;
   while (readFileOrNull(join(directory, MANIFEST_FILE)) === null) {
     const parent = dirname(directory);

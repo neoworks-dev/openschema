@@ -12,7 +12,7 @@
 
 import { Command, Option } from "commander";
 import chalk from "chalk";
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, join } from "path";
 import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
@@ -31,6 +31,7 @@ import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERS
 import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
 import { addDependency, installProject } from "./dependencies.js";
+import { ignoreHint } from "./ignoreHint.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
@@ -1010,6 +1011,24 @@ function cmdCheck(
 const BASE_PORT_HELP = "port of every service on the base domain, e.g. 8443 for *.neoworks.localhost:8443 (env: OPENSCHEMA_BASE_PORT)";
 
 const program = new Command();
+
+program.hook("postAction", (_program, actionCommand) => {
+  const hint = ignoreHint(projectCandidates(actionCommand));
+  if (hint !== null) console.error(chalk.dim(hint));
+});
+
+/** Where a command's project may be: its --dir, the paths it was given, then the working directory. */
+function projectCandidates(command: Command): string[] {
+  const candidates: string[] = [];
+  if (typeof command.opts().dir === "string") candidates.push(command.opts().dir);
+  for (const argument of command.args) {
+    if (!existsSync(argument)) continue;
+    if (statSync(argument).isDirectory()) candidates.push(argument);
+    else candidates.push(dirname(argument));
+  }
+  candidates.push(process.cwd());
+  return candidates;
+}
 
 program
   .name("openschema")

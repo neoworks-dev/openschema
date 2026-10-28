@@ -223,7 +223,9 @@ anything fails, neither file changes.
 Downloads what `openschema.yaml` requires, keeping each version
 `openschema.lock` pins while the requirements still allow it, and refusing a
 download whose files differ from the pinned integrity. Run it after a fresh
-checkout: `.openschema/` is a download folder and does not belong in git.
+checkout: `.openschema/` is a download folder and does not belong in git. The
+CLI never edits `.gitignore`; until git ignores the folder, every command ends
+with a hint on stderr recommending the line.
 
 `add` and `install` take the same flags.
 
