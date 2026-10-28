@@ -2,6 +2,7 @@
 import { describe, it, expect } from "bun:test";
 import { loadProject, resolveModules } from "../src/resolver";
 import type { ReadFileOrNull } from "../src/resolver/moduleGraph";
+import { buildDescriptor } from "../src/emit/descriptor/descriptorEmitter";
 
 const DEPENDENCIES = "/project/.openschema/dependencies";
 
@@ -79,6 +80,23 @@ describe("package imports", () => {
     const schema = resolveModules(loadProject("/project/places.schema", reader(files)));
     const unresolved = schema.diagnostics.find(diagnostic => diagnostic.code === "OS1008");
     expect(unresolved?.message).toContain(".openschema/dependencies");
+  });
+
+  // The registry's compatibility check compares descriptors, so this is what
+  // catches a dependency's new major changing a collection's rows.
+  it("puts the models a table uses from a dependency into the descriptor", () => {
+    const files = {
+      "/project/openschema.yaml": manifest("acme", "places", "places.schema"),
+      "/project/places.schema":
+        'namespace acme.places\nimport { GeoPoint } from "@neoworks/shared"\n@neoworks.table\nmodel Place { 1 location: GeoPoint }',
+      [`${DEPENDENCIES}/@neoworks/shared/openschema.yaml`]: manifest("neoworks", "shared", "shared.schema"),
+      [`${DEPENDENCIES}/@neoworks/shared/shared.schema`]:
+        "namespace neoworks.shared\nmodel GeoPoint { 1 latitude: f64  2 longitude: f64 }",
+    };
+    const schema = resolveModules(loadProject("/project/places.schema", reader(files)));
+    const descriptor = buildDescriptor({ schema, company: null, includePrivate: false, options: {} });
+    const geoPoint = descriptor.models.find(model => model.name === "GeoPoint");
+    expect(geoPoint?.fields.map(field => field.name)).toEqual(["latitude", "longitude"]);
   });
 
   it("leaves package imports unresolved outside a project with a manifest", () => {
