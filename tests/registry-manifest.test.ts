@@ -119,9 +119,16 @@ describe("preparePublish", () => {
     expect(prepared.problems).toEqual([]);
     expect(prepared.payload).toMatchObject({
       scope: "acme", name: "recipes", version: "1.0.0", title: "Recipes",
-      license: "MIT", files: [{ path: "recipes.schema", contents: SCHEMA }],
+      license: "MIT", entry: "recipes.schema", files: [{ path: "recipes.schema", contents: SCHEMA }], dependencies: [],
     });
     expect(JSON.parse(prepared.payload!.descriptor!).tables[0].model).toBe("Recipe");
+  });
+
+  it("sends the manifest's dependencies", () => {
+    const manifest = `${MANIFEST}dependencies:\n  "@neoworks/shared": ^1.2.0\n`;
+    const prepared = preparePublish(project({ "openschema.yaml": manifest, "recipes.schema": SCHEMA }), "test");
+    expect(prepared.problems).toEqual([]);
+    expect(prepared.payload!.dependencies).toEqual([{ scope: "neoworks", name: "shared", requirement: "^1.2.0" }]);
   });
 
   it("sends no descriptor for a schema without tables", () => {

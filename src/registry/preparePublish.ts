@@ -16,7 +16,7 @@ import { definesNeoworksTables, publishedDescriptor } from "../emit/descriptor/d
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { MANIFEST_FILE, parseManifest, type Manifest } from "./manifest.js";
-import type { PublishPayload } from "./client.js";
+import type { PublishPayload, PublishedDependency } from "./client.js";
 
 export type PreparedPublish =
   | { payload: PublishPayload; problems: [] }
@@ -52,7 +52,9 @@ function buildPayload(directory: string, generator: string): PublishPayload {
     license: manifest.license,
     repository: manifest.repository,
     targets: [],
+    entry: manifest.entry,
     files: collectSchemaFiles(directory),
+    dependencies: publishedDependencies(manifest),
   };
   const descriptor = describeTables(schema);
   if (descriptor !== null) payload.descriptor = descriptor;
@@ -126,6 +128,14 @@ function describeEmitError(error: unknown): string {
     return `${error.code} ${error.message}`;
   }
   return `descriptor: ${(error as Error).message}`;
+}
+
+function publishedDependencies(manifest: Manifest): PublishedDependency[] {
+  if (manifest.dependencies === undefined) return [];
+  return Object.entries(manifest.dependencies).map(([specifier, requirement]) => {
+    const [scope, name] = specifier.slice(1).split("/");
+    return { scope, name, requirement };
+  });
 }
 
 function collectSchemaFiles(directory: string): { path: string; contents: string }[] {

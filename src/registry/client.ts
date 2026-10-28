@@ -118,9 +118,19 @@ export interface PublishPayload {
   repository?: string;
   readme?: string;
   targets?: string[];
+  /** The file the CLI compiles, one of `files`. */
+  entry: string;
   files: { path: string; contents: string }[];
+  dependencies: PublishedDependency[];
   /** The descriptor target's output, when the schema defines Neoworks nodes. */
   descriptor?: string;
+}
+
+/** A schema the version imports from, with its manifest's version requirement. */
+export interface PublishedDependency {
+  scope: string;
+  name: string;
+  requirement: string;
 }
 
 /** One rule a refused publish broke; `path` points into the schema's descriptor. */
