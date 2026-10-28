@@ -1,13 +1,17 @@
 // src/registry/manifest.ts
 // openschema.yaml: a published schema's identity and metadata. Publishing reads
 // nothing else, and refuses a manifest with any problem rather than guessing.
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, parseDocument } from "yaml";
 import { z } from "zod";
+import { parseVersionRange } from "./versionRange.js";
 export const MANIFEST_FILE = "openschema.yaml";
 const MAX_TITLE = 80;
 const MAX_DESCRIPTION = 500;
 // The registry's own rules for scope and name.
-const REGISTRY_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const REGISTRY_NAME_PART = "[a-z0-9][a-z0-9._-]{0,63}";
+const REGISTRY_NAME = new RegExp(`^${REGISTRY_NAME_PART}$`);
+/** `@scope/name`, as a dependency key and an import specifier. */
+export const PACKAGE_SPECIFIER = new RegExp(`^@${REGISTRY_NAME_PART}/${REGISTRY_NAME_PART}$`);
 // Rows record the version that wrote them as three numbers, so there is no
 // pre-release or build suffix.
 const SEMANTIC_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -30,6 +34,13 @@ function filledText(maxCharacters) {
         .refine(value => [...value].length <= maxCharacters, `must be at most ${maxCharacters} characters`);
 }
 const NAME_RULE = "must be lowercase letters, digits, '.', '_' or '-', starting with a letter or digit";
+function describeDependenciesError(issue) {
+    if (issue.code === "invalid_key")
+        return "must be a schema name such as @scope/name";
+    if (issue.code === "invalid_type")
+        return "must be a mapping of @scope/name to a version range";
+    return undefined;
+}
 const manifestShape = z.strictObject({
     scope: text().regex(REGISTRY_NAME, NAME_RULE),
     name: text().regex(REGISTRY_NAME, NAME_RULE),
@@ -41,7 +52,20 @@ const manifestShape = z.strictObject({
     entry: text().regex(SCHEMA_FILE, "must name a .schema file in the manifest's directory"),
     license: filledText(MAX_TITLE).optional(),
     repository: z.url({ protocol: /^https?$/, error: "must be an http(s) URL" }).optional(),
-}, { error: describeObjectError });
+    dependencies: z.record(z.string().regex(PACKAGE_SPECIFIER), 
+    // YAML reads an unquoted 1.2 as a number, so a range must be a string.
+    z.string({ error: "must be a quoted version range such as \"^1.2.0\"" })
+        .refine(range => parseVersionRange(range) !== null, "must be a version range such as ^1.2.0"), { error: describeDependenciesError }).optional(),
+}, { error: describeObjectError })
+    .refine(manifest => !dependsOnItself(manifest), {
+    path: ["dependencies"],
+    message: "must not list the schema itself",
+});
+function dependsOnItself(manifest) {
+    if (manifest.dependencies === undefined)
+        return false;
+    return `@${manifest.scope}/${manifest.name}` in manifest.dependencies;
+}
 function describeObjectError(issue) {
     if (issue.code === "invalid_type")
         return "must be a mapping of manifest fields";
@@ -59,6 +83,12 @@ export function parseManifest(text) {
     if (parsed.success)
         return { manifest: parsed.data, problems: [] };
     return { manifest: null, problems: parsed.error.issues.map(describeIssue) };
+}
+/** The manifest text with `@scope/name` required at `requirement`, keeping the rest of the file and its comments. */
+export function withDependency(manifestText, packageName, requirement) {
+    const document = parseDocument(manifestText);
+    document.setIn(["dependencies", packageName], requirement);
+    return document.toString();
 }
 function describeIssue(issue) {
     const field = issue.path.join(".");

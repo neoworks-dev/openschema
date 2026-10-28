@@ -4,13 +4,16 @@
 import { resolve as resolvePath, dirname, isAbsolute } from "path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { isPackageSpecifier, packageLocator } from "./packages.js";
 /**
  * Load the entry file and everything it imports (transitively) into a module
- * list, entry first. Specifiers are resolved relative to the importing file;
- * package-style specifiers are not yet supported and surface as OS1008 later.
+ * list, entry first. Relative specifiers resolve against the importing file,
+ * `@scope/name` against the project's downloaded dependencies; anything
+ * unresolved surfaces as OS1008 later.
  */
 export function loadProject(entryPath, readFileOrNull) {
     const entryId = resolvePath(entryPath);
+    const packages = packageLocator(entryId, readFileOrNull);
     const modules = new Map();
     const queue = [entryId];
     while (queue.length > 0) {
@@ -24,13 +27,13 @@ export function loadProject(entryPath, readFileOrNull) {
         const program = parseSource(source);
         const importMap = new Map();
         for (const importDecl of importDeclarations(program)) {
-            const targetId = resolveSpecifier(importDecl.from, moduleId, readFileOrNull);
+            const targetId = resolveSpecifier(importDecl.from, moduleId, readFileOrNull, packages);
             if (targetId === null)
                 continue; // unresolved → reported during resolveModules
             importMap.set(importDecl.from, targetId);
             queue.push(targetId);
         }
-        modules.set(moduleId, { moduleId, sourcePath: moduleId, program, importMap });
+        modules.set(moduleId, { moduleId, sourcePath: moduleId, program, importMap, packageName: packages.packageOf(moduleId) });
     }
     return orderEntryFirst(entryId, modules);
 }
@@ -47,10 +50,11 @@ function importDeclarations(program) {
     return imports;
 }
 const EXTENSION_CANDIDATES = ["", ".schema", ".openschema"];
-function resolveSpecifier(specifier, importerId, readFileOrNull) {
-    if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
-        return null; // package-style specifier — not supported yet
-    }
+function resolveSpecifier(specifier, importerId, readFileOrNull, packages) {
+    if (isPackageSpecifier(specifier))
+        return packages.locate(specifier);
+    if (!specifier.startsWith(".") && !isAbsolute(specifier))
+        return null;
     const base = isAbsolute(specifier) ? specifier : resolvePath(dirname(importerId), specifier);
     for (const extension of EXTENSION_CANDIDATES) {
         const candidate = `${base}${extension}`;

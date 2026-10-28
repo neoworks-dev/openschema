@@ -6,6 +6,7 @@ export interface Module {
     sourcePath: string | null;
     program: Program;
     importMap: Map<string, string>;
+    packageName: string | null;
 }
 /** A named top-level declaration, resolved to its fully-qualified name. */
 export interface DeclSymbol {
@@ -13,6 +14,7 @@ export interface DeclSymbol {
     localName: string;
     qualifiedName: string;
     moduleId: string;
+    packageName: string | null;
     decl: ModelDecl | EnumDecl | TypeAlias;
     span: Span;
 }

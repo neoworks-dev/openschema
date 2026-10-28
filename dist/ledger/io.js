@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DEFAULT_LOCKFILE_NAME, LOCKFILE_VERSION } from "./types.js";
+import { PACKAGE_SPECIFIER } from "../registry/manifest.js";
 /**
  * The lockfile sits beside the entry schema. There is deliberately no
  * upward-directory search: a security control that resolves by walking parent
@@ -35,6 +36,9 @@ export function loadLedger(path) {
                 `The lockfile was edited by hand or a merge conflict was resolved incorrectly.`,
         };
     }
+    // Written only when there are dependencies.
+    if (parsed.dependencies === undefined)
+        parsed.dependencies = {};
     return { ledger: parsed, integrityError: null };
 }
 function structuralProblem(ledger) {
@@ -45,6 +49,23 @@ function structuralProblem(ledger) {
     }
     if (typeof ledger.spaces !== "object" || ledger.spaces === null)
         return "missing 'spaces'";
+    if (ledger.dependencies === undefined)
+        return null;
+    if (typeof ledger.dependencies !== "object" || ledger.dependencies === null)
+        return "'dependencies' is not an object";
+    return lockedDependencyProblem(ledger.dependencies);
+}
+function lockedDependencyProblem(dependencies) {
+    for (const [name, locked] of Object.entries(dependencies)) {
+        if (!PACKAGE_SPECIFIER.test(name))
+            return `dependency '${name}' is not a schema name such as @scope/name`;
+        if (typeof locked?.version !== "string" || !/^\d+\.\d+\.\d+$/.test(locked.version)) {
+            return `dependency '${name}' has no exact version`;
+        }
+        if (typeof locked.integrity !== "string" || !/^sha256-[0-9a-f]{64}$/.test(locked.integrity)) {
+            return `dependency '${name}' has no sha256 integrity`;
+        }
+    }
     return null;
 }
 /**
@@ -63,7 +84,17 @@ export function serializeLedger(ledger) {
         digest: withDigest.digest,
         spaces: withDigest.spaces,
     };
+    // Left out when empty, so a schema without dependencies keeps the same lockfile.
+    if (Object.keys(ledger.dependencies).length > 0)
+        ordered.dependencies = sortDependencies(ledger.dependencies);
     return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+function sortDependencies(dependencies) {
+    const sorted = {};
+    for (const name of Object.keys(dependencies).sort()) {
+        sorted[name] = { version: dependencies[name].version, integrity: dependencies[name].integrity };
+    }
+    return sorted;
 }
 /**
  * sha256 over the canonical form of `spaces`.

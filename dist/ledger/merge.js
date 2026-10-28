@@ -335,6 +335,12 @@ function buildLedger(spaces, current, timestamp, options) {
         baseline: current === null,
         digest: "", // filled in by serializeLedger
         spaces,
+        dependencies: lockedDependenciesOf(current),
     };
+}
+function lockedDependenciesOf(current) {
+    if (current === null)
+        return {};
+    return { ...current.dependencies };
 }
 //# sourceMappingURL=merge.js.map

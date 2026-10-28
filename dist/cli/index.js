@@ -11,7 +11,7 @@
 //   lock   <schema>               Ordinal-ledger CI gate
 import { Command, Option } from "commander";
 import chalk from "chalk";
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, mkdirSync, statSync, writeFileSync } from "fs";
 import { basename, dirname, join } from "path";
 import { Lexer, LexError } from "../lexer/lexer.js";
 import { Parser, ParseError } from "../parser/parser.js";
@@ -28,6 +28,8 @@ import { findCollectionIdentity, readCollectionIdentity, readManifestVersion } f
 import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERSIONS_MODULE_OPTION } from "../emit/collection/collectionEmitter.js";
 import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject } from "./init.js";
+import { addDependency, installProject } from "./dependencies.js";
+import { ignoreHint } from "./ignoreHint.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
@@ -326,25 +328,36 @@ function endpointsOrExit(opts) {
         process.exit(1);
     }
 }
-async function cmdAdd(ref, opts) {
+async function cmdAdd(reference, opts) {
     const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
-    let resolved;
     try {
-        resolved = await fetchSchema(registry, parseSchemaRef(ref));
+        const added = await addDependency(reference, opts.dir, registry, GENERATOR);
+        console.log(chalk.green(`✓ ${added.packageName} ${added.requirement}`));
+        printPinned(added.pinned);
     }
-    catch (e) {
-        console.error(chalk.red(`error: ${e instanceof Error ? e.message : String(e)}`));
+    catch (error) {
+        console.error(chalk.red(`error: ${describeError(error)}`));
+        console.error(chalk.dim("  openschema.yaml and openschema.lock were not changed"));
         process.exit(1);
     }
-    // Default to a folder named after the schema so multiple `add`s don't collide.
-    const outDir = opts.out === "." ? resolved.name : opts.out;
-    mkdirSync(outDir, { recursive: true });
-    for (const file of resolved.files) {
-        const fullPath = join(outDir, file.path);
-        writeFileSync(fullPath, file.contents, "utf8");
-        console.log(chalk.green(`✓ ${fullPath}`));
+}
+async function cmdInstall(opts) {
+    const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
+    try {
+        const pinned = await installProject(opts.dir, registry, GENERATOR);
+        if (Object.keys(pinned).length === 0)
+            console.log(chalk.green("✓ no dependencies"));
+        printPinned(pinned);
     }
-    console.log(chalk.dim(`\n  added @${resolved.scope}/${resolved.name}@${resolved.version} (${resolved.files.length} file${resolved.files.length === 1 ? "" : "s"})`));
+    catch (error) {
+        console.error(chalk.red(`error: ${describeError(error)}`));
+        process.exit(1);
+    }
+}
+function printPinned(pinned) {
+    for (const [packageName, locked] of Object.entries(pinned)) {
+        console.log(chalk.dim(`  ${packageName}@${locked.version}`));
+    }
 }
 // ── login / publish ───────────────────────────────────────────────────────────
 async function cmdLogin(opts) {
@@ -800,6 +813,27 @@ function cmdCheck(oldPath, newPath, opts) {
 // ── Program ───────────────────────────────────────────────────────────────────
 const BASE_PORT_HELP = "port of every service on the base domain, e.g. 8443 for *.neoworks.localhost:8443 (env: OPENSCHEMA_BASE_PORT)";
 const program = new Command();
+program.hook("postAction", (_program, actionCommand) => {
+    const hint = ignoreHint(projectCandidates(actionCommand));
+    if (hint !== null)
+        console.error(chalk.dim(hint));
+});
+/** Where a command's project may be: its --dir, the paths it was given, then the working directory. */
+function projectCandidates(command) {
+    const candidates = [];
+    if (typeof command.opts().dir === "string")
+        candidates.push(command.opts().dir);
+    for (const argument of command.args) {
+        if (!existsSync(argument))
+            continue;
+        if (statSync(argument).isDirectory())
+            candidates.push(argument);
+        else
+            candidates.push(dirname(argument));
+    }
+    candidates.push(process.cwd());
+    return candidates;
+}
 program
     .name("openschema")
     .description("OpenSchema DSL — schema compiler, differ, and compatibility checker")
@@ -892,11 +926,18 @@ program
 // ── add ─────────────────────────────────────────────────────────────────────
 program
     .command("add <schema>")
-    .description("Download a published schema from the registry (e.g. @neoworks/commerce)")
-    .option("-o, --out <dir>", "output directory (defaults to the schema name)", ".")
+    .description("Depend on a published schema: @scope/name, or @scope/name@^1.2 for a requirement (default: ^latest)")
+    .option("--dir <dir>", "the project, with its openschema.yaml", ".")
     .option("--registry <url>", "registry API base (default: production)")
     .option("--base-port <port>", BASE_PORT_HELP)
     .action((schema, opts) => cmdAdd(schema, opts));
+program
+    .command("install")
+    .description("Download the dependencies openschema.yaml requires, at the versions openschema.lock pins")
+    .option("--dir <dir>", "the project, with its openschema.yaml", ".")
+    .option("--registry <url>", "registry API base (default: production)")
+    .option("--base-port <port>", BASE_PORT_HELP)
+    .action((opts) => cmdInstall(opts));
 program
     .command("versions")
     .description("The published versions of the schema beside openschema.yaml")

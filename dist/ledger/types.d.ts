@@ -34,6 +34,12 @@ export interface LedgerSpace {
     /** Keyed by ordinal, as a decimal string. */
     ordinals: Record<string, OrdinalEntry>;
 }
+/** A dependency pinned to the exact version that was downloaded. */
+export interface LockedDependency {
+    version: string;
+    /** sha256 over the downloaded files, so a later download that differs is caught. */
+    integrity: string;
+}
 export interface OrdinalLedger {
     lockfileVersion: number;
     generator: string;
@@ -41,7 +47,10 @@ export interface OrdinalLedger {
     updatedAt: string;
     /** True when the ledger was seeded from an existing schema rather than grown. */
     baseline: boolean;
+    /** Covers `spaces` only; each dependency carries its own integrity. */
     digest: string;
     spaces: Record<string, LedgerSpace>;
+    /** Keyed by `@scope/name`; empty when the schema has no dependencies. */
+    dependencies: Record<string, LockedDependency>;
 }
 //# sourceMappingURL=types.d.ts.map

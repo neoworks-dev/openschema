@@ -36,6 +36,8 @@ export function collectSpaces(schema) {
 // ── Models ────────────────────────────────────────────────────────────────────
 function collectModelSpaces(schema, into) {
     for (const record of schema.records.values()) {
+        if (record.symbol.packageName !== null)
+            continue;
         // Only own fields: inherited ones belong to the base's space, and are
         // reachable through inheritsFrom.
         const declared = record.fields
@@ -86,6 +88,8 @@ function collectOverlaySpaces(schema, into) {
 // ── Enums ─────────────────────────────────────────────────────────────────────
 function collectEnumSpaces(schema, into) {
     for (const symbol of schema.enums.values()) {
+        if (symbol.packageName !== null)
+            continue;
         const decl = symbol.decl;
         into.push({
             id: enumSpaceId(symbol.qualifiedName),
@@ -110,6 +114,8 @@ function collectEnumSpaces(schema, into) {
 // alias under every field that consumes it.
 function collectOneofSpaces(schema, into) {
     for (const symbol of schema.symbols.values()) {
+        if (symbol.packageName !== null)
+            continue;
         if (symbol.kind === "model") {
             collectOneofsInModel(symbol, into);
             continue;

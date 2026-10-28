@@ -35,6 +35,9 @@ export function describeTables(schema, models) {
         const model = models.get(record.symbol.localName);
         if (model === undefined)
             continue;
+        // A dependency's tables belong to its own collection; here they are only types.
+        if (record.symbol.packageName !== null)
+            continue;
         if (!isTable(record)) {
             rejectTableOnlyDecorators(record);
             continue;
@@ -87,6 +90,8 @@ function describeTable(record, model, tableNames) {
 function tableNamesOf(schema) {
     const names = new Set();
     for (const record of schema.records.values()) {
+        if (record.symbol.packageName !== null)
+            continue;
         if (allDecorators(record.decorators, TABLE_DECORATOR).length > 0)
             names.add(record.symbol.qualifiedName);
     }

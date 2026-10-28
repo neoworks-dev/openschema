@@ -61,6 +61,31 @@ export async function fetchSchema(registry, ref) {
     const files = [...versionRow.files].sort((a, b) => a.ordinal - b.ordinal);
     return { scope: ref.scope, name: ref.name, version, files };
 }
+export async function fetchSchemaDetail(registry, scope, name) {
+    const detail = await getJson(`${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`, `schema @${scope}/${name} not found in the registry`);
+    let versions = [];
+    if (detail.versions !== null)
+        versions = detail.versions.map(entry => entry.version);
+    return { title: detail.schema.title, description: detail.schema.description, versions };
+}
+/** A version's files in ordinal order; `download` counts the read as a download. */
+export async function fetchVersionDetail(registry, scope, name, version, download) {
+    let url = `${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`;
+    if (download)
+        url += "?download=1";
+    const detail = await getJson(url, `version ${version} of @${scope}/${name} not found`);
+    // The registry leaves out an empty entry and an empty dependency list.
+    const published = {
+        entry: "",
+        files: [...detail.files].sort((left, right) => left.ordinal - right.ordinal),
+        dependencies: [],
+    };
+    if (detail.entry !== undefined)
+        published.entry = detail.entry;
+    if (detail.dependencies !== undefined)
+        published.dependencies = detail.dependencies;
+    return published;
+}
 /** Every published version of a schema, as the registry lists them. */
 export async function listVersions(registry, scope, name) {
     const detail = await getJson(`${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`, `schema @${scope}/${name} not found in the registry`);

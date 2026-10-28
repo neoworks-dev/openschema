@@ -31,6 +31,21 @@ export declare function parseSchemaRef(input: string): SchemaRef;
  * `download=1`, so the registry counts it as a download of that version.
  */
 export declare function fetchSchema(registry: string, ref: SchemaRef): Promise<ResolvedSchema>;
+/** A schema's current title and description, and every version it has published. */
+export interface SchemaDetail {
+    title: string;
+    description: string;
+    versions: string[];
+}
+export declare function fetchSchemaDetail(registry: string, scope: string, name: string): Promise<SchemaDetail>;
+/** A published version as dependencies need it. `entry` is empty for versions published before entries were kept. */
+export interface VersionDetail {
+    entry: string;
+    files: RegistryFile[];
+    dependencies: PublishedDependency[];
+}
+/** A version's files in ordinal order; `download` counts the read as a download. */
+export declare function fetchVersionDetail(registry: string, scope: string, name: string, version: string, download: boolean): Promise<VersionDetail>;
 /** Every published version of a schema, as the registry lists them. */
 export declare function listVersions(registry: string, scope: string, name: string): Promise<string[]>;
 export interface PublishPayload {
@@ -43,12 +58,30 @@ export interface PublishPayload {
     repository?: string;
     readme?: string;
     targets?: string[];
+    /** The file the CLI compiles, one of `files`. */
+    entry: string;
     files: {
         path: string;
         contents: string;
     }[];
+    dependencies: PublishedDependency[];
+    /** Every schema in the dependency tree at the version openschema.lock pins. */
+    pinned: PinnedVersion[];
     /** The descriptor target's output, when the schema defines Neoworks nodes. */
     descriptor?: string;
+}
+/** A schema the version was published against, at its exact version and with the integrity of its files. */
+export interface PinnedVersion {
+    scope: string;
+    name: string;
+    version: string;
+    integrity: string;
+}
+/** A schema the version imports from, with its manifest's version requirement. */
+export interface PublishedDependency {
+    scope: string;
+    name: string;
+    requirement: string;
 }
 /** One rule a refused publish broke; `path` points into the schema's descriptor. */
 export interface Violation {

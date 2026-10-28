@@ -3,6 +3,7 @@
 // ordinal validation, and per-company overlay merging.
 import { aliasByLocalName, substituteTypeParams, unionAliases, isInputModel, resolveAliasInline, findDecorator, hasDecorator, modelByLocalName, } from "../emit/typeMapping.js";
 import { expandReserved, EMPTY_RESERVED } from "./reserved.js";
+import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "./packages.js";
 export { expandReserved, MAX_ORDINAL } from "./reserved.js";
 export { loadProject } from "./moduleGraph.js";
 class Diagnostics {
@@ -28,7 +29,7 @@ class Diagnostics {
  * import graph is a later extension.
  */
 export function resolve(program) {
-    return resolveModules([{ moduleId: "<entry>", sourcePath: null, program, importMap: new Map() }]);
+    return resolveModules([{ moduleId: "<entry>", sourcePath: null, program, importMap: new Map(), packageName: null }]);
 }
 /**
  * Resolve a module graph (entry module first) into a single ResolvedSchema.
@@ -78,7 +79,7 @@ export function resolveModules(modules) {
     const namespace = modules.length > 0 ? namespaceByModule.get(modules[0].moduleId) : [];
     const schema = {
         namespace,
-        requiresLedger: modules.some(m => hasDirective(m.program, "requireLedger")),
+        requiresLedger: modules.some(m => m.packageName === null && hasDirective(m.program, "requireLedger")),
         symbols: byQualified,
         records,
         enums,
@@ -120,7 +121,7 @@ function registerModuleSymbols(module, namespace, byQualified, diagnostics) {
         }
         const symbol = {
             kind, localName: named.name, qualifiedName,
-            moduleId: module.moduleId, decl: named, span: named.span,
+            moduleId: module.moduleId, packageName: module.packageName, decl: named, span: named.span,
         };
         ownByLocal.set(symbol.localName, symbol);
         byQualified.set(qualifiedName, symbol);
@@ -139,7 +140,7 @@ function buildModuleScope(module, ownByLocal, diagnostics) {
 function bindImport(scope, importDecl, module, ownByLocal, diagnostics) {
     const targetModuleId = module.importMap.get(importDecl.from);
     if (targetModuleId === undefined) {
-        diagnostics.error("OS1008", `Cannot resolve import '${importDecl.from}'`, importDecl.span);
+        diagnostics.error("OS1008", describeUnresolvedImport(importDecl.from), importDecl.span);
         return;
     }
     const exports = ownByLocal.get(targetModuleId);
@@ -155,6 +156,11 @@ function bindImport(scope, importDecl, module, ownByLocal, diagnostics) {
         }
         scope.set(name, exported);
     }
+}
+function describeUnresolvedImport(specifier) {
+    if (!isPackageSpecifier(specifier))
+        return `Cannot resolve import '${specifier}'`;
+    return `Cannot resolve import '${specifier}': it is not downloaded into ${DEPENDENCIES_DIRECTORY}`;
 }
 function collectOperations(program) {
     const operations = [];
