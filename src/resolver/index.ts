@@ -15,6 +15,7 @@ import {
   resolveAliasInline, findDecorator, hasDecorator, modelByLocalName,
 } from "../emit/typeMapping.js";
 import { expandReserved, EMPTY_RESERVED, type ReservedSet } from "./reserved.js";
+import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "./packages.js";
 
 export { expandReserved, MAX_ORDINAL } from "./reserved.js";
 export type { ReservedSet } from "./reserved.js";
@@ -194,7 +195,7 @@ function bindImport(
 ): void {
   const targetModuleId = module.importMap.get(importDecl.from);
   if (targetModuleId === undefined) {
-    diagnostics.error("OS1008", `Cannot resolve import '${importDecl.from}'`, importDecl.span);
+    diagnostics.error("OS1008", describeUnresolvedImport(importDecl.from), importDecl.span);
     return;
   }
   const exports = ownByLocal.get(targetModuleId);
@@ -210,6 +211,11 @@ function bindImport(
     }
     scope.set(name, exported);
   }
+}
+
+function describeUnresolvedImport(specifier: string): string {
+  if (!isPackageSpecifier(specifier)) return `Cannot resolve import '${specifier}'`;
+  return `Cannot resolve import '${specifier}': it is not downloaded into ${DEPENDENCIES_DIRECTORY}`;
 }
 
 function collectOperations(program: Program): OperationDecl[] {
