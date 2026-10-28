@@ -71,6 +71,7 @@ export function collectSpaces(schema: ResolvedSchema): ObservedSpace[] {
 
 function collectModelSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void {
   for (const record of schema.records.values()) {
+    if (record.symbol.packageName !== null) continue;
     // Only own fields: inherited ones belong to the base's space, and are
     // reachable through inheritsFrom.
     const declared = record.fields
@@ -127,6 +128,7 @@ function collectOverlaySpaces(schema: ResolvedSchema, into: ObservedSpace[]): vo
 
 function collectEnumSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void {
   for (const symbol of schema.enums.values()) {
+    if (symbol.packageName !== null) continue;
     const decl = symbol.decl as EnumDecl;
     into.push({
       id:   enumSpaceId(symbol.qualifiedName),
@@ -153,6 +155,7 @@ function collectEnumSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void 
 
 function collectOneofSpaces(schema: ResolvedSchema, into: ObservedSpace[]): void {
   for (const symbol of schema.symbols.values()) {
+    if (symbol.packageName !== null) continue;
     if (symbol.kind === "model") {
       collectOneofsInModel(symbol, into);
       continue;

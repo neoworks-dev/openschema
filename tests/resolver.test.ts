@@ -14,7 +14,7 @@ function codes(schema: ResolvedSchema): string[] {
 
 // Build a Module without touching the filesystem; importMap wires `from` → id.
 function mod(moduleId: string, src: string, importMap: Record<string, string> = {}): Module {
-  return { moduleId, sourcePath: null, program: parse(src), importMap: new Map(Object.entries(importMap)) };
+  return { moduleId, sourcePath: null, program: parse(src), importMap: new Map(Object.entries(importMap)), packageName: null };
 }
 
 describe("symbol table", () => {

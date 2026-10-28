@@ -49,7 +49,7 @@ class Diagnostics {
  * import graph is a later extension.
  */
 export function resolve(program: Program): ResolvedSchema {
-  return resolveModules([{ moduleId: "<entry>", sourcePath: null, program, importMap: new Map() }]);
+  return resolveModules([{ moduleId: "<entry>", sourcePath: null, program, importMap: new Map(), packageName: null }]);
 }
 
 /**
@@ -108,7 +108,7 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
 
   const schema: ResolvedSchema = {
     namespace,
-    requiresLedger: modules.some(m => hasDirective(m.program, "requireLedger")),
+    requiresLedger: modules.some(m => m.packageName === null && hasDirective(m.program, "requireLedger")),
     symbols: byQualified,
     records,
     enums,
@@ -162,7 +162,7 @@ function registerModuleSymbols(
 
     const symbol: DeclSymbol = {
       kind, localName: named.name, qualifiedName,
-      moduleId: module.moduleId, decl: named, span: named.span,
+      moduleId: module.moduleId, packageName: module.packageName, decl: named, span: named.span,
     };
     ownByLocal.set(symbol.localName, symbol);
     byQualified.set(qualifiedName, symbol);

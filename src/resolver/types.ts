@@ -14,6 +14,7 @@ export interface Module {
   sourcePath: string | null;
   program:    Program;
   importMap:  Map<string, string>;    // import `from` specifier → target moduleId
+  packageName: string | null;         // "@scope/name" of a downloaded dependency; null for the project's own files
 }
 
 /** A named top-level declaration, resolved to its fully-qualified name. */
@@ -22,6 +23,7 @@ export interface DeclSymbol {
   localName:     string;          // "Person"
   qualifiedName: string;          // "schema.org.Person"
   moduleId:      string;          // the module that declared it
+  packageName:   string | null;   // the module's package; null when the project declares it
   decl:          ModelDecl | EnumDecl | TypeAlias;
   span:          Span;
 }

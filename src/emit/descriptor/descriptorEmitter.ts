@@ -25,9 +25,10 @@ export const descriptorEmitter: Emitter = {
   },
 };
 
-/** Whether the schema defines Neoworks tables, which is what makes it a collection with a descriptor. */
+/** Whether the schema defines Neoworks tables of its own, which is what makes it a collection with a descriptor. */
 export function definesNeoworksTables(schema: ResolvedSchema): boolean {
-  return [...schema.records.values()].some(record => hasDecorator(record.decorators, TABLE_DECORATOR));
+  return [...schema.records.values()].some(record =>
+    record.symbol.packageName === null && hasDecorator(record.decorators, TABLE_DECORATOR));
 }
 
 /** The descriptor text exactly as `openschema publish` uploads it: no company overlay, no private fields. */

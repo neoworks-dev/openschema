@@ -3,23 +3,40 @@
 // the project's .openschema/dependencies folder, next to its openschema.yaml.
 // Each download keeps its manifest, which names the entry file.
 
-import { dirname, join } from "path";
+import { dirname, isAbsolute, join, relative, sep } from "path";
 import { MANIFEST_FILE, PACKAGE_SPECIFIER, parseManifest } from "../registry/manifest.js";
 import type { ReadFileOrNull } from "./moduleGraph.js";
 
 export const DEPENDENCIES_DIRECTORY = join(".openschema", "dependencies");
 
-/** The entry file of a downloaded package, or null when it is not downloaded. */
-export type LocatePackage = (specifier: string) => string | null;
+export interface PackageLocator {
+  /** The entry file of a downloaded package, or null when it is not downloaded. */
+  locate(specifier: string): string | null;
+  /** The `@scope/name` a file was downloaded as, or null for the project's own files. */
+  packageOf(path: string): string | null;
+}
+
+const OUTSIDE_A_PROJECT: PackageLocator = { locate: () => null, packageOf: () => null };
 
 export function isPackageSpecifier(specifier: string): boolean {
   return PACKAGE_SPECIFIER.test(specifier);
 }
 
-export function packageLocator(entryId: string, readFileOrNull: ReadFileOrNull): LocatePackage {
+export function packageLocator(entryId: string, readFileOrNull: ReadFileOrNull): PackageLocator {
   const projectRoot = findProjectRoot(dirname(entryId), readFileOrNull);
-  if (projectRoot === null) return () => null;
-  return specifier => packageEntry(join(projectRoot, DEPENDENCIES_DIRECTORY, specifier), readFileOrNull);
+  if (projectRoot === null) return OUTSIDE_A_PROJECT;
+  const dependenciesRoot = join(projectRoot, DEPENDENCIES_DIRECTORY);
+  return {
+    locate: specifier => packageEntry(join(dependenciesRoot, specifier), readFileOrNull),
+    packageOf: path => packageContaining(dependenciesRoot, path),
+  };
+}
+
+function packageContaining(dependenciesRoot: string, path: string): string | null {
+  const inside = relative(dependenciesRoot, path);
+  if (inside.startsWith("..") || isAbsolute(inside)) return null;
+  const [scope, name] = inside.split(sep);
+  return `${scope}/${name}`;
 }
 
 /** The nearest directory at or above `startDirectory` that holds an openschema.yaml. */
