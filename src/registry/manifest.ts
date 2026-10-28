@@ -2,7 +2,7 @@
 // openschema.yaml: a published schema's identity and metadata. Publishing reads
 // nothing else, and refuses a manifest with any problem rather than guessing.
 
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, parseDocument } from "yaml";
 import { z } from "zod";
 import { parseVersionRange } from "./versionRange.js";
 
@@ -99,6 +99,13 @@ export function parseManifest(text: string): ManifestResult {
   const parsed = manifestShape.safeParse(document);
   if (parsed.success) return { manifest: parsed.data, problems: [] };
   return { manifest: null, problems: parsed.error.issues.map(describeIssue) };
+}
+
+/** The manifest text with `@scope/name` required at `requirement`, keeping the rest of the file and its comments. */
+export function withDependency(manifestText: string, packageName: string, requirement: string): string {
+  const document = parseDocument(manifestText);
+  document.setIn(["dependencies", packageName], requirement);
+  return document.toString();
 }
 
 function describeIssue(issue: z.core.$ZodIssue): string {

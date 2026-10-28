@@ -205,6 +205,31 @@ are already there.
 | `--registry <url>` | registry API base (default: production) |
 | `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) |
 
+## `add <schema>`
+
+Makes the project in `--dir` depend on a published schema, so its files can
+`import { GeoPoint } from "@neoworks/shared"`. `<schema>` is `@scope/name` for
+`^` and the latest version, or `@scope/name@<requirement>` such as
+`@neoworks/shared@~1.2`. `add` picks one version of every schema in the tree,
+downloads them into `.openschema/dependencies/@scope/name/`, pins them in
+`openschema.lock`, and writes the requirement into `openschema.yaml`. When
+anything fails, neither file changes.
+
+## `install`
+
+Downloads what `openschema.yaml` requires, keeping each version
+`openschema.lock` pins while the requirements still allow it, and refusing a
+download whose files differ from the pinned integrity. Run it after a fresh
+checkout: `.openschema/` is a download folder and does not belong in git.
+
+`add` and `install` take the same flags.
+
+| Flag | Meaning | Default |
+|---|---|---|
+| `--dir <dir>` | the project, with its `openschema.yaml` | `.` |
+| `--registry <url>` | registry API base | production |
+| `--base-port <port>` | port of every service on the base domain (env: `OPENSCHEMA_BASE_PORT`) | |
+
 ## `init [dir]`
 
 Writes a starter `openschema.yaml` and schema for a new collection.

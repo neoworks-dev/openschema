@@ -98,6 +98,55 @@ export async function fetchSchema(registry: string, ref: SchemaRef): Promise<Res
   return { scope: ref.scope, name: ref.name, version, files };
 }
 
+/** A schema's current title and description, and every version it has published. */
+export interface SchemaDetail {
+  title: string;
+  description: string;
+  versions: string[];
+}
+
+export async function fetchSchemaDetail(registry: string, scope: string, name: string): Promise<SchemaDetail> {
+  const detail = await getJson<{ schema: { title: string; description: string }; versions: { version: string }[] | null }>(
+    `${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}`,
+    `schema @${scope}/${name} not found in the registry`,
+  );
+  let versions: string[] = [];
+  if (detail.versions !== null) versions = detail.versions.map(entry => entry.version);
+  return { title: detail.schema.title, description: detail.schema.description, versions };
+}
+
+/** A published version as dependencies need it. `entry` is empty for versions published before entries were kept. */
+export interface VersionDetail {
+  entry: string;
+  files: RegistryFile[];
+  dependencies: PublishedDependency[];
+}
+
+/** A version's files in ordinal order; `download` counts the read as a download. */
+export async function fetchVersionDetail(
+  registry: string,
+  scope: string,
+  name: string,
+  version: string,
+  download: boolean,
+): Promise<VersionDetail> {
+  let url = `${registry}/api/v1/schemas/${encodeURIComponent(scope)}/${encodeURIComponent(name)}/versions/${encodeURIComponent(version)}`;
+  if (download) url += "?download=1";
+  const detail = await getJson<{ entry?: string; files: RegistryFile[]; dependencies?: PublishedDependency[] }>(
+    url,
+    `version ${version} of @${scope}/${name} not found`,
+  );
+  // The registry leaves out an empty entry and an empty dependency list.
+  const published: VersionDetail = {
+    entry: "",
+    files: [...detail.files].sort((left, right) => left.ordinal - right.ordinal),
+    dependencies: [],
+  };
+  if (detail.entry !== undefined) published.entry = detail.entry;
+  if (detail.dependencies !== undefined) published.dependencies = detail.dependencies;
+  return published;
+}
+
 /** Every published version of a schema, as the registry lists them. */
 export async function listVersions(registry: string, scope: string, name: string): Promise<string[]> {
   const detail = await getJson<{ versions: { version: string }[] | null }>(

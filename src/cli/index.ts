@@ -30,12 +30,13 @@ import { findCollectionIdentity, readCollectionIdentity, readManifestVersion } f
 import { CODEC_MODULE_OPTION, COLLECTION_OPTION, COLLECTION_VERSION_OPTION, VERSIONS_MODULE_OPTION } from "../emit/collection/collectionEmitter.js";
 import { CURRENT_VERSION_OPTION, ENTRY_OPTION, PROJECT_DIRECTORY_OPTION, VERSIONS_CODEC_MODULE_OPTION } from "../emit/versions/versionsEmitter.js";
 import { initProject, type InitOptions } from "./init.js";
+import { addDependency, installProject } from "./dependencies.js";
 import { preparePublish } from "../registry/preparePublish.js";
 import type { ResolvedSchema } from "../resolver/types.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, isSuperset, loadLedger, serializeLedger } from "../ledger/io.js";
-import type { OrdinalLedger } from "../ledger/types.js";
+import type { LockedDependency, OrdinalLedger } from "../ledger/types.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import type { Change, Severity } from "../engine/types.js";
@@ -396,35 +397,40 @@ function endpointsOrExit(opts: EndpointOptions): Endpoints {
   }
 }
 
-interface AddOptions extends EndpointOptions {
-  out: string;
+interface DependencyOptions extends EndpointOptions {
+  dir: string;
   registry?: string;
 }
 
-async function cmdAdd(ref: string, opts: AddOptions): Promise<void> {
+async function cmdAdd(reference: string, opts: DependencyOptions): Promise<void> {
   const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
-
-  let resolved;
   try {
-    resolved = await fetchSchema(registry, parseSchemaRef(ref));
-  } catch (e) {
-    console.error(chalk.red(`error: ${e instanceof Error ? e.message : String(e)}`));
+    const added = await addDependency(reference, opts.dir, registry, GENERATOR);
+    console.log(chalk.green(`✓ ${added.packageName} ${added.requirement}`));
+    printPinned(added.pinned);
+  } catch (error) {
+    console.error(chalk.red(`error: ${describeError(error)}`));
+    console.error(chalk.dim("  openschema.yaml and openschema.lock were not changed"));
     process.exit(1);
   }
+}
 
-  // Default to a folder named after the schema so multiple `add`s don't collide.
-  const outDir = opts.out === "." ? resolved.name : opts.out;
-  mkdirSync(outDir, { recursive: true });
-  for (const file of resolved.files) {
-    const fullPath = join(outDir, file.path);
-    writeFileSync(fullPath, file.contents, "utf8");
-    console.log(chalk.green(`✓ ${fullPath}`));
+async function cmdInstall(opts: DependencyOptions): Promise<void> {
+  const registry = resolveRegistry(opts.registry, endpointsOrExit(opts));
+  try {
+    const pinned = await installProject(opts.dir, registry, GENERATOR);
+    if (Object.keys(pinned).length === 0) console.log(chalk.green("✓ no dependencies"));
+    printPinned(pinned);
+  } catch (error) {
+    console.error(chalk.red(`error: ${describeError(error)}`));
+    process.exit(1);
   }
-  console.log(
-    chalk.dim(
-      `\n  added @${resolved.scope}/${resolved.name}@${resolved.version} (${resolved.files.length} file${resolved.files.length === 1 ? "" : "s"})`,
-    ),
-  );
+}
+
+function printPinned(pinned: Record<string, LockedDependency>): void {
+  for (const [packageName, locked] of Object.entries(pinned)) {
+    console.log(chalk.dim(`  ${packageName}@${locked.version}`));
+  }
 }
 
 // ── login / publish ───────────────────────────────────────────────────────────
@@ -1133,11 +1139,19 @@ program
 
 program
   .command("add <schema>")
-  .description("Download a published schema from the registry (e.g. @neoworks/commerce)")
-  .option("-o, --out <dir>", "output directory (defaults to the schema name)", ".")
+  .description("Depend on a published schema: @scope/name, or @scope/name@^1.2 for a requirement (default: ^latest)")
+  .option("--dir <dir>", "the project, with its openschema.yaml", ".")
   .option("--registry <url>", "registry API base (default: production)")
   .option("--base-port <port>", BASE_PORT_HELP)
   .action((schema, opts) => cmdAdd(schema, opts));
+
+program
+  .command("install")
+  .description("Download the dependencies openschema.yaml requires, at the versions openschema.lock pins")
+  .option("--dir <dir>", "the project, with its openschema.yaml", ".")
+  .option("--registry <url>", "registry API base (default: production)")
+  .option("--base-port <port>", BASE_PORT_HELP)
+  .action((opts) => cmdInstall(opts));
 
 program
   .command("versions")
