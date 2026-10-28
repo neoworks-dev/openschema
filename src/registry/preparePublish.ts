@@ -20,7 +20,7 @@ import { definesNeoworksTables, publishedDescriptor } from "../emit/descriptor/d
 import { DescriptorError } from "../emit/descriptor/errors.js";
 import { CodecUnsupportedError } from "../emit/codec/errors.js";
 import { MANIFEST_FILE, parseManifest, type Manifest } from "./manifest.js";
-import type { PublishPayload, PublishedDependency } from "./client.js";
+import type { PinnedVersion, PublishPayload, PublishedDependency } from "./client.js";
 
 export type PreparedPublish =
   | { payload: PublishPayload; problems: [] }
@@ -63,6 +63,7 @@ function buildPayload(directory: string, generator: string): PublishPayload {
     entry: manifest.entry,
     files: collectSchemaFiles(directory),
     dependencies: publishedDependencies(manifest),
+    pinned: pinnedVersions(ledger),
   };
   const descriptor = describeTables(schema);
   if (descriptor !== null) payload.descriptor = descriptor;
@@ -194,6 +195,14 @@ function publishedDependencies(manifest: Manifest): PublishedDependency[] {
   return Object.entries(manifest.dependencies).map(([specifier, requirement]) => {
     const [scope, name] = specifier.slice(1).split("/");
     return { scope, name, requirement };
+  });
+}
+
+/** The whole tree as openschema.lock pins it, so the registry can show the version as it was built. */
+function pinnedVersions(ledger: OrdinalLedger): PinnedVersion[] {
+  return Object.entries(ledger.dependencies).map(([packageName, locked]) => {
+    const [scope, name] = packageName.slice(1).split("/");
+    return { scope, name, version: locked.version, integrity: locked.integrity };
   });
 }
 

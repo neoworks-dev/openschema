@@ -8,7 +8,7 @@ afterEach(() => {
 
 const payload: PublishPayload = {
   scope: "example", name: "songs", version: "0.2.0", title: "Songs", description: "Songs",
-  entry: "songs.schema", files: [{ path: "songs.schema", contents: "namespace example.songs" }], dependencies: [],
+  entry: "songs.schema", files: [{ path: "songs.schema", contents: "namespace example.songs" }], dependencies: [], pinned: [],
 };
 
 function stubRegistry(status: number, body: unknown): void {

@@ -171,8 +171,18 @@ export interface PublishPayload {
   entry: string;
   files: { path: string; contents: string }[];
   dependencies: PublishedDependency[];
+  /** Every schema in the dependency tree at the version openschema.lock pins. */
+  pinned: PinnedVersion[];
   /** The descriptor target's output, when the schema defines Neoworks nodes. */
   descriptor?: string;
+}
+
+/** A schema the version was published against, at its exact version and with the integrity of its files. */
+export interface PinnedVersion {
+  scope: string;
+  name: string;
+  version: string;
+  integrity: string;
 }
 
 /** A schema the version imports from, with its manifest's version requirement. */

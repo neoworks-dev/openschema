@@ -54,6 +54,7 @@ describe("preparePublish with dependencies", () => {
     const prepared = preparePublish(project({ dependencies: LISTED, downloaded: "1.4.0", pinned: "1.4.0" }), "test");
     expect(prepared.problems).toEqual([]);
     expect(prepared.payload!.dependencies).toEqual([{ scope: "neoworks", name: "shared", requirement: "^1.2.0" }]);
+    expect(prepared.payload!.pinned).toEqual([{ scope: "neoworks", name: "shared", version: "1.4.0", integrity: INTEGRITY }]);
     expect(prepared.payload!.files.map(file => file.path)).toEqual(["places.schema"]);
   });
 
