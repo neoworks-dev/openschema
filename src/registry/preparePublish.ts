@@ -8,7 +8,11 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadProject, resolveModules } from "../resolver/index.js";
 import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
-import type { ResolvedSchema } from "../resolver/types.js";
+import type { Module, ResolvedSchema } from "../resolver/types.js";
+import type { ImportDecl } from "../parser/ast.js";
+import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "../resolver/packages.js";
+import type { LockedDependency, OrdinalLedger } from "../ledger/types.js";
+import { parseVersion, parseVersionRange, rangeIncludes } from "./versionRange.js";
 import { collectSpaces } from "../ledger/spaces.js";
 import { reconcileLedger } from "../ledger/merge.js";
 import { defaultLockPath, loadLedger } from "../ledger/io.js";
@@ -40,8 +44,12 @@ export function preparePublish(directory: string, generator: string): PreparedPu
 function buildPayload(directory: string, generator: string): PublishPayload {
   const manifest = readManifest(directory);
   const entryPath = join(directory, manifest.entry);
-  const schema = resolveEntry(entryPath);
-  checkLedger(entryPath, schema, generator, manifest.version);
+  const modules = loadEntry(entryPath);
+  const requirements = { ...manifest.dependencies };
+  checkImportsAreListed(modules, requirements);
+  const schema = resolveEntry(modules);
+  const ledger = checkLedger(entryPath, schema, generator, manifest.version);
+  checkDependenciesArePinned(directory, requirements, ledger);
 
   const payload: PublishPayload = {
     scope: manifest.scope,
@@ -79,13 +87,16 @@ const readFileOrNull: ReadFileOrNull = (path: string) => {
   return readFileSync(path, "utf8");
 };
 
-function resolveEntry(entryPath: string): ResolvedSchema {
-  let schema: ResolvedSchema;
+function loadEntry(entryPath: string): Module[] {
   try {
-    schema = resolveModules(loadProject(entryPath, readFileOrNull));
+    return loadProject(entryPath, readFileOrNull);
   } catch (error) {
     throw new PublishRefused([`${entryPath}: ${(error as Error).message}`]);
   }
+}
+
+function resolveEntry(modules: Module[]): ResolvedSchema {
+  const schema = resolveModules(modules);
   const errors = schema.diagnostics.filter(diagnostic => diagnostic.severity === "error");
   if (errors.length > 0) {
     throw new PublishRefused(errors.map(diagnostic => `${diagnostic.code} ${diagnostic.message}`));
@@ -94,9 +105,8 @@ function resolveEntry(entryPath: string): ResolvedSchema {
 }
 
 /** The lockfile must exist and already record this schema: publishing never writes it. */
-function checkLedger(entryPath: string, schema: ResolvedSchema, generator: string, version: string): void {
-  const lockPath = defaultLockPath(entryPath);
-  const loaded = loadLedger(lockPath);
+function checkLedger(entryPath: string, schema: ResolvedSchema, generator: string, version: string): OrdinalLedger {
+  const loaded = loadLedger(defaultLockPath(entryPath));
   if (loaded.integrityError !== null) throw new PublishRefused([`OS2009 ${loaded.integrityError}`]);
 
   const result = reconcileLedger(collectSpaces(schema), loaded.ledger, {
@@ -108,9 +118,58 @@ function checkLedger(entryPath: string, schema: ResolvedSchema, generator: strin
     version,
   });
   const errors = result.diagnostics.filter(diagnostic => diagnostic.severity === "error");
-  if (errors.length > 0) {
+  if (errors.length > 0 || loaded.ledger === null) {
     throw new PublishRefused(errors.map(diagnostic => `${diagnostic.code} ${diagnostic.message}`));
   }
+  return loaded.ledger;
+}
+
+// ── Dependencies ─────────────────────────────────────────────────────────────
+// Whoever depends on this version resolves its imports from its manifest, so
+// every package the project's own files import must be listed there, and what
+// was checked here must be what the lock pins.
+
+function checkImportsAreListed(modules: Module[], requirements: Record<string, string>): void {
+  const problems = modules
+    .filter(module => module.packageName === null)
+    .flatMap(module => unlistedImports(module, requirements));
+  if (problems.length > 0) throw new PublishRefused(problems);
+}
+
+function unlistedImports(module: Module, requirements: Record<string, string>): string[] {
+  return module.program.declarations
+    .filter(declaration => declaration.kind === "import" && isPackageSpecifier(declaration.from))
+    .map(declaration => (declaration as ImportDecl).from)
+    .filter(specifier => !(specifier in requirements))
+    .map(specifier =>
+      `${module.sourcePath} imports ${specifier}, which ${MANIFEST_FILE} does not list; run openschema add ${specifier}`);
+}
+
+function checkDependenciesArePinned(directory: string, requirements: Record<string, string>, ledger: OrdinalLedger): void {
+  const problems = Object.entries(requirements)
+    .map(([packageName, requirement]) => pinningProblem(directory, packageName, requirement, ledger.dependencies[packageName]))
+    .filter((problem): problem is string => problem !== null);
+  if (problems.length > 0) throw new PublishRefused(problems);
+}
+
+function pinningProblem(directory: string, packageName: string, requirement: string, locked: LockedDependency | undefined): string | null {
+  if (locked === undefined) return `${packageName} is not pinned in openschema.lock; run openschema install`;
+  if (!rangeIncludes(parseVersionRange(requirement)!, parseVersion(locked.version)!)) {
+    return `openschema.lock pins ${packageName}@${locked.version}, outside ${requirement}; run openschema install`;
+  }
+  const downloaded = downloadedVersion(join(directory, DEPENDENCIES_DIRECTORY, packageName));
+  if (downloaded !== locked.version) {
+    return `the downloaded ${packageName} is not the ${locked.version} openschema.lock pins; run openschema install`;
+  }
+  return null;
+}
+
+function downloadedVersion(packageDirectory: string): string | null {
+  const manifestText = readFileOrNull(join(packageDirectory, MANIFEST_FILE));
+  if (manifestText === null) return null;
+  const parsed = parseManifest(manifestText);
+  if (parsed.manifest === null) return null;
+  return parsed.manifest.version;
 }
 
 /** The descriptor, exactly as the descriptor target writes it, when the schema defines Neoworks tables. */

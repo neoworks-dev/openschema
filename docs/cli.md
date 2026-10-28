@@ -176,6 +176,9 @@ Unknown keys are an error. Before anything is uploaded, `publish` checks that:
 - the schema compiles without errors,
 - `openschema.lock` exists and already records the schema (`OS2011`, `OS2008`); publish
   never writes the ledger,
+- every `@scope/name` the schema's own files import is listed under `dependencies`,
+  and `openschema.lock` pins each dependency at a version its requirement allows,
+  which is also the version downloaded (`openschema add` and `install` keep this so),
 - for a schema with `@neoworks.table` models, the descriptor builds. It is uploaded
   with the version (see [Descriptor target and Neoworks tables](./descriptor.md)).
 
