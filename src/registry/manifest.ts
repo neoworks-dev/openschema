@@ -43,18 +43,11 @@ function filledText(maxCharacters: number) {
 
 const NAME_RULE = "must be lowercase letters, digits, '.', '_' or '-', starting with a letter or digit";
 
-const dependencyName = z.string().regex(PACKAGE_SPECIFIER);
-
 function describeDependenciesError(issue: { code: string }): string | undefined {
   if (issue.code === "invalid_key") return "must be a schema name such as @scope/name";
   if (issue.code === "invalid_type") return "must be a mapping of @scope/name to a version range";
   return undefined;
 }
-
-// YAML reads an unquoted 1.2 as a number, so a range must be a string.
-const dependencyRange = z
-  .string({ error: "must be a quoted version range such as \"^1.2.0\"" })
-  .refine(range => parseVersionRange(range) !== null, "must be a version range such as ^1.2.0");
 
 const manifestShape = z.strictObject({
   scope:       text().regex(REGISTRY_NAME, NAME_RULE),
@@ -67,7 +60,13 @@ const manifestShape = z.strictObject({
   entry:       text().regex(SCHEMA_FILE, "must name a .schema file in the manifest's directory"),
   license:     filledText(MAX_TITLE).optional(),
   repository:  z.url({ protocol: /^https?$/, error: "must be an http(s) URL" }).optional(),
-  dependencies: z.record(dependencyName, dependencyRange, { error: describeDependenciesError }).optional(),
+  dependencies: z.record(
+    z.string().regex(PACKAGE_SPECIFIER),
+    // YAML reads an unquoted 1.2 as a number, so a range must be a string.
+    z.string({ error: "must be a quoted version range such as \"^1.2.0\"" })
+      .refine(range => parseVersionRange(range) !== null, "must be a version range such as ^1.2.0"),
+    { error: describeDependenciesError },
+  ).optional(),
 }, { error: describeObjectError })
   .refine(manifest => !dependsOnItself(manifest), {
     path: ["dependencies"],

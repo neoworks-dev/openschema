@@ -19,8 +19,7 @@ export function isPackageSpecifier(specifier: string): boolean {
 export function packageLocator(entryId: string, readFileOrNull: ReadFileOrNull): LocatePackage {
   const projectRoot = findProjectRoot(dirname(entryId), readFileOrNull);
   if (projectRoot === null) return () => null;
-  const dependenciesRoot = join(projectRoot, DEPENDENCIES_DIRECTORY);
-  return specifier => packageEntry(join(dependenciesRoot, specifier), readFileOrNull);
+  return specifier => packageEntry(join(projectRoot, DEPENDENCIES_DIRECTORY, specifier), readFileOrNull);
 }
 
 /** The nearest directory at or above `startDirectory` that holds an openschema.yaml. */

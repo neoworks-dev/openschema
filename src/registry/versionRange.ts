@@ -19,8 +19,6 @@ interface PartialVersion {
 
 type Operator = "^" | "~" | "=" | ">" | ">=" | "<" | "<=";
 
-const COMPARATOR = /^(\^|~|=|>=|>|<=|<)?\s*([0-9.*]+)$/;
-const VERSION_PART = /^(0|[1-9]\d*)$/;
 const UNBOUNDED: VersionRange = { lowest: null, below: null };
 
 /** The range a requirement allows, or null when it is not one. */
@@ -49,7 +47,7 @@ export function compareVersions(left: Version, right: Version): number {
 
 function parseComparator(text: string): VersionRange | null {
   if (text === "*") return UNBOUNDED;
-  const match = COMPARATOR.exec(text);
+  const match = /^(\^|~|=|>=|>|<=|<)?\s*([0-9.*]+)$/.exec(text);
   if (match === null) return null;
   const operator = match[1] as Operator | undefined;
   const versionText = match[2];
@@ -69,7 +67,7 @@ function parseComparator(text: string): VersionRange | null {
 function parsePartialVersion(text: string): PartialVersion | null {
   const parts = text.split(".");
   if (parts.length > 3) return null;
-  if (!parts.every(part => VERSION_PART.test(part))) return null;
+  if (!parts.every(part => /^(0|[1-9]\d*)$/.test(part))) return null;
   const numbers = parts.map(Number);
   return { major: numbers[0], minor: partAt(numbers, 1), patch: partAt(numbers, 2) };
 }
