@@ -139,6 +139,32 @@ is recomputed on every write:
 The two checks cover different failures. `check` compares two versions pairwise and
 cannot see an ordinal retired several versions ago; `lock --check` can.
 
+## `migrate <old> <new>` / `migrate <schema> --numbered <dir>`
+
+Generate a migration. With two schemas it writes `migration.<ext>` into `--out`;
+with `--numbered` it writes the next numbered file of a migrations directory,
+migrating from the snapshot the previous run left there. See
+[Migrations](./migrations.md).
+
+| Flag | Meaning | Default |
+|------|---------|---------|
+| `-t`, `--target <target>` | `migration-sql`, `migration-sqlite` or `migration-surreal` (not needed for `--baseline`) | — |
+| `-o`, `--out <dir>` | output directory (two-schema form) | `.` |
+| `--company <id>` | include this company's overlay fields | none |
+| `--include-private` | include the schema's own `private` fields | off |
+| `--numbered <dir>` | write `<dir>/NNN_<name>.<ext>`, migrating from `<dir>/openschema.snapshot.json` | — |
+| `--name <name>` | the name part of the numbered file (required to write one) | — |
+| `--baseline` | record the current schema as the snapshot; write no migration | off |
+| `--allow-empty` | write a numbered file even without a schema change | off |
+| `--check` | exit 1 when the schema changed since the snapshot | off |
+
+```bash
+openschema migrate v1.schema v2.schema -t migration-sql -o ./out
+openschema migrate schema/main.schema -t migration-sqlite --numbered db/migrations --name add_clips
+openschema migrate schema/main.schema --numbered db/migrations --baseline
+openschema migrate schema/main.schema -t migration-sqlite --numbered db/migrations --check
+```
+
 ## `publish [dir]`
 
 Publishes the schema described by `[dir]/openschema.yaml` (default: the current

@@ -9,6 +9,8 @@
 //   diff   <old> <new>            Show all changes between two schema files
 //   check  <old> <new>            Assert compatibility under a given mode (CI-friendly)
 //   lock   <schema>               Ordinal-ledger CI gate
+//   migrate <old> <new>           Migration between two schema versions
+//   migrate <schema> --numbered   The next numbered migration file of a directory
 
 import { Command, Option } from "commander";
 import chalk from "chalk";
@@ -20,8 +22,12 @@ import { diff as engineDiff } from "../engine/index.js";
 import { resolveModules, loadProject } from "../resolver/index.js";
 import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
-import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
-import { buildMigrationPlan } from "../engine/migration.js";
+import { getMigrationEmitter, MIGRATION_TARGETS, type MigrationEmitter } from "../emit/migration/index.js";
+import { buildMigrationPlan, type MigrationPlan } from "../engine/migration.js";
+import {
+  SNAPSHOT_FILE, emptyMigration, emptySchema, loadWithSnapshot, nextMigrationFileName, numberedFiles,
+  readSnapshot, resolveSnapshot, snapshotPathIn, writeSnapshot, type SchemaSnapshot,
+} from "./numberedMigrations.js";
 import { IncompatibleSchemaError, PublishRefusedError, describeViolations, fetchSchema, listVersions, parseSchemaRef, publish, resolveRegistry, type PublishPayload } from "../registry/client.js";
 import { snapshotVersions, writeVersionSnapshot } from "../registry/versionSnapshots.js";
 import { getAccessToken, login } from "../registry/auth.js";
@@ -544,21 +550,47 @@ function cmdInit(dir: string, opts: InitOptions): void {
 // ── migrate ───────────────────────────────────────────────────────────────────
 
 interface MigrateOptions {
-  target: string;
+  target?: string;
   out: string;
   company?: string;
   includePrivate?: boolean;
+  numbered?: string;
+  name?: string;
+  baseline?: boolean;
+  allowEmpty?: boolean;
+  check?: boolean;
+}
+
+/** `migrate <old> <new>`, or `migrate <schema> --numbered <dir>`. */
+function cmdMigrateEntry(firstPath: string, secondPath: string | undefined, opts: MigrateOptions): void {
+  if (opts.numbered !== undefined) {
+    if (secondPath !== undefined) exitWithError("with --numbered, pass only the schema; the snapshot is the old version");
+    cmdMigrateNumbered(firstPath, opts.numbered, opts);
+    return;
+  }
+  if (opts.name !== undefined || opts.baseline === true || opts.allowEmpty === true || opts.check === true) {
+    exitWithError("--name, --baseline, --allow-empty and --check need --numbered <dir>");
+  }
+  if (secondPath === undefined) exitWithError("migrate needs <old> <new>, or <schema> --numbered <dir>");
+  cmdMigrate(firstPath, secondPath, opts);
+}
+
+function exitWithError(message: string): never {
+  console.error(chalk.red(`error: ${message}`));
+  process.exit(1);
+}
+
+function migrationEmitterOrExit(target: string | undefined): MigrationEmitter {
+  if (target === undefined) exitWithError(`--target is required (${MIGRATION_TARGETS.join(", ")})`);
+  const emitter = getMigrationEmitter(target);
+  if (emitter === null) exitWithError(`no migration emitter for target '${target}'`);
+  return emitter;
 }
 
 function cmdMigrate(oldPath: string, newPath: string, opts: MigrateOptions): void {
   const oldSchema = resolveProject(oldPath);
   const newSchema = resolveProject(newPath);
-
-  const emitter = getMigrationEmitter(opts.target);
-  if (emitter === null) {
-    console.error(chalk.red(`error: no migration emitter for target '${opts.target}'`));
-    process.exit(1);
-  }
+  const emitter = migrationEmitterOrExit(opts.target);
 
   const plan = buildMigrationPlan(oldSchema, newSchema);
   if (plan.ops.length === 0) {
@@ -580,8 +612,120 @@ function cmdMigrate(oldPath: string, newPath: string, opts: MigrateOptions): voi
     writeFileSync(fullPath, file.contents, "utf8");
     console.log(chalk.green(`✓ ${fullPath} (${plan.ops.length} ops)`));
   }
+  reportPlanWarnings(plan);
+}
+
+function reportPlanWarnings(plan: MigrationPlan): void {
   if (plan.hasDestructive) console.log(chalk.yellow("⚠ contains DESTRUCTIVE operations — review before running"));
   if (plan.hasManualSteps) console.log(chalk.yellow("⚠ contains TODO/LOSSY steps that need manual completion"));
+}
+
+// ── migrate --numbered ────────────────────────────────────────────────────────
+
+function cmdMigrateNumbered(schemaPath: string, directory: string, opts: MigrateOptions): void {
+  const { schema: newSchema, snapshot } = resolveProjectWithSnapshot(schemaPath);
+  const snapshotPath = snapshotPathIn(directory);
+
+  if (opts.baseline === true) {
+    writeBaseline(snapshotPath, snapshot);
+    return;
+  }
+
+  const emitter = migrationEmitterOrExit(opts.target);
+  const oldSchema = previousSchema(directory, snapshotPath, schemaPath);
+  const plan = buildMigrationPlan(oldSchema, newSchema);
+
+  if (opts.check === true) {
+    checkMigrated(plan, snapshotPath);
+    return;
+  }
+  if (plan.ops.length === 0 && opts.allowEmpty !== true) {
+    console.log(chalk.green("✓ no schema change since the last migration — nothing written"));
+    return;
+  }
+  if (opts.name === undefined) exitWithError("--name <name> is required to write a migration");
+
+  const fileName = nextMigrationName(directory, opts.name, emitter.fileExtension);
+  const contents = numberedMigrationContents(fileName, emitter, { oldSchema, newSchema, plan, opts });
+  mkdirSync(directory, { recursive: true });
+  // "wx" refuses to overwrite: an applied migration must never change.
+  writeFileSync(join(directory, fileName), contents, { encoding: "utf8", flag: "wx" });
+  writeSnapshot(snapshotPath, snapshot);
+  console.log(chalk.green(`✓ ${join(directory, fileName)} (${plan.ops.length} ops)`));
+  reportPlanWarnings(plan);
+}
+
+function resolveProjectWithSnapshot(schemaPath: string): { schema: ResolvedSchema; snapshot: SchemaSnapshot } {
+  readFile(schemaPath);
+  let loaded;
+  try {
+    loaded = loadWithSnapshot(schemaPath, readFileOrNull);
+  } catch (e) {
+    reportFrontEndError(e);
+    process.exit(1);
+  }
+  const schema = resolveModules(loaded.modules);
+  printDiagnostics(schema.diagnostics);
+  if (schema.hasErrors) process.exit(1);
+  return { schema, snapshot: loaded.snapshot };
+}
+
+function writeBaseline(snapshotPath: string, snapshot: SchemaSnapshot): void {
+  if (existsSync(snapshotPath)) {
+    exitWithError(`${snapshotPath} already exists; delete it first to re-baseline`);
+  }
+  mkdirSync(dirname(snapshotPath), { recursive: true });
+  writeSnapshot(snapshotPath, snapshot);
+  console.log(chalk.green(`✓ ${snapshotPath} — the current schema is the baseline; no migration written`));
+}
+
+// Without a snapshot, an empty directory means a new project (migrate from
+// nothing); existing migrations mean the history predates OpenSchema.
+function previousSchema(directory: string, snapshotPath: string, schemaPath: string): ResolvedSchema {
+  if (existsSync(snapshotPath)) {
+    try {
+      return resolveSnapshot(readSnapshot(snapshotPath), schemaPath);
+    } catch (e) {
+      exitWithError(`${snapshotPath}: ${(e as Error).message}`);
+    }
+  }
+  if (numberedFiles(directory).length > 0) {
+    exitWithError(`${directory} has migrations but no ${SNAPSHOT_FILE}; run with --baseline once to adopt it`);
+  }
+  return emptySchema();
+}
+
+function checkMigrated(plan: MigrationPlan, snapshotPath: string): void {
+  if (plan.ops.length === 0) {
+    console.log(chalk.green(`✓ the schema matches ${snapshotPath}`));
+    return;
+  }
+  console.error(chalk.red(`✗ the schema has ${plan.ops.length} change(s) without a migration; run migrate --numbered --name <name>`));
+  process.exit(1);
+}
+
+function nextMigrationName(directory: string, name: string, extension: string): string {
+  try {
+    return nextMigrationFileName(numberedFiles(directory), name, extension);
+  } catch (e) {
+    exitWithError((e as Error).message);
+  }
+}
+
+function numberedMigrationContents(
+  fileName: string,
+  emitter: MigrationEmitter,
+  input: { oldSchema: ResolvedSchema; newSchema: ResolvedSchema; plan: MigrationPlan; opts: MigrateOptions },
+): string {
+  if (input.plan.ops.length === 0) return emptyMigration(fileName);
+  const files = emitter.emit({
+    oldSchema: input.oldSchema,
+    newSchema: input.newSchema,
+    plan: input.plan,
+    company: input.opts.company ?? null,
+    includePrivate: input.opts.includePrivate === true,
+  });
+  return files[0].contents;
 }
 
 function reportFrontEndError(e: unknown): void {
@@ -1142,17 +1286,33 @@ program
   .action((schema, opts) => cmdLock(schema, opts));
 
 program
-  .command("migrate <old> <new>")
-  .description("Generate a migration script between two schema versions")
+  .command("migrate <old> [new]")
+  .description("Generate a migration between two schema versions, or the next numbered migration file (--numbered)")
   .addOption(
-    new Option("-t, --target <target>", "migration target")
-      .choices(MIGRATION_TARGETS)
-      .makeOptionMandatory(),
+    new Option("-t, --target <target>", "migration target (required unless --baseline)")
+      .choices(MIGRATION_TARGETS),
   )
   .option("-o, --out <dir>", "output directory", ".")
   .option("--company <id>", "include this company's overlay fields")
   .option("--include-private", "include base-record private fields")
-  .action((oldPath, newPath, opts) => cmdMigrate(oldPath, newPath, opts));
+  .option("--numbered <dir>", `write the next numbered file (NNN_<name>.<ext>) into <dir>, migrating from <dir>/${SNAPSHOT_FILE}`)
+  .option("--name <name>", "with --numbered: the name part of the file")
+  .option("--baseline", "with --numbered: record the current schema as the snapshot, write no migration")
+  .option("--allow-empty", "with --numbered: write a numbered file even when the schema did not change")
+  .option("--check", "with --numbered: exit 1 if the schema changed since the snapshot (CI)")
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Examples:",
+      "  openschema migrate v1.schema v2.schema -t migration-sql -o ./out",
+      "  openschema migrate schema/main.schema -t migration-sqlite --numbered db/migrations --name add_clips",
+      "  openschema migrate schema/main.schema --numbered db/migrations --baseline",
+      "  openschema migrate schema/main.schema -t migration-sqlite --numbered db/migrations --check",
+      "",
+    ].join("\n"),
+  )
+  .action((firstPath, secondPath, opts) => cmdMigrateEntry(firstPath, secondPath, opts));
 
 // ── add ─────────────────────────────────────────────────────────────────────
 

@@ -12,6 +12,37 @@ openschema migrate v1.schema v2.schema --target migration-sqlite   --out ./migra
 openschema migrate v1.schema v2.schema --target migration-surreal  --out ./migrations
 ```
 
+## Numbered migration files
+
+Many projects ship migrations as an append-only sequence of numbered files
+(`001_init.sql`, `002_….sql`, …) that every install replays in order.
+`--numbered <dir>` writes the next file of such a directory, so only the current
+schema is passed:
+
+```bash
+openschema migrate schema/main.schema -t migration-sqlite --numbered db/migrations --name add_clips
+# → db/migrations/038_add_clips.sql
+```
+
+- The old schema is `<dir>/openschema.snapshot.json`, written on every
+  successful run: the source of every file the schema was loaded from (imports
+  and dependencies included), keyed relative to the entry file's directory. It
+  resolves exactly as the schema did, whatever has changed on disk since. Commit
+  it with the migrations.
+- The number continues the highest numbered file in the directory, hand-written
+  ones included, and keeps its zero padding (`0012_…` → `0013_…`; `001_` in an
+  empty directory). `--name` is turned into lower-case words joined by `_`.
+- An existing file is never touched, and the snapshot is updated only after the
+  new file is written.
+- No schema change writes nothing, unless `--allow-empty`: then the file is a
+  comment stub for a hand-written data migration.
+- A directory without a snapshot but with no migrations either starts from an
+  empty schema, so the first file creates every table. One that already has
+  migrations is refused: run `--baseline` once to record the current schema as
+  the snapshot without writing a migration (to adopt OpenSchema for a project
+  with an existing history).
+- `--check` (CI) exits 1 when the schema has changes no migration covers yet.
+
 ## What is generated automatically
 
 The planner derives a platform-neutral list of operations and each backend renders
