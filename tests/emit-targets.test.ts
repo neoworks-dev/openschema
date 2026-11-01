@@ -560,3 +560,24 @@ describe("zod emitter", () => {
     expect(out).not.toContain("PageSchema");
   });
 });
+
+describe("ts: names the schema may declare", () => {
+  it("renders maps without the built-in Record, so a model named Record cannot shadow it", () => {
+    const out = emit("ts", "model Record { 1 a: i32 }  model M { 1 headers: {string: string}  2 flags: {bool: i32}  3 file: File }");
+    expect(out).toContain("headers: { [key in string]: string };");
+    expect(out).toContain('flags: { [key in "true" | "false"]: number };');
+    expect(out).not.toContain("Record<");
+  });
+});
+
+describe("graphql: the schema definition", () => {
+  it("names the roots, so a model named Subscription stays a plain type", () => {
+    const out = emit("graphql", "model Subscription { 1 a: i32 }\n@query op subscriptions(): [Subscription]\n@mutation op ping(): bool");
+    expect(out).toContain("schema {\n  query: Query\n  mutation: Mutation\n}");
+    expect(out).toContain("type Subscription {");
+  });
+
+  it("declares nothing without a query root, which a schema definition requires", () => {
+    expect(emit("graphql", "model M { 1 a: i32 }\n@mutation op ping(): bool")).not.toContain("schema {");
+  });
+});

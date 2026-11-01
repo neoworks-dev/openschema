@@ -93,13 +93,20 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "decimal":  return "number";
     case "named":    return mapNamed(type.path, type.typeArgs, schema);
     case "array":    return `${arrayElement(type.element, schema)}[]`;
-    case "map":      return `Record<${mapType(type.key, schema)}, ${mapType(type.value, schema)}>`;
+    case "map":      return `{ [key in ${mapKey(type.key, schema)}]: ${mapType(type.value, schema)} }`;
     case "nullable": return `${mapType(type.inner, schema)} | null`;
     case "null":     return "null";
     case "file":     return FILE_TS;
     case "union":    return type.variants.map(v => mapType(v, schema)).join(" | ");
     case "oneof":    return mapOneof(type.variants, schema);
   }
+}
+
+// A map is a mapped type rather than the built-in `Record<K, V>`, which a model
+// named `Record` would shadow. A boolean key travels as the text of its value.
+function mapKey(type: TypeExpr, schema: ResolvedSchema): string {
+  if (type.kind === "scalar" && type.scalar === "bool") return `"true" | "false"`;
+  return mapType(type, schema);
 }
 
 // Array element types whose rendering contains a top-level `|` (unions, oneofs,

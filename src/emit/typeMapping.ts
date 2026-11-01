@@ -11,7 +11,7 @@ import type { EmitContext } from "./types.js";
 // descriptor targets describe the same value on the wire (see codec/filePlan.ts).
 
 export const FILE_TS = "{ objectId: string; name: string; mediaType: string; size: number; " +
-  "variants: Record<string, { objectId: string; size: number }> }";
+  "variants: { [variant: string]: { objectId: string; size: number } } }";
 
 const FILE_OBJECT_ID = { type: "string", format: "uuid" };
 

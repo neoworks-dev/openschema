@@ -910,8 +910,9 @@ function sortJsonKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJsonKeys);
   if (value === null || typeof value !== "object") return value;
 
-  const source = value as Record<string, unknown>;
-  const sorted: Record<string, unknown> = {};
+  // Not the built-in Record type: the generated module may declare a model named Record.
+  const source = value as { [key: string]: unknown };
+  const sorted: { [key: string]: unknown } = {};
   for (const key of Object.keys(source).sort()) sorted[key] = sortJsonKeys(source[key]);
   return sorted;
 }

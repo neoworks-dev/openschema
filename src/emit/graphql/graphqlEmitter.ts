@@ -112,11 +112,25 @@ function emitRoots(schema: ResolvedSchema): string[] {
   }
 
   const blocks: string[] = [];
+  const roots: string[] = [];
   for (const root of ["Query", "Mutation", "Subscription"]) {
     if (buckets[root].length === 0) continue;
     blocks.push(`type ${root} {\n${buckets[root].join("\n")}\n}`);
+    roots.push(root);
   }
+  const definition = schemaDefinition(roots);
+  if (definition !== null) blocks.unshift(definition);
   return blocks;
+}
+
+// Without a schema definition, GraphQL takes any type named Query, Mutation or
+// Subscription as that root, so a model named Subscription would become the
+// subscription root. Naming the roots explicitly keeps such a model a plain type.
+// A schema definition needs a query root, so without one nothing is declared.
+function schemaDefinition(roots: string[]): string | null {
+  if (!roots.includes("Query")) return null;
+  const lines = roots.map(root => `  ${root.toLowerCase()}: ${root}`);
+  return `schema {\n${lines.join("\n")}\n}`;
 }
 
 function rootForOperation(op: OperationDecl): string {

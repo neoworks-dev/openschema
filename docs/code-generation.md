@@ -374,6 +374,11 @@ they generate root types:
 ```
 
 ```graphql
+schema {
+  query: Query
+  mutation: Mutation
+}
+
 type Query {
   getOrder(id: UUID!): Order!
 }
@@ -382,6 +387,11 @@ type Mutation {
   placeOrder(order: OrderInput!): Order!
 }
 ```
+
+The `schema` block names the roots, so a model that happens to be called
+`Subscription` (or `Mutation`, when there are no mutations) stays an ordinary
+type. It is left out when there are no queries, since GraphQL requires a query
+root in it.
 
 Notice `OrderInput`. GraphQL forbids using an output `type` where an input is
 expected, so any model used as an operation **parameter** automatically gets a

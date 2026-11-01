@@ -76,6 +76,14 @@ describe("the default command", () => {
     expect(result.exitCode).toBe(0);
   });
 
+  it("refuses targets that would write the same file, writing nothing", () => {
+    writeSchema(V1);
+    const result = run([join(workspace, "m.schema"), "-t", "sql,sqlite", "-o", join(workspace, "out")]);
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("targets sql and sqlite both write schema.sql");
+    expect(existsSync(join(workspace, "out", "schema.sql"))).toBe(false);
+  });
+
   it("names the available targets when --target is missing", () => {
     writeSchema(V1);
     const result = run([join(workspace, "m.schema")]);
