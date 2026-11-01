@@ -12,7 +12,7 @@ import { previousModel, type MigrationOp } from "../../engine/migration.js";
 import { pairByOrdinal } from "../../engine/match.js";
 import { describeType } from "../../engine/type-compat.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { applyLink, hasDecorator, isTableModel, unwrapNullable } from "../typeMapping.js";
+import { hasDecorator, isTableModel, unwrapNullable } from "../typeMapping.js";
 import { quoteSqliteIdentifier as quote } from "../sql/sqlIdentifiers.js";
 import { tableNameFor } from "../sql/sqlDdl.js";
 import { renderCreateIndex, renderDropIndex, tableIndexes } from "../sql/sqlIndexes.js";
@@ -288,7 +288,7 @@ function convertedValue(source: string, previousField: ResolvedField, field: Res
 }
 
 function columnTypeOf(field: ResolvedField, schema: ResolvedSchema): string {
-  const inner = unwrapNullable(applyLink(field.type, field, schema)).inner;
+  const inner = unwrapNullable(field.type).inner;
   return sqliteColumnType(inner, field.decorators, schema);
 }
 

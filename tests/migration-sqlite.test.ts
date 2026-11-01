@@ -93,8 +93,8 @@ describe("sqlite migrations", () => {
   });
 
   it("keeps rows referencing a rebuilt table", () => {
-    const oldSrc = "model P { @primaryKey 1 id: string  2 a: string } model C { @primaryKey 1 id: string  @link 2 parent: P }";
-    const out = migration(oldSrc, "model P { @primaryKey 1 id: string  2 a: string? } model C { @primaryKey 1 id: string  @link 2 parent: P }");
+    const oldSrc = "model P { @primaryKey 1 id: uuid  2 a: string } model C { @primaryKey 1 id: uuid  2 parent: ref<P> }";
+    const out = migration(oldSrc, "model P { @primaryKey 1 id: uuid  2 a: string? } model C { @primaryKey 1 id: uuid  2 parent: ref<P> }");
 
     const db = createdDatabase(oldSrc);
     db.exec("PRAGMA foreign_keys = ON");
@@ -102,5 +102,35 @@ describe("sqlite migrations", () => {
     db.exec(out);
     expect(db.query("SELECT parent FROM C").all()).toEqual([{ parent: "p" }]);
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
+
+  it("rebuilds a table whose reference points at another model now", () => {
+    const models = "model P { @primaryKey 1 id: uuid } model Q { @primaryKey 1 id: uuid }";
+    const out = migration(`${models} model C { @primaryKey 1 id: uuid  2 parent: ref<P> }`, `${models} model C { @primaryKey 1 id: uuid  2 parent: ref<Q> }`);
+    expect(out).toContain("CREATE TABLE C__new");
+    expect(out).toContain("parent TEXT NOT NULL REFERENCES Q(id)");
+  });
+});
+
+describe("postgres migrations of references", () => {
+  function postgresMigration(oldSrc: string, newSrc: string): string {
+    const oldSchema = resolve(parse(oldSrc));
+    const newSchema = resolve(parse(newSrc));
+    const plan = buildMigrationPlan(oldSchema, newSchema);
+    return getMigrationEmitter("migration-sql")!.emit({ oldSchema, newSchema, plan, company: null, includePrivate: false })[0].contents;
+  }
+
+  it("swaps the foreign key when a reference points at another model", () => {
+    const models = "model P { @primaryKey 1 id: uuid } model Q { @primaryKey 1 id: uuid }";
+    const out = postgresMigration(`${models} model C { @primaryKey 1 id: uuid  2 parent: ref<P> }`, `${models} model C { @primaryKey 1 id: uuid  2 parent: ref<Q> }`);
+    expect(out).toContain('ALTER TABLE "C" DROP CONSTRAINT IF EXISTS "C_parent_fkey";');
+    expect(out).toContain('ALTER TABLE "C" ADD CONSTRAINT "C_parent_fkey" FOREIGN KEY (parent) REFERENCES "Q"(id);');
+    expect(out).not.toContain("ALTER COLUMN");
+  });
+
+  it("adds a foreign key when a plain uuid becomes a reference", () => {
+    const out = postgresMigration("model P { @primaryKey 1 id: uuid } model C { 1 parent: uuid }", "model P { @primaryKey 1 id: uuid } model C { 1 parent: ref<P> }");
+    expect(out).not.toContain("DROP CONSTRAINT");
+    expect(out).toContain('ADD CONSTRAINT "C_parent_fkey" FOREIGN KEY (parent) REFERENCES "P"(id);');
   });
 });

@@ -32,7 +32,6 @@ by the [compatibility checker](./compatibility.md).
 | `@unique` | none | SQL: `UNIQUE`. Diff: adding it is breaking for writers (`R012`); removing it is safe (`R014`). |
 | `@default(expr)` | an expression | SQL: `DEFAULT <expr>`. A field added *with* a default is a safe change (`R002`) rather than a breaking one. |
 | `@check(expr)` | a boolean expression | SQL: `CHECK (<expr>)`. Diff: adding is breaking for writers (`R013`); removing is safe (`R014`). |
-| `@references(Type.field)` | a qualified field | SQL: `REFERENCES table(column)`. Diff: changing the target is breaking (`R018`). |
 
 ```openschema
 @table("orders")
@@ -40,13 +39,17 @@ model Order {
   @primaryKey @default(gen_uuid())
   1 id: uuid
 
-  @references(Customer.id)
-  2 customerId: uuid
+  2 customerId: ref<Customer>
 
   @check(total >= 0)
   3 total: decimal(12, 2)
 }
 ```
+
+A foreign key is not a decorator: type the field `ref<Customer>` and the SQL
+targets add `REFERENCES` themselves (see
+[References](./language-reference.md#references-reft)). The former `@link` and
+`@references` decorators were removed; using either is an error (`OS1019`).
 
 The argument to `@default` and `@check` is a real expression: literals
 (`0`, `"draft"`), function calls (`gen_uuid()`, `now()`), comparisons

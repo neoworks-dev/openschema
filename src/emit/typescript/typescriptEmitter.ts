@@ -5,7 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, ModelDecl, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
   unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS,
 } from "../typeMapping.js";
 
@@ -76,7 +76,7 @@ function typeParamList(record: ResolvedModel): string {
 // `T?` in the DSL means the field may be absent, which is `undefined` — an
 // optional property says exactly that. It does not mean the field may hold null.
 function fieldLine(field: ResolvedField, schema: ResolvedSchema): string {
-  const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+  const { inner, nullable } = unwrapNullable(field.type);
   const optional = nullable ? "?" : "";
   const tsType = mapType(inner, schema);
   const docPrefix = field.isPrivate ? "  /** @private */\n" : "";

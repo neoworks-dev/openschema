@@ -415,8 +415,8 @@ describe("decorators", () => {
     expect((value as { kind: "expr"; expr: CallExpr }).expr.callee).toBe("gen_uuid");
   });
 
-  it("parses a qualified-identifier argument (@references)", () => {
-    const f = firstField("model R { @references(User.id) 1 uid: i64 }");
+  it("parses a qualified-identifier argument", () => {
+    const f = firstField("model R { @source(User.id) 1 uid: i64 }");
     expect(f.decorators[0].args[0].value).toMatchObject({ kind: "ident", value: "User.id" });
   });
 

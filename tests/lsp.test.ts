@@ -167,7 +167,8 @@ describe("lsp completion", () => {
     const src = "@\nmodel R { 1 id: uuid }";
     const labels = completion(src, { line: 0, character: 1 }, null).map(i => i.label);
     expect(labels).toContain("minValue");
-    expect(labels).toContain("references");
+    expect(labels).toContain("abstract");
+    expect(labels).not.toContain("references");
     expect(labels).not.toContain("string");
   });
 

@@ -209,7 +209,7 @@ export class Differ {
       // Type
       this.diffFieldTypes(`${name}.${newField.name}`, oldField, newField);
 
-      // Constraints carried by decorators (@primaryKey, @unique, @check, @references)
+      // Constraints carried by decorators (@primaryKey, @unique, @check)
       this.diffFieldConstraints(`${name}.${newField.name}`, oldField, newField);
 
       // Nullability (surfaced separately for clarity)
@@ -259,13 +259,6 @@ export class Differ {
         `The primary-key status of '${newField.name}' changed. This alters row identity for all consumers.`);
     }
 
-    const oldRef = referencesTarget(oldField);
-    const newRef = referencesTarget(newField);
-    if (oldRef !== newRef && (oldRef !== null || newRef !== null)) {
-      this.emit(path, R.REFERENCES_CHANGED, "field_type_incompatible", "breaking_both",
-        `The foreign-key reference on '${newField.name}' changed from ${oldRef ?? "none"} to ${newRef ?? "none"}.`);
-    }
-
     if (!hasDecorator(oldField, "deprecated") && hasDecorator(newField, "deprecated")) {
       this.emit(path, R.FIELD_DEPRECATED, "field_type_same", "warning",
         `Field '${newField.name}' was marked @deprecated.`);
@@ -311,6 +304,15 @@ export class Differ {
     const rel     = compareTypes(oldField.type, newField.type);
     const oldDesc = describeType(oldField.type, true);
     const newDesc = describeType(newField.type, true);
+
+    const oldTarget = referenceTarget(oldField.type);
+    const newTarget = referenceTarget(newField.type);
+    if (oldTarget !== null && newTarget !== null && oldTarget !== newTarget) {
+      this.emit(path, R.REFERENCES_CHANGED, "field_type_incompatible", "breaking_both",
+        `The reference '${newField.name}' now points at ${newTarget} instead of ${oldTarget}; stored ids name rows of the old model.`,
+        oldDesc, newDesc);
+      return;
+    }
 
     switch (rel) {
       case "same": return; // no change
@@ -501,14 +503,12 @@ function hasDecorator(field: AST.FieldDecl, name: string): boolean {
   return field.decorators.some(d => d.name === name);
 }
 
-function referencesTarget(field: AST.FieldDecl): string | null {
-  for (const decorator of field.decorators) {
-    if (decorator.name !== "references") continue;
-    if (decorator.args.length === 0) return null;
-    const value = decorator.args[0].value;
-    if (value.kind === "ident" || value.kind === "string") return value.value;
-  }
-  return null;
+/** The model a `ref<T>` (or a list of them, possibly nullable) names, or null. */
+function referenceTarget(type: AST.TypeExpr): string | null {
+  if (type.kind === "nullable") return referenceTarget(type.inner);
+  if (type.kind === "array") return referenceTarget(type.element);
+  if (type.kind !== "scalar" || type.reference === undefined) return null;
+  return type.reference.join(".");
 }
 
 // ── #suppress directive support ───────────────────────────────────────────────

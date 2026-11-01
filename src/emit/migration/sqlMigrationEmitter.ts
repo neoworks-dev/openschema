@@ -8,7 +8,10 @@ import type { MigrationOp } from "../../engine/migration.js";
 import { describeType } from "../../engine/type-compat.js";
 import { unwrapNullable } from "../typeMapping.js";
 import { quotePostgresIdentifier as quote } from "../sql/sqlIdentifiers.js";
-import { renderCreateTable, renderCreateEnum, enumTypeName, columnDefinition, columnTypeFor, sqlColumnName } from "../sql/sqlDdl.js";
+import {
+  renderCreateTable, renderCreateEnum, enumTypeName, columnDefinition, columnTypeFor, sqlColumnName,
+  referenceForeignKeyClause,
+} from "../sql/sqlDdl.js";
 import { renderCreateIndex, renderDropIndex } from "../sql/sqlIndexes.js";
 
 export const sqlMigrationEmitter: MigrationEmitter = {
@@ -103,28 +106,52 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
   }
 }
 
-function renderChangeFieldType(
-  op: Extract<MigrationOp, { kind: "ChangeFieldType" }>,
-  ctx: MigrationEmitContext,
-): string {
+type ChangeFieldTypeOp = Extract<MigrationOp, { kind: "ChangeFieldType" }>;
+
+function renderChangeFieldType(op: ChangeFieldTypeOp, ctx: MigrationEmitContext): string {
   const columnName = sqlColumnName(op.field);
-  const column = quote(columnName);
+  const lines = [...columnTypeChange(op, ctx), ...foreignKeyChange(op, ctx)];
+  // No-op when both DSL types collapse to the same SQL column (e.g. [i32]→[i64] both JSONB).
+  if (lines.length === 0) {
+    return `-- no-op: "${columnName}" changed ${describeType(op.oldType)} → ${describeType(op.field.type)} but its SQL column stays the same.`;
+  }
+  return lines.join("\n");
+}
+
+function columnTypeChange(op: ChangeFieldTypeOp, ctx: MigrationEmitContext): string[] {
+  const column = quote(sqlColumnName(op.field));
   const newInner = unwrapNullable(op.field.type).inner;
   const oldInner = unwrapNullable(op.oldType).inner;
   const newColType = columnTypeFor(newInner, op.field.decorators, ctx.newSchema);
   const oldColType = columnTypeFor(oldInner, op.field.decorators, ctx.oldSchema);
-
-  // No-op when both DSL types collapse to the same SQL column type (e.g. [i32]→[i64] both JSONB).
-  if (newColType === oldColType) {
-    return `-- no-op: "${columnName}" changed ${describeType(op.oldType)} → ${describeType(op.field.type)} but the SQL column type stays ${newColType}.`;
-  }
+  if (newColType === oldColType) return [];
 
   const alter = `ALTER TABLE ${quote(op.table)} ALTER COLUMN ${column} TYPE ${newColType}`;
   if (op.safety === "lossy") {
     return [
       `-- LOSSY (${op.relation}): ${describeType(op.oldType)} → ${describeType(op.field.type)}; values outside the new type will error. Review the USING cast.`,
       `${alter} USING ${column}::${newColType};`,
-    ].join("\n");
+    ];
   }
-  return `${alter};`;
+  return [`${alter};`];
+}
+
+// A ref<T> whose target changed swaps its foreign key. An inline REFERENCES gets
+// PostgreSQL's default constraint name, <table>_<column>_fkey, so that is the
+// one dropped and the one the new key is created under.
+function foreignKeyChange(op: ChangeFieldTypeOp, ctx: MigrationEmitContext): string[] {
+  const oldKey = referenceForeignKeyClause({ ...op.field, type: op.oldType }, ctx.oldSchema);
+  const newKey = referenceForeignKeyClause(op.field, ctx.newSchema);
+  if (oldKey === newKey) return [];
+
+  const columnName = sqlColumnName(op.field);
+  const constraint = quote(`${op.table}_${columnName}_fkey`);
+  const table = quote(op.table);
+  const lines: string[] = [];
+  if (oldKey !== null) lines.push(`ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS ${constraint};`);
+  if (newKey !== null) {
+    lines.push(`-- Existing values must name rows of the new target, or adding the key fails.`);
+    lines.push(`ALTER TABLE ${table} ADD CONSTRAINT ${constraint} FOREIGN KEY (${quote(columnName)}) ${newKey};`);
+  }
+  return lines;
 }

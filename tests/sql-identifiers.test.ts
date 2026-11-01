@@ -23,11 +23,11 @@ function migration(target: string, oldSrc: string, newSrc: string): string {
 
 const KEYWORDS_V1 = `
   enum Kind { 1 a  2 b }
-  model Group { @primaryKey 1 id: string  2 name: string }
+  model Group { @primaryKey 1 id: uuid  2 name: string }
   @index(fields: ["group", "order"])
   model GroupItem {
     @primaryKey 1 id: string
-    @link 2 group: Group
+    2 group: ref<Group>
     3 order: i32
     4 select: Kind
     5 tags: [string]
@@ -36,11 +36,11 @@ const KEYWORDS_V1 = `
 
 const KEYWORDS_V2 = `
   enum Kind { 1 a  2 b  3 c }
-  model Group { @primaryKey 1 id: string  2 name: string }
+  model Group { @primaryKey 1 id: uuid  2 name: string }
   @index(fields: ["group", "order"])
   model GroupItem {
     @primaryKey 1 id: string
-    @link 2 group: Group
+    2 group: ref<Group>
     3 order: i64?
     4 select: Kind
     5 tags: [string]
@@ -73,7 +73,7 @@ describe("SQL identifiers", () => {
     const out = generate("sql", KEYWORDS_V1);
     expect(out).toContain('CREATE TYPE "Kind" AS ENUM');
     expect(out).toContain('CREATE TABLE "GroupItem" (');
-    expect(out).toContain('"group" TEXT NOT NULL REFERENCES "Group"(id)');
+    expect(out).toContain('"group" UUID NOT NULL REFERENCES "Group"(id)');
     expect(out).toContain('"select" "Kind" NOT NULL');
     expect(out).toContain('CREATE INDEX "GroupItem_group_order_idx" ON "GroupItem" ("group", "order");');
   });

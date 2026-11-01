@@ -7,7 +7,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, TypeAlias } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, hasDecorator, applyLink,
+  baseFieldsToEmit, overlayFieldsToEmit, hasDecorator,
   isVisibleInOutput, isVisibleInInput, isInputModel,
   unionAliases, isUnionAlias, resolveAliasInline,
 } from "../typeMapping.js";
@@ -67,7 +67,7 @@ function emitObjectType(record: ResolvedModel, context: EmitContext): string {
     ...baseFieldsToEmit(record, context),
     ...overlayFieldsToEmit(context.schema, record, context.company),
   ].filter(f => isVisibleInOutput(f.decorators));
-  const lines = fields.map(f => `  ${f.name}: ${renderType(applyLink(f.type, f, context.schema), false, context.schema)}`);
+  const lines = fields.map(f => `  ${f.name}: ${renderType(f.type, false, context.schema)}`);
   return `type ${record.symbol.localName} {\n${lines.join("\n")}\n}`;
 }
 
@@ -77,7 +77,7 @@ function emitInputType(record: ResolvedModel, context: EmitContext): string {
   const fields = record.fields
     .filter(f => !f.isPrivate)
     .filter(f => isVisibleInInput(f.decorators));
-  const lines = fields.map(f => `  ${f.name}: ${renderType(applyLink(f.type, f, context.schema), true, context.schema)}`);
+  const lines = fields.map(f => `  ${f.name}: ${renderType(f.type, true, context.schema)}`);
   return `input ${inputTypeName(record)} {\n${lines.join("\n")}\n}`;
 }
 
@@ -145,7 +145,7 @@ function collectInputRecords(schema: ResolvedSchema): string[] {
     for (const field of record.fields) {
       if (field.isPrivate) continue;
       if (!isVisibleInInput(field.decorators)) continue;
-      collectRecordNames(applyLink(field.type, field, schema), schema, found, queue);
+      collectRecordNames(field.type, schema, found, queue);
     }
   }
   return [...found];

@@ -5,7 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
   firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
 
@@ -63,7 +63,7 @@ function recordSchema(record: ResolvedModel, context: EmitContext): Json {
     ...overlayFieldsToEmit(context.schema, record, context.company),
   ];
   for (const field of fields) {
-    const { inner, nullable } = unwrapNullable(applyLink(field.type, field, context.schema));
+    const { inner, nullable } = unwrapNullable(field.type);
     properties[field.name] = fieldSchema(inner, field);
     if (!nullable) required.push(field.name);
   }

@@ -293,11 +293,18 @@ describe("constraint changes", () => {
     expect(cs.some(c => c.ruleId === "R015" && c.severity === "breaking_both")).toBe(true);
   });
 
-  it("@references target change is breaking_both (R018)", () => {
-    const OLD = "model R { @references(User.id) 1 uid: i64 }";
-    const NEW = "model R { @references(Account.id) 1 uid: i64 }";
+  it("a ref<T> target change is breaking_both (R018)", () => {
+    const MODELS = "model User { @primaryKey 1 id: uuid }  model Account { @primaryKey 1 id: uuid }";
+    const OLD = `${MODELS}  model R { 1 owner: ref<User> }`;
+    const NEW = `${MODELS}  model R { 1 owner: ref<Account> }`;
     const cs = changes(OLD, NEW);
     expect(cs.some(c => c.ruleId === "R018" && c.severity === "breaking_both")).toBe(true);
+  });
+
+  it("reports a changed ref<T> list target as R018 only", () => {
+    const MODELS = "model User { @primaryKey 1 id: uuid }  model Account { @primaryKey 1 id: uuid }";
+    const cs = changes(`${MODELS}  model R { 1 owners: [ref<User>]? }`, `${MODELS}  model R { 1 owners: [ref<Account>]? }`);
+    expect(cs.filter(c => c.path === "R.owners").map(c => c.ruleId)).toEqual(["R018"]);
   });
 
   it("marking a field @deprecated is a warning (R019)", () => {

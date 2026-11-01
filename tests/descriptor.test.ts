@@ -223,11 +223,13 @@ model AlbumPhoto {
     expect(descriptorError("@neoworks.table model A { 1 a: i32 }\nmodel B { @belongsTo 1 a: ref<A> }").code).toBe("OSD004");
   });
 
-  it("reports a reference to an unknown model or to a model that is not a table", () => {
+  it("reports a reference to an unknown model, and to a model that is not a table when describing", () => {
     const unknown = resolve(parse("namespace t\nmodel M { 1 photo: ref<Missing> }"));
     expect(unknown.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1003");
-    const plain = resolve(parse("namespace t\nmodel Plain { 1 a: i32 }\nmodel M { 1 photo: ref<Plain> }"));
-    expect(plain.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1017");
+    const plain = "model Plain { 1 a: i32 }\n@neoworks.table model M { 1 photo: ref<Plain> }";
+    expect(resolve(parse(`namespace t\n${plain}`)).hasErrors).toBe(false);
+    expect(descriptorError(plain).code).toBe("OSD014");
+    expect(descriptorError("model Plain { 1 a: i32 }\n@neoworks.table model M { 1 photos: [ref<Plain>]? }").code).toBe("OSD014");
   });
 
   it("types a reference as a string in the generated code", () => {

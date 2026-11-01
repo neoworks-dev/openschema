@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 import {
   aliasByLocalName, substituteTypeParams, unionAliases, isInputModel,
-  resolveAliasInline, findDecorator, hasDecorator, modelByLocalName,
+  resolveAliasInline, findDecorator,
 } from "../emit/typeMapping.js";
 import { expandReserved, EMPTY_RESERVED, type ReservedSet } from "./reserved.js";
 import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "./packages.js";
@@ -124,7 +124,7 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
   // is fully built.
   schema.operations = normalizeAliases(schema, diagnostics);
   lintUnionAliases(schema, diagnostics);
-  lintLinks(schema, diagnostics);
+  lintRemovedLinkDecorators(schema, diagnostics);
 
   schema.hasErrors = diagnostics.items.some(d => d.severity === "error");
   return schema;
@@ -311,7 +311,11 @@ function checkNamedReference(
   diagnostics.error("OS1003", `Undefined type '${type.path.join(".")}'`, type.span);
 }
 
-/** `ref<Model>` names a row, so the model must exist and be marked @neoworks.table. */
+/**
+ * `ref<Model>` names a stored record, so the target must be a model that is
+ * stored on its own or through its subtypes: not an enum, alias, generic or
+ * @value model (OS1017).
+ */
 function checkReferenceTarget(
   path: string[],
   span: Span,
@@ -324,11 +328,19 @@ function checkReferenceTarget(
     diagnostics.error("OS1003", `Undefined type '${path.join(".")}'`, span);
     return;
   }
-  const isTable = target.decl.kind === "model" &&
-    target.decl.decorators.some(decorator => decorator.name === "neoworks.table");
-  if (!isTable) {
-    diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.table`, span);
+  const problem = referenceTargetProblem(target);
+  if (problem !== null) {
+    diagnostics.error("OS1017", `ref<${path.join(".")}> must name a stored model; ${problem}`, span);
   }
+}
+
+function referenceTargetProblem(target: DeclSymbol): string | null {
+  if (target.decl.kind !== "model") return `'${target.localName}' is not a model`;
+  if (target.decl.typeParams.length > 0) return `'${target.localName}' is generic`;
+  if (target.decl.decorators.some(decorator => decorator.name === "value")) {
+    return `'${target.localName}' is a @value model, stored inline`;
+  }
+  return null;
 }
 
 function resolveName(
@@ -905,47 +917,30 @@ function lintUnionAliases(schema: ResolvedSchema, diagnostics: Diagnostics): voi
   }
 }
 
-/** A @link field stores the target model's primary-key id, so the target must be
- * a model with exactly one @primaryKey field — otherwise the id type is undefined.
- * OS1015: not a model reference. OS1016: zero or composite primary key. */
-function lintLinks(schema: ResolvedSchema, diagnostics: Diagnostics): void {
+// @link and @references were the old ways to link records; `ref<T>` replaced
+// both. Ignoring them would silently change the output of an older schema, so
+// using either is an error (OS1019).
+const REMOVED_LINK_DECORATORS = ["link", "references"];
+
+function lintRemovedLinkDecorators(schema: ResolvedSchema, diagnostics: Diagnostics): void {
   for (const record of schema.records.values()) {
-    for (const field of record.fields) {
-      if (!hasDecorator(field.decorators, "link")) continue;
-      lintLinkField(field, schema, diagnostics);
+    if (record.symbol.packageName !== null) continue;
+    for (const field of record.fields) lintRemovedOnField(field, diagnostics);
+  }
+  for (const byCompany of schema.overlays.values()) {
+    for (const overlay of byCompany.values()) {
+      for (const field of overlay.fields) lintRemovedOnField(field, diagnostics);
     }
   }
 }
 
-function lintLinkField(field: ResolvedField, schema: ResolvedSchema, diagnostics: Diagnostics): void {
-  const named = unwrapToNamed(field.type);
-  const target = named === null ? null : modelByLocalName(named.path[named.path.length - 1], schema);
-  if (target === null) {
-    diagnostics.error("OS1015",
-      `@link field '${field.name}' must reference a model`, field.span);
-    return;
+function lintRemovedOnField(field: ResolvedField, diagnostics: Diagnostics): void {
+  for (const decorator of field.decorators) {
+    if (!REMOVED_LINK_DECORATORS.includes(decorator.name)) continue;
+    diagnostics.error("OS1019",
+      `@${decorator.name} was removed; type the field '${field.name}' as ref<Model> (or [ref<Model>]) instead`,
+      decorator.span);
   }
-
-  const primaryKeys = target.fields.filter(f => hasDecorator(f.decorators, "primaryKey"));
-  if (primaryKeys.length === 0) {
-    diagnostics.error("OS1016",
-      `@link target '${target.symbol.localName}' has no @primaryKey; the link id type is undefined`,
-      field.span);
-    return;
-  }
-  if (primaryKeys.length > 1) {
-    diagnostics.error("OS1016",
-      `@link target '${target.symbol.localName}' has a composite primary key; a scalar link needs exactly one @primaryKey`,
-      field.span);
-  }
-}
-
-/** Peel nullable/array wrappers to the underlying named type, or null. */
-function unwrapToNamed(type: TypeExpr): Extract<TypeExpr, { kind: "named" }> | null {
-  if (type.kind === "named")    return type;
-  if (type.kind === "nullable") return unwrapToNamed(type.inner);
-  if (type.kind === "array")    return unwrapToNamed(type.element);
-  return null;
 }
 
 function isObjectModelRef(type: TypeExpr, schema: ResolvedSchema): boolean {

@@ -35,8 +35,7 @@ model Order {
   @primaryKey @default(gen_uuid())
   1 id: uuid
 
-  @references(Customer.id)
-  2 customerId: uuid
+  2 customerId: ref<Customer>
 
   3 status: OrderStatus
   4 lines:  [OrderLine]

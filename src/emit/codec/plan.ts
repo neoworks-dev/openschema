@@ -5,7 +5,7 @@
 
 import type { ScalarKind, Span, TypeExpr } from "../../parser/ast.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { applyLink, resolveAliasInline, unwrapNullable } from "../typeMapping.js";
+import { resolveAliasInline, unwrapNullable } from "../typeMapping.js";
 import { CodecUnsupportedError } from "./errors.js";
 import {
   MAX_ORDINAL, SCALAR_CODEC_TS, SCALAR_WIRE, WireType,
@@ -76,7 +76,7 @@ function planField(model: string, field: ResolvedField, schema: ResolvedSchema):
   rejectBadOrdinal(model, field);
   rejectUnknownCollision(model, field);
 
-  const type = resolveAliasInline(applyLink(field.type, field, schema), schema);
+  const type = resolveAliasInline(field.type, schema);
   const { container, value } = planShape(model, field, type, schema);
 
   return {

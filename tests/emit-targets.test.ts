@@ -454,46 +454,52 @@ describe("array length bounds", () => {
   });
 });
 
-describe("@link across targets", () => {
-  // GeoPoint's primary key is a uuid; @link fields store that id, not the object.
-  const SRC = "model GeoPoint { @primaryKey 1 id: uuid  2 lat: f64 }  model Media { @link 1 location: GeoPoint? }";
+describe("ref<T> across targets", () => {
+  // A reference is the id of a GeoPoint row, under the field's own name.
+  const SRC = "model GeoPoint { @primaryKey 1 id: uuid  2 lat: f64 }  model Media { 1 location: ref<GeoPoint>? }";
 
-  it("ts: renders a @link field as the primary-key scalar", () => {
+  it("ts: renders a reference as the id", () => {
     const out = emit("ts", SRC);
     expect(out).toContain("location?: string;");
     expect(out).not.toContain("location?: GeoPoint");
   });
 
-  it("zod: renders a @link field as the primary-key scalar", () => {
+  it("zod: renders a reference as the id", () => {
     const out = emit("zod", SRC);
     expect(out).toContain("location: z.string().uuid().nullish(),");
   });
 
-  it("json-schema: renders a @link field as the id type, not a $ref", () => {
+  it("json-schema: renders a reference as the id, not a $ref", () => {
     const js = JSON.parse(emit("json-schema", SRC));
     expect(js.$defs.Media.properties.location).toMatchObject({ type: "string", format: "uuid" });
   });
 
-  it("graphql: renders a @link field as the id scalar", () => {
+  it("graphql: renders a reference as the id scalar", () => {
     const out = emit("graphql", SRC);
     expect(out).toContain("location: UUID");
     expect(out).not.toContain("location: GeoPoint");
   });
 
-  it("openapi: renders a @link field as the id type", () => {
+  it("openapi: renders a reference as the id", () => {
     const doc = JSON.parse(emit("openapi", SRC));
     expect(doc.components.schemas.Media.properties.location).toMatchObject({ type: "string", format: "uuid" });
   });
 
-  it("sql: renders a @link field as a foreign key to the primary key", () => {
+  it("sql: renders a reference as a foreign key to the primary key", () => {
     const out = emit("sql", SRC);
     expect(out).toContain("location UUID REFERENCES \"GeoPoint\"(id)");
   });
 
-  it("uses a non-uuid primary-key type for the link", () => {
-    const src = "model Tag { @primaryKey 1 code: i32 }  model Post { @link 1 tag: Tag }";
-    expect(emit("ts", src)).toContain("tag: number;");
-    expect(emit("sql", src)).toContain("tag INTEGER NOT NULL REFERENCES \"Tag\"(code)");
+  it("sql: adds no foreign key for a list, an abstract target, or a target without one uuid key", () => {
+    const src = "model Tag { @primaryKey 1 code: i32 }  model Plain { 1 a: i32 }  " +
+      "@abstract model Media { @primaryKey 1 id: uuid }  model Video extends Media { 2 a: i32 }  " +
+      "model Post { 1 tag: ref<Tag>  2 plain: ref<Plain>  3 media: ref<Media>  4 videos: [ref<Video>] }";
+    const out = emit("sql", src);
+    expect(out).toContain("tag UUID NOT NULL,");
+    expect(out).toContain("plain UUID NOT NULL,");
+    expect(out).toContain("media UUID NOT NULL,");
+    expect(out).toContain("videos JSONB NOT NULL\n");
+    expect(out).not.toContain("REFERENCES");
   });
 });
 

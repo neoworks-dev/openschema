@@ -11,7 +11,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, ParamDecl } from "../../parser/ast.js";
 import {
-  findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink,
+  findDecorator, hasDecorator, firstStringArg, unwrapNullable,
   isVisibleInInput, isVisibleInOutput, isInputModel,
   unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
@@ -98,7 +98,7 @@ function objectSchema(fields: ResolvedField[], inputMode: boolean, schema: Resol
   const properties: Json = {};
   const required: string[] = [];
   for (const field of fields) {
-    const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+    const { inner, nullable } = unwrapNullable(field.type);
     properties[field.name] = applyFieldConstraints(mapType(inner, inputMode, schema), field);
     if (!nullable) required.push(field.name);
   }
@@ -286,7 +286,7 @@ function collectInputModels(schema: ResolvedSchema): string[] {
     for (const field of model.fields) {
       if (field.isPrivate) continue;
       if (!isVisibleInInput(field.decorators)) continue;
-      collectModelNames(applyLink(field.type, field, schema), schema, found, queue);
+      collectModelNames(field.type, schema, found, queue);
     }
   }
   return [...found];

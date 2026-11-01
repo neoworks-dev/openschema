@@ -8,10 +8,10 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, Decorator, Expr, EnumDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
-  unwrapNullable, applyLink, overlayFieldsToEmit,
+  unwrapNullable, overlayFieldsToEmit,
 } from "../typeMapping.js";
 import {
-  checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName,
+  checkClauseFor, referenceForeignKeyClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName,
 } from "./sqlDdl.js";
 import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 
@@ -81,7 +81,7 @@ export function sqliteColumnName(field: ResolvedField): string {
 
 /** One column definition, e.g. `status TEXT NOT NULL CHECK (status IN ('a', 'b'))`. */
 export function sqliteColumnDefinition(columnName: string, field: ResolvedField, schema: ResolvedSchema): string {
-  const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+  const { inner, nullable } = unwrapNullable(field.type);
   const shape = sqliteColumnShape(inner, field.decorators, schema);
   const column = quoteSqliteIdentifier(columnName);
 
@@ -94,8 +94,7 @@ export function sqliteColumnDefinition(columnName: string, field: ResolvedField,
   if (defaultClause !== null) parts.push(defaultClause);
 
   const optionalClauses = [
-    referencesClauseFor(field.decorators, quoteSqliteIdentifier),
-    linkReferencesClause(field, schema, quoteSqliteIdentifier),
+    referenceForeignKeyClause(field, schema, quoteSqliteIdentifier),
     checkClauseFor(field.decorators),
   ];
   for (const clause of optionalClauses) {
@@ -180,7 +179,7 @@ export function needsRebuildToAdd(field: ResolvedField, schema: ResolvedSchema):
   const { nullable } = unwrapNullable(field.type);
   if (nullable) return false;
   if (defaultClause === null) return true;
-  return referencesClauseFor(decorators) !== null || linkReferencesClause(field, schema) !== null;
+  return referenceForeignKeyClause(field, schema) !== null;
 }
 
 /** A single-quoted SQLite string literal. */

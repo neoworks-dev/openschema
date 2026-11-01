@@ -14,7 +14,8 @@ export type DescriptorErrorCode =
   | "OSD010"   // @neoworks.title not on exactly one single string or File field
   | "OSD011"   // invalid @belongsTo
   | "OSD012"   // invalid @onDelete
-  | "OSD013";  // invalid @neoworks.index
+  | "OSD013"   // invalid @neoworks.index
+  | "OSD014";  // ref<T> naming a model that is not @neoworks.table
 
 export class DescriptorError extends Error {
   constructor(

@@ -5,7 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
   firstStringArg, findDecorator, unionAliases, resolveAliasInline, SEMVER_ZOD,
 } from "../typeMapping.js";
 
@@ -96,7 +96,7 @@ function emitUnionAlias(localName: string, alias: TypeAlias, schema: ResolvedSch
 }
 
 function fieldLine(field: ResolvedField, schema: ResolvedSchema): string {
-  const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+  const { inner, nullable } = unwrapNullable(field.type);
   let expr = mapType(inner, schema);
   expr += constraintChain(inner, field);
   if (nullable) expr += ".nullish()"; // matches TS `field?: T | null`

@@ -154,9 +154,10 @@ model Event {
 ### References
 
 `ref<Table>` is a field type for a link to a row of a table, possibly of another
-schema (`ref<neoworks.photos.Photo>`). The model must be marked
-`@neoworks.table`; the resolver reports `OS1003` for an unknown model and `OS1017`
-for one that is not a table. In the descriptor the field's value is
+schema (`ref<neoworks.photos.Photo>`). Here the model must be marked
+`@neoworks.table`: the resolver reports `OS1003` for an unknown model, and the
+descriptor target `OSD014` for one that is not a table (other targets accept a
+reference to any stored model). In the descriptor the field's value is
 `{"kind": "ref", "model": "<qualified table name>"}`.
 
 On the wire a reference is the message `Ref`:
@@ -303,3 +304,4 @@ refuses to move a field to another facet — including by renaming the facet —
 | `OSD011` | `@belongsTo` not on one single `ref<Table>` field naming a table of the schema, more than one per table, or with `@onDelete` |
 | `OSD012` | `@onDelete` other than `"cascade"`, or not on a `ref<Table>` or `[ref<Table>]` field |
 | `OSD013` | invalid `@neoworks.index`: a field that cannot be indexed or does not exist, a field named twice, a table-level index without `fields`, or arguments on a field |
+| `OSD014` | a `ref<T>` (or `[ref<T>]`) naming a model that is not marked `@neoworks.table` |

@@ -116,9 +116,15 @@ Type mapping:
 | `[T]`, `{K: V}`, unions, `oneof` | `JSONB` |
 
 - A non-nullable field becomes `NOT NULL`; a `T?` field omits it.
-- `@table`, `@sql.type`, `@sql.column`, `@primaryKey`, `@unique`, `@default`,
-  `@check`, and `@references` all shape the output — see
-  [Decorators](./decorators.md).
+- `@table`, `@sql.type`, `@sql.column`, `@primaryKey`, `@unique`, `@default`
+  and `@check` shape the output — see [Decorators](./decorators.md).
+- A `ref<T>` field is a `UUID` column under the field's own name. When `T` has
+  a table and exactly one `uuid` `@primaryKey`, the column also gets
+  `REFERENCES "T"(<key>)`. A list `[ref<T>]` is a `JSONB` id list, and a
+  reference to an `@abstract` model may name a row of any subtype's table, so
+  neither gets a foreign key. When a migration changes the target, the key is
+  swapped: `DROP CONSTRAINT IF EXISTS "<table>_<column>_fkey"` (PostgreSQL's
+  default name for an inline key) and `ADD CONSTRAINT` with the new target.
 - Names are used exactly as written: the table is the model name, a column the
   field name, a native enum type the enum name (`UserAccount.displayName` →
   table `"UserAccount"`, column `"displayName"`). `@table` and `@sql.column`
@@ -159,9 +165,10 @@ SQLite has no enum, JSON or UUID column types, so values that need one are
 | `json`, `[T]`, `{K: V}`, unions, `oneof`, `File`, an embedded model | `TEXT` + `CHECK (json_valid(col))` |
 | an `enum` type | `TEXT` + `CHECK (col IN ('a', 'b'))` |
 
-- Keys, `@unique`, `@check`, `@references` and `@link` render as in the
-  PostgreSQL target; `@sql.type` and `@sql.column` still override (an explicit
-  `@sql.type` drops the implicit `CHECK`).
+- Keys, `@unique`, `@check` and `ref<T>` foreign keys render as in the
+  PostgreSQL target (a reference is a `TEXT` column); `@sql.type` and
+  `@sql.column` still override (an explicit `@sql.type` drops the implicit
+  `CHECK`). A changed reference target rebuilds the table.
 - A `@default` that is not a plain literal is parenthesised, as SQLite requires;
   `now()` becomes `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, an ISO 8601 UTC
   timestamp. Other functions (`gen_uuid()`) are passed through and must exist in

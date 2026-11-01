@@ -13,6 +13,7 @@ self-contained and includes runnable examples. If you are new, read
 - [Ordinals (field numbers)](#ordinals-field-numbers)
 - [Scalar types](#scalar-types)
 - [Composite types](#composite-types-arrays-maps-nullable)
+- [References: `ref<T>`](#references-reft)
 - [Unions and oneof](#unions-and-oneof)
 - [Enums](#enums)
 - [Type aliases](#type-aliases)
@@ -296,6 +297,40 @@ Array length can also be set per field with `@minItems(n)` / `@maxItems(n)` /
 for inner arrays use the type-level `[T; …]` form. Bounds emit as `minItems`/
 `maxItems` (JSON Schema, OpenAPI) and `array<T, max>` plus an `array::len` ASSERT
 (SurrealDB); other targets ignore them.
+
+---
+
+## References: `ref<T>`
+
+A field typed with a model embeds a copy of it. To point at a stored record
+instead, type the field `ref<Model>`: its value is that record's id, a `uuid`.
+
+```openschema
+model Order {
+  @primaryKey 1 id: uuid
+  2 customer: ref<Customer>      // one customer's id
+  3 items:    [ref<Product>]     // a list of product ids
+  4 coupon:   ref<Coupon>?       // optional
+}
+```
+
+The field keeps its name in every target; only its type says it is a reference:
+
+| Target | `ref<Customer>` | `[ref<Product>]` |
+|---|---|---|
+| TypeScript, Zod, JSON Schema, OpenAPI, GraphQL, Go | the id (`string`, `UUID`) | a list of ids |
+| PostgreSQL / SQLite | `UUID` / `TEXT` column, `REFERENCES "Customer"(id)` | a JSON id list, no foreign key |
+| SurrealDB | `record<Customer>` | `array<record<Product>>` |
+
+- The target must be a model that is stored: not an enum, alias, generic or
+  `@value` model (`OS1017`). An `@abstract` model is allowed; its id may name a
+  record of any subtype, so SQL adds no foreign key and SurrealDB links
+  `record<A | B>` over the concrete subtypes.
+- SQL adds the foreign key only when the target has exactly one `uuid`
+  `@primaryKey`, the only key a reference can match.
+- Changing the target (`ref<A>` → `ref<B>`) is breaking (`R018`).
+- The decorators `@link` and `@references` that linked records before were
+  removed; using either is an error (`OS1019`).
 
 ---
 

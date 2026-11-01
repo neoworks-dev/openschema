@@ -138,7 +138,7 @@ Each change kind has a stable rule ID, so you can reference it (and suppress it)
 | `R015` | `@primaryKey` added or removed | breaking_both |
 | `R016` | model added | safe |
 | `R017` | model removed | breaking_both |
-| `R018` | `@references` target changed | breaking_both |
+| `R018` | `ref<T>` target changed (`ref<A>` → `ref<B>`, also in lists) | breaking_both |
 | `R019` | field marked `@deprecated` | warning |
 | `R020` | model renamed (via `@renamed`) | warning |
 

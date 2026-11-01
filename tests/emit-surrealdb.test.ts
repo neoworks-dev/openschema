@@ -29,8 +29,8 @@ describe("surrealdb emitter", () => {
     expect(out).toContain("TYPE float;");
   });
 
-  it("turns @references into a record link", () => {
-    const out = emit("model Order { 1 id: uuid  @references(User.id) 2 buyer: uuid }");
+  it("turns ref<T> into a record link", () => {
+    const out = emit("model User { 1 id: uuid }  model Order { 1 id: uuid  2 buyer: ref<User> }");
     expect(out).toContain("DEFINE FIELD buyer ON TABLE Order TYPE record<User>;");
   });
 
@@ -94,19 +94,27 @@ describe("surrealdb emitter", () => {
     expect(out).toContain("DEFINE FIELD tags.*.name ON TABLE Post TYPE string;");
   });
 
-  it("turns a @link field into a record link and keeps the model a table", () => {
-    const src = "model GeoPoint { 1 lat: f64  2 lng: f64 }  model Media { @link 1 location: GeoPoint? }";
+  it("keeps a referenced model a table even when another field embeds it", () => {
+    const src = "model GeoPoint { 1 lat: f64  2 lng: f64 }  model Media { 1 location: ref<GeoPoint>?  2 copy: GeoPoint? }";
     const out = emit(src);
     expect(out).toContain("DEFINE TABLE GeoPoint SCHEMAFULL;");
     expect(out).toContain("DEFINE FIELD location ON TABLE Media TYPE option<record<GeoPoint>>;");
     expect(out).not.toContain("location.lat");
   });
 
-  it("links an array of records with @link", () => {
-    const src = "model Tag { 1 name: string }  model Post { @link 1 tags: [Tag] }";
+  it("links a list of records", () => {
+    const src = "model Tag { 1 name: string }  model Post { 1 tags: [ref<Tag>] }";
     const out = emit(src);
     expect(out).toContain("DEFINE TABLE Tag SCHEMAFULL;");
     expect(out).toContain("DEFINE FIELD tags ON TABLE Post TYPE array<record<Tag>>;");
+  });
+
+  it("links a reference to an abstract model to any of its concrete subtypes", () => {
+    const src = "@abstract model Media { 1 id: uuid }  model Video extends Media { 2 a: i32 }  " +
+      "model Gallery extends Media { 2 b: i32 }  model Item { 1 media: ref<Media> }";
+    const out = emit(src);
+    expect(out).toContain("DEFINE FIELD media ON TABLE Item TYPE record<Video | Gallery>;");
+    expect(out).not.toContain("DEFINE TABLE Media");
   });
 
   it("treats a @table model as an entity even when referenced inline", () => {

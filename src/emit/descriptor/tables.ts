@@ -8,9 +8,9 @@
 // sorted indexes a client keeps for queries; the @belongsTo field always has one.
 
 import { createHash } from "node:crypto";
-import type { Decorator } from "../../parser/ast.js";
+import type { Decorator, TypeExpr } from "../../parser/ast.js";
 import type { ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { allDecorators, firstStringArg, namedStringListArg } from "../typeMapping.js";
+import { allDecorators, firstStringArg, namedStringListArg, referencedModel as referencedRecord } from "../typeMapping.js";
 import { MAX_ORDINAL } from "../codec/wireFormat.js";
 import type {
   FacetDescriptor, FieldDescriptor, IndexDescriptor, ModelDescriptor, TableDescriptor,
@@ -45,6 +45,7 @@ export function describeTables(schema: ResolvedSchema, models: Map<string, Model
     if (model === undefined) continue;
     // A dependency's tables belong to its own collection; here they are only types.
     if (record.symbol.packageName !== null) continue;
+    rejectReferencesToNonTables(record, schema);
     if (!isTable(record)) {
       rejectTableOnlyDecorators(record);
       continue;
@@ -52,6 +53,25 @@ export function describeTables(schema: ResolvedSchema, models: Map<string, Model
     tables.push(describeTable(record, model, tableNames));
   }
   return tables;
+}
+
+/** A Neoworks reference opens the row it names, so every `ref<T>` must name a @neoworks.table model (OSD014). */
+function rejectReferencesToNonTables(record: ResolvedModel, schema: ResolvedSchema): void {
+  for (const field of record.fields) {
+    const target = referencedRecord(referenceOf(field.type), schema);
+    if (target === null) continue;
+    if (allDecorators(target.decorators, TABLE_DECORATOR).length > 0) continue;
+    throw new DescriptorError("OSD014", record.symbol.localName, field.name,
+      `ref<${target.symbol.localName}> must name a model marked @${TABLE_DECORATOR}`, field.span);
+  }
+}
+
+/** The reference a field holds, looking through nullable and list wrappers. */
+function referenceOf(type: TypeExpr): TypeExpr {
+  if (type.kind === "nullable") return referenceOf(type.inner);
+  if (type.kind === "array") return referenceOf(type.element);
+  if (type.kind === "map") return referenceOf(type.value);
+  return type;
 }
 
 /** Whether the model is marked @neoworks.table, rejecting a marker that carries arguments or repeats. */

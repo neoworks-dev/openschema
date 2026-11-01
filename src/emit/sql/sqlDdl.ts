@@ -8,7 +8,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, Decorator, Expr, EnumDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
-  unwrapNullable, applyLink, modelByLocalName, primaryKeyField,
+  unwrapNullable, referencedModel, isTableModel,
 } from "../typeMapping.js";
 import { quotePostgresIdentifier } from "./sqlIdentifiers.js";
 
@@ -47,9 +47,7 @@ export function overlayColumnName(company: string, field: ResolvedField): string
 }
 
 export function columnDefinition(columnName: string, field: ResolvedField, schema: ResolvedSchema): string {
-  // @link stores the foreign primary-key value: render the column as the linked
-  // model's id type, then add the REFERENCES clause below.
-  const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+  const { inner, nullable } = unwrapNullable(field.type);
 
   const parts: string[] = [quotePostgresIdentifier(columnName), columnTypeFor(inner, field.decorators, schema)];
   if (!nullable) parts.push("NOT NULL");
@@ -59,11 +57,8 @@ export function columnDefinition(columnName: string, field: ResolvedField, schem
   const defaultClause = defaultClauseFor(field.decorators);
   if (defaultClause !== null) parts.push(defaultClause);
 
-  const referencesClause = referencesClauseFor(field.decorators);
-  if (referencesClause !== null) parts.push(referencesClause);
-
-  const linkClause = linkReferencesClause(field, schema);
-  if (linkClause !== null) parts.push(linkClause);
+  const foreignKey = referenceForeignKeyClause(field, schema);
+  if (foreignKey !== null) parts.push(foreignKey);
 
   const checkClause = checkClauseFor(field.decorators);
   if (checkClause !== null) parts.push(checkClause);
@@ -71,26 +66,30 @@ export function columnDefinition(columnName: string, field: ResolvedField, schem
   return parts.join(" ");
 }
 
-// A scalar @link field becomes a foreign key to the linked model's primary key.
-// Array links degrade to a JSONB id list (no FK), and an explicit @references
-// wins, so both are skipped here.
-export function linkReferencesClause(
+/**
+ * `REFERENCES "T"(pk)` for a single `ref<T>` whose target has a table and one
+ * uuid @primaryKey (a reference is a uuid, so only such a key can match it). A
+ * list of references is a JSON id list, and a reference to an abstract model may
+ * name a row of any subtype's table, so neither gets one.
+ */
+export function referenceForeignKeyClause(
   field: ResolvedField,
   schema: ResolvedSchema,
   quote: QuoteIdentifier = quotePostgresIdentifier,
 ): string | null {
-  if (!hasDecorator(field.decorators, "link")) return null;
-  if (hasDecorator(field.decorators, "references")) return null;
+  const target = referencedModel(unwrapNullable(field.type).inner, schema);
+  if (target === null || !isTableModel(target)) return null;
+  const primaryKey = uuidPrimaryKey(target);
+  if (primaryKey === null) return null;
+  return `REFERENCES ${quote(tableNameFor(target))}(${quote(sqlColumnName(primaryKey))})`;
+}
 
-  const { inner } = unwrapNullable(field.type);
-  if (inner.kind !== "named") return null;
-
-  const model = modelByLocalName(inner.path[inner.path.length - 1], schema);
-  if (model === null) return null;
-
-  const primaryKey = primaryKeyField(model);
-  const pkColumn = primaryKey !== null ? sqlColumnName(primaryKey) : "id";
-  return `REFERENCES ${quote(tableNameFor(model))}(${quote(pkColumn)})`;
+function uuidPrimaryKey(model: ResolvedModel): ResolvedField | null {
+  const primaryKeys = model.fields.filter(candidate => hasDecorator(candidate.decorators, "primaryKey"));
+  if (primaryKeys.length !== 1) return null;
+  const keyType = unwrapNullable(primaryKeys[0].type).inner;
+  if (keyType.kind !== "scalar" || keyType.scalar !== "uuid") return null;
+  return primaryKeys[0];
 }
 
 export function columnTypeFor(type: TypeExpr, decorators: Decorator[], schema: ResolvedSchema): string {
@@ -143,15 +142,6 @@ export function checkClauseFor(decorators: Decorator[]): string | null {
   const value = decorator.args[0].value;
   if (value.kind !== "expr") return null;
   return `CHECK (${exprToSql(value.expr)})`;
-}
-
-/** `REFERENCES Table(column)` for @references(Table.column), names as written. */
-export function referencesClauseFor(decorators: Decorator[], quote: QuoteIdentifier = quotePostgresIdentifier): string | null {
-  const target = firstStringArg(decorators, "references");
-  if (target === null) return null;
-  const segments = target.split(".");
-  if (segments.length < 2) return `REFERENCES ${quote(target)}`;
-  return `REFERENCES ${quote(segments[0])}(${quote(segments[1])})`;
 }
 
 export function exprToSql(expr: Expr): string {

@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, Decorator, Expr, EnumDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
-  unwrapNullable,
+  unwrapNullable, referencedModel, isAbstractModel, concreteSubtypes,
 } from "../typeMapping.js";
 import type { TableIndex } from "../sql/sqlIndexes.js";
 
@@ -101,7 +101,7 @@ export function renderField(
 
 // ── Embedded value objects ────────────────────────────────────────────────────
 //
-// A model referenced inline (a plain named type, no @references record link) is a
+// A model named inline (a plain named type, not a ref<T> record link) is a
 // value object: it is embedded in its host table as a typed nested object rather
 // than getting a table of its own. A model marked @table is always an entity, so
 // it is never treated as embedded (it keeps the legacy untyped `object` shape).
@@ -113,9 +113,6 @@ interface EmbeddedRef {
 }
 
 function embeddedModelRef(field: ResolvedField, schema: ResolvedSchema): EmbeddedRef | null {
-  if (hasDecorator(field.decorators, "references")) return null; // record link, not embed
-  if (hasDecorator(field.decorators, "link")) return null;       // explicit record link, not embed
-
   const { inner, nullable } = unwrapNullable(field.type);
 
   if (inner.kind === "named") {
@@ -147,7 +144,7 @@ function embeddableModel(path: string[], schema: ResolvedSchema): ResolvedModel 
 
 /** Local names of every model embedded somewhere as a value object. The schema
  * emitter skips these: they live inside their host tables, not as tables. A model
- * that is @link'd anywhere is an entity (it owns the table the link points at), so
+ * a `ref<T>` points at is an entity (it owns the table the record link names), so
  * it is excluded even if some other field embeds it. */
 export function collectEmbeddedModels(schema: ResolvedSchema): Set<string> {
   const embedded = new Set<string>();
@@ -157,26 +154,34 @@ export function collectEmbeddedModels(schema: ResolvedSchema): Set<string> {
       if (ref !== null) embedded.add(ref.model.symbol.localName);
     }
   }
-  for (const linked of collectLinkedModels(schema)) embedded.delete(linked);
+  for (const referenced of collectReferencedModels(schema)) embedded.delete(referenced);
   return embedded;
 }
 
-/** Local names of every model targeted by a @link field — these own a table. */
-function collectLinkedModels(schema: ResolvedSchema): Set<string> {
-  const linked = new Set<string>();
+/** Local names of every model a `ref<T>` field points at, and of the subtypes of abstract targets. */
+function collectReferencedModels(schema: ResolvedSchema): Set<string> {
+  const referenced = new Set<string>();
   for (const record of schema.records.values()) {
     for (const field of record.fields) {
-      if (!hasDecorator(field.decorators, "link")) continue;
-      const { inner } = unwrapNullable(field.type);
-      const named = inner.kind === "array"
-        ? (inner.element.kind === "nullable" ? inner.element.inner : inner.element)
-        : inner;
-      if (named.kind !== "named") continue;
-      const model = modelByLocalName(named.path[named.path.length - 1], schema);
-      if (model !== null) linked.add(model.symbol.localName);
+      const target = referencedModel(referenceElement(unwrapNullable(field.type).inner), schema);
+      if (target === null) continue;
+      for (const model of recordTargets(target, schema)) referenced.add(model.symbol.localName);
     }
   }
-  return linked;
+  return referenced;
+}
+
+/** The reference inside a `[ref<T>]` list, or the type itself. */
+function referenceElement(type: TypeExpr): TypeExpr {
+  if (type.kind !== "array") return type;
+  if (type.element.kind === "nullable") return type.element.inner;
+  return type.element;
+}
+
+/** The tables a reference may point at: the target itself, or every concrete subtype of an abstract one. */
+function recordTargets(target: ResolvedModel, schema: ResolvedSchema): ResolvedModel[] {
+  if (isAbstractModel(target)) return concreteSubtypes(target, schema);
+  return [target];
 }
 
 function renderEmbeddedField(
@@ -225,41 +230,20 @@ function fieldTypeFor(type: TypeExpr, decorators: Decorator[], schema: ResolvedS
   const override = firstStringArg(decorators, "surreal.type");
   if (override !== null) return override;
 
-  // A @references decorator turns a field into a typed record link.
-  const reference = firstStringArg(decorators, "references");
-  if (reference !== null) return `record<${referencedTable(reference)}>`;
-
-  // @link makes a named-model field a record link to that model's own table.
-  if (hasDecorator(decorators, "link")) return linkType(type, schema);
-
   return mapType(type, schema);
 }
 
-// record<table> for a @link field, preserving an array wrapper for [Model] links.
-function linkType(type: TypeExpr, schema: ResolvedSchema): string {
-  if (type.kind === "array") {
-    const element = type.element.kind === "nullable" ? type.element.inner : type.element;
-    return `array<${recordRef(element, schema)}>`;
-  }
-  return recordRef(type, schema);
-}
-
-function recordRef(type: TypeExpr, schema: ResolvedSchema): string {
-  if (type.kind === "named") {
-    const model = modelByLocalName(type.path[type.path.length - 1], schema);
-    if (model !== null) return `record<${tableNameFor(model)}>`;
-  }
-  return "record"; // untyped record link fallback
-}
-
-function modelByLocalName(name: string, schema: ResolvedSchema): ResolvedModel | null {
-  for (const record of schema.records.values()) {
-    if (record.symbol.localName === name) return record;
-  }
-  return null;
+// A `ref<T>` is a record link to T's table; a reference to an abstract model may
+// name a record of any of its concrete subtypes.
+function recordLink(target: ResolvedModel, schema: ResolvedSchema): string {
+  const tables = recordTargets(target, schema).map(tableNameFor);
+  if (tables.length === 0) return "record";
+  return `record<${tables.join(" | ")}>`;
 }
 
 function mapType(type: TypeExpr, schema: ResolvedSchema): string {
+  const target = referencedModel(type, schema);
+  if (target !== null)          return recordLink(target, schema);
   if (type.kind === "scalar")   return SCALAR_SURREAL[type.scalar];
   if (type.kind === "decimal")  return "decimal";
   if (type.kind === "array") {
@@ -279,13 +263,8 @@ function mapNamedType(path: string[], schema: ResolvedSchema): string {
   for (const symbol of schema.enums.values()) {
     if (symbol.localName === local) return "string"; // enums are stored as strings
   }
-  // A reference to another model with no @references link is stored embedded.
+  // A model named inline (not through ref<T>) is stored embedded.
   return "object";
-}
-
-function referencedTable(reference: string): string {
-  const segments = reference.split(".");
-  return segments[0];
 }
 
 function defaultClauseFor(decorators: Decorator[]): string | null {

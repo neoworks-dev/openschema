@@ -246,30 +246,27 @@ describe("array length decorators", () => {
   });
 });
 
-describe("@link validation", () => {
-  it("accepts a link to a model with a single @primaryKey", () => {
-    const s = resolveSrc("model Geo { @primaryKey 1 id: uuid  2 lat: f64 }  model M { @link 1 g: Geo? }");
+describe("ref<T> validation", () => {
+  it("accepts a reference to any stored model, abstract ones included", () => {
+    const s = resolveSrc(
+      "@abstract model Media { 1 id: uuid }  model Video extends Media { 2 title: string }  " +
+      "model Plain { 1 a: i32 }  model M { 1 a: ref<Plain>?  2 b: [ref<Video>]  3 c: ref<Media> }",
+    );
     expect(s.hasErrors).toBe(false);
   });
 
-  it("rejects a link whose target has no @primaryKey (OS1016)", () => {
-    const s = resolveSrc("model Geo { 1 lat: f64 }  model M { @link 1 g: Geo? }");
-    expect(codes(s)).toContain("OS1016");
-    expect(s.hasErrors).toBe(true);
+  it("rejects a reference to a @value model, an enum or a generic model (OS1017)", () => {
+    for (const target of ["@value model T { 1 a: i32 }", "enum T { 1 a }", "model T<X> { 1 a: X }"]) {
+      const s = resolveSrc(`${target}  model M { 1 t: ref<T> }`);
+      expect(codes(s)).toContain("OS1017");
+    }
   });
 
-  it("rejects a link to a composite-key target (OS1016)", () => {
-    const s = resolveSrc("model Geo { @primaryKey 1 lat: f64  @primaryKey 2 lng: f64 }  model M { @link 1 g: Geo }");
-    expect(codes(s)).toContain("OS1016");
-  });
-
-  it("rejects @link on a non-model field (OS1015)", () => {
-    const s = resolveSrc("model M { @link 1 g: string }");
-    expect(codes(s)).toContain("OS1015");
-  });
-
-  it("validates links through array element types", () => {
-    const s = resolveSrc("model Geo { 1 lat: f64 }  model M { @link 1 g: [Geo] }");
-    expect(codes(s)).toContain("OS1016");
+  it("rejects the removed @link and @references decorators (OS1019)", () => {
+    const linked = resolveSrc("model Geo { @primaryKey 1 id: uuid }  model M { @link 1 g: Geo? }");
+    const referenced = resolveSrc("model M { @references(Geo.id) 1 g: uuid }");
+    expect(codes(linked)).toContain("OS1019");
+    expect(codes(referenced)).toContain("OS1019");
+    expect(linked.hasErrors).toBe(true);
   });
 });

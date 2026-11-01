@@ -52,11 +52,11 @@ describe("sqlite emitter", () => {
     expect(out).toContain("s TEXT NOT NULL DEFAULT 'it''s'");
   });
 
-  it("renders keys, links and @sqlite.strict", () => {
+  it("renders keys, references and @sqlite.strict", () => {
     const out = sqlite(`
       model Studio { @primaryKey 1 id: uuid }
       @sqlite.strict
-      model Video { @primaryKey 1 id: uuid  @link 2 studio: Studio?  @unique 3 slug: string }
+      model Video { @primaryKey 1 id: uuid  2 studio: ref<Studio>?  @unique 3 slug: string }
     `);
     expect(out).toContain("id TEXT NOT NULL PRIMARY KEY");
     expect(out).toContain("studio TEXT REFERENCES Studio(id)");
@@ -74,7 +74,7 @@ describe("sqlite emitter", () => {
         @primaryKey 1 id: uuid
         2 status: Status
         3 tags: [string]
-        @link 4 studio: Studio?
+        4 studio: ref<Studio>?
         @default(now()) 5 createdAt: timestamp
       }
     `));
