@@ -59,7 +59,7 @@ export function columnDefinition(columnName: string, field: ResolvedField, schem
 // A scalar @link field becomes a foreign key to the linked model's primary key.
 // Array links degrade to a JSONB id list (no FK), and an explicit @references
 // wins, so both are skipped here.
-function linkReferencesClause(field: ResolvedField, schema: ResolvedSchema): string | null {
+export function linkReferencesClause(field: ResolvedField, schema: ResolvedSchema): string | null {
   if (!hasDecorator(field.decorators, "link")) return null;
   if (hasDecorator(field.decorators, "references")) return null;
 

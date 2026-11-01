@@ -8,6 +8,7 @@ is never mistaken for a drop + add.
 
 ```bash
 openschema migrate v1.schema v2.schema --target migration-sql      --out ./migrations
+openschema migrate v1.schema v2.schema --target migration-sqlite   --out ./migrations
 openschema migrate v1.schema v2.schema --target migration-surreal  --out ./migrations
 ```
 
@@ -31,6 +32,29 @@ it to DDL:
 | enum variant add / rename      | `ALTER TYPE … ADD VALUE` / `RENAME VALUE` | re-`DEFINE FIELD` updated ASSERT |
 | enum variant remove            | `-- MANUAL` recreate (PG limitation)  | re-`DEFINE FIELD` updated ASSERT |
 
+SQLite (`migration-sqlite`) runs `CREATE TABLE`, `DROP TABLE`, `RENAME TO`,
+`RENAME COLUMN` and simple `ADD COLUMN`s in place. It cannot alter a column, so
+every other change **rebuilds the table**, following SQLite's documented
+procedure: create the new definition as `<table>__new`, copy the rows across,
+drop the old table, rename the new one into place. All changes to one table share
+one rebuild, placed after every table is created and before the drops.
+
+| Change                         | SQLite                                                     |
+| ------------------------------ | ---------------------------------------------------------- |
+| added field                    | `ADD COLUMN`; a rebuild when SQLite forbids that (`PRIMARY KEY`, `UNIQUE`, a parenthesised default, `NOT NULL` without a default, a `NOT NULL` foreign key) |
+| removed field                  | rebuild (destructive); works on every SQLite version       |
+| type change                    | rebuild with `CAST(old AS NEWTYPE)`; `-- no-op` when the column stays the same (`i32`→`i64`) |
+| nullability change             | rebuild                                                    |
+| new / removed / renamed enum   | comment (enums are a `CHECK`, there is no type)            |
+| enum variant add / remove / rename | rebuild of every table using the enum; a renamed value is mapped with `CASE` while copying |
+
+A rebuild drops the old table, so foreign keys must be off while it runs: the
+migration starts with `PRAGMA foreign_keys = OFF` and ends with
+`PRAGMA foreign_key_check` and `PRAGMA foreign_keys = ON`. The pragma does
+nothing inside a transaction, so a runner that wraps each migration in one must
+turn foreign keys off itself first. Indexes and triggers that the schema does not
+declare are lost with the old table and must be recreated by hand.
+
 Operations are ordered so dependencies hold: tables are created before fields that
 reference them, a field is renamed before any op that targets its new name, and
 destructive drops come last (an expand-then-contract forward migration).
@@ -42,7 +66,9 @@ project, so the generator marks those spots rather than guessing:
 
 - **Required column, no `@default`** → a `-- TODO backfill` block: add the column
   nullable, backfill, then enforce `NOT NULL`. (If the field has `@default`, that
-  declared value is used automatically and no TODO is emitted.)
+  declared value is used automatically and no TODO is emitted.) In SQLite the
+  rebuild copies `NULL /* TODO backfill */` into the column; replace it with the
+  value to fill in.
 - **Narrowing / incompatible type change** → a `-- LOSSY` marker plus a `USING`
   cast (SQL) or a commented `UPDATE` (SurrealDB) to review — values outside the new
   type's range will fail.

@@ -3,6 +3,7 @@
 
 import type { Emitter } from "./types.js";
 import { sqlEmitter } from "./sql/sqlEmitter.js";
+import { sqliteEmitter } from "./sql/sqliteEmitter.js";
 import { typescriptEmitter } from "./typescript/typescriptEmitter.js";
 import { jsonSchemaEmitter } from "./jsonSchema/jsonSchemaEmitter.js";
 import { goEmitter } from "./go/goEmitter.js";
@@ -21,6 +22,7 @@ export type * from "./descriptor/descriptorTypes.js";
 
 const EMITTERS: Record<string, Emitter> = {
   [sqlEmitter.target]: sqlEmitter,
+  [sqliteEmitter.target]: sqliteEmitter,
   [typescriptEmitter.target]: typescriptEmitter,
   [jsonSchemaEmitter.target]: jsonSchemaEmitter,
   [goEmitter.target]: goEmitter,

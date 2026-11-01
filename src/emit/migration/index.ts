@@ -4,12 +4,14 @@
 
 import type { MigrationEmitter } from "./types.js";
 import { sqlMigrationEmitter } from "./sqlMigrationEmitter.js";
+import { sqliteMigrationEmitter } from "./sqliteMigrationEmitter.js";
 import { surrealMigrationEmitter } from "./surrealMigrationEmitter.js";
 
 export type { MigrationEmitter, MigrationEmitContext } from "./types.js";
 
 const MIGRATION_EMITTERS: Record<string, MigrationEmitter> = {
   [sqlMigrationEmitter.target]:     sqlMigrationEmitter,
+  [sqliteMigrationEmitter.target]:  sqliteMigrationEmitter,
   [surrealMigrationEmitter.target]: surrealMigrationEmitter,
 };
 

@@ -13,7 +13,7 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
 | `--include-private` | include the schema's own `private` fields | off |
 
-Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
+Targets: `sql`, `sqlite`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
 `surrealdb`, `codec`, `descriptor`, `collection`, `kotlin`, `versions`. Pass several at once
 with a comma: `-t ts,zod,sql`. The `versions` target writes the types of every
 published version of a collection ([Types per version](./collection.md#types-per-version)).
@@ -121,6 +121,49 @@ Type mapping:
   [Decorators](./decorators.md).
 - Table and column names are snake-cased (`UserAccount` → `user_account`)
   unless overridden.
+
+---
+
+## SQLite
+
+```bash
+openschema order.schema --target sqlite --out ./out
+```
+
+```sql
+CREATE TABLE orders (
+  id TEXT NOT NULL PRIMARY KEY DEFAULT (gen_uuid()),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'shipped')),
+  total TEXT NOT NULL,
+  tags TEXT NOT NULL CHECK (json_valid(tags)),
+  note TEXT
+);
+```
+
+SQLite has no enum, JSON or UUID column types, so values that need one are
+`TEXT` guarded by a `CHECK`. Type mapping:
+
+| OpenSchema | SQLite |
+|-----------|--------|
+| `bool`, `i8`…`i64`, `u8`…`u32` | `INTEGER` |
+| `u64` | `TEXT` (exact; does not fit a signed 64-bit `INTEGER`) |
+| `f32` `f64` | `REAL` |
+| `decimal(p, s)` | `TEXT` (exact) |
+| `string` `uuid` `date` `time` `timestamp` `duration` `semver` | `TEXT` |
+| `bytes` | `BLOB` |
+| `json`, `[T]`, `{K: V}`, unions, `oneof`, `File`, an embedded model | `TEXT` + `CHECK (json_valid(col))` |
+| an `enum` type | `TEXT` + `CHECK (col IN ('a', 'b'))` |
+
+- Keys, `@unique`, `@check`, `@references` and `@link` render as in the
+  PostgreSQL target; `@sql.type` and `@sql.column` still override (an explicit
+  `@sql.type` drops the implicit `CHECK`).
+- A `@default` that is not a plain literal is parenthesised, as SQLite requires;
+  `now()` becomes `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, an ISO 8601 UTC
+  timestamp. Other functions (`gen_uuid()`) are passed through and must exist in
+  the database.
+- `@sqlite.strict` on a model makes its table `STRICT` (SQLite 3.37+). It is
+  opt-in because older SQLite builds, such as those of many mobile platforms,
+  reject it.
 
 ---
 

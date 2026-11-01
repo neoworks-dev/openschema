@@ -32,8 +32,8 @@ the older `openschema gen` are aliases for the same command.
 | `--write-lock` | write the ordinal ledger even when `CI` is set | off |
 | `--no-lock` | skip the ordinal ledger entirely | off |
 
-Targets: `sql`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
-`surrealdb`, `codec`, `descriptor`, `collection`, `kotlin`.
+Targets: `sql`, `sqlite`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
+`surrealdb`, `codec`, `descriptor`, `collection`, `kotlin`, `versions`.
 
 ```bash
 openschema order.schema -t sql -o ./generated

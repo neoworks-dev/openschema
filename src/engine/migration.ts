@@ -156,6 +156,14 @@ function planEnums(ops: MigrationOp[], oldSchema: ResolvedSchema, newSchema: Res
   }
 }
 
+/** The old model a new model continues (same name, or @renamed from it), or null when it is new. */
+export function previousModel(oldSchema: ResolvedSchema, newSchema: ResolvedSchema, newModel: ResolvedModel): ResolvedModel | null {
+  const match = matchDeclarations(modelEntries(oldSchema), modelEntries(newSchema));
+  const pair = match.pairs.find(candidate => candidate.newDecl.model === newModel);
+  if (pair === undefined) return null;
+  return pair.oldDecl.model;
+}
+
 // ── Adapters ──────────────────────────────────────────────────────────────────
 
 function modelEntries(schema: ResolvedSchema): Map<string, ModelEntry> {

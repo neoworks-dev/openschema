@@ -52,7 +52,7 @@ bun build src/cli/index.ts --compile --outfile openschema
 
 ## What it does
 
-- **One source, many targets.** SQL DDL, TypeScript, Go, JSON Schema, GraphQL, and OpenAPI.
+- **One source, many targets.** SQL DDL (PostgreSQL and SQLite), TypeScript, Go, JSON Schema, GraphQL, and OpenAPI.
 - **Protobuf-style field numbers** give every field a stable identity, so the
   compatibility checker can tell a safe rename from a breaking removal.
 - **Per-company overlays** let many companies extend a shared schema with private
