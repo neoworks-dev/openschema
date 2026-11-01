@@ -8,7 +8,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, TypeAlias } from "../../parser/ast.js";
 import {
   baseFieldsToEmit, overlayFieldsToEmit, hasDecorator,
-  isVisibleInOutput, isVisibleInInput, isInputModel,
+  isVisibleInOutput, isVisibleInInput, isInputModel, isAbstractModel, abstractAncestors,
   unionAliases, isUnionAlias, resolveAliasInline,
 } from "../typeMapping.js";
 
@@ -68,7 +68,20 @@ function emitObjectType(record: ResolvedModel, context: EmitContext): string {
     ...overlayFieldsToEmit(context.schema, record, context.company),
   ].filter(f => isVisibleInOutput(f.decorators));
   const lines = fields.map(f => `  ${f.name}: ${renderType(f.type, false, context.schema)}`);
-  return `type ${record.symbol.localName} {\n${lines.join("\n")}\n}`;
+  return `${objectKeyword(record)} ${record.symbol.localName}${implementsClause(record, context.schema)} {\n${lines.join("\n")}\n}`;
+}
+
+// An @abstract model is an interface; every model extending abstract models
+// implements all of them, as GraphQL requires transitively implemented ones listed.
+function objectKeyword(record: ResolvedModel): string {
+  if (isAbstractModel(record)) return "interface";
+  return "type";
+}
+
+function implementsClause(record: ResolvedModel, schema: ResolvedSchema): string {
+  const interfaces = abstractAncestors(record, schema).map(base => base.symbol.localName);
+  if (interfaces.length === 0) return "";
+  return ` implements ${interfaces.join(" & ")}`;
 }
 
 function emitInputType(record: ResolvedModel, context: EmitContext): string {

@@ -305,3 +305,4 @@ refuses to move a field to another facet — including by renaming the facet —
 | `OSD012` | `@onDelete` other than `"cascade"`, or not on a `ref<Table>` or `[ref<Table>]` field |
 | `OSD013` | invalid `@neoworks.index`: a field that cannot be indexed or does not exist, a field named twice, a table-level index without `fields`, or arguments on a field |
 | `OSD014` | a `ref<T>` (or `[ref<T>]`) naming a model that is not marked `@neoworks.table` |
+| `OSD015` | `@neoworks.table` on an `@abstract` model, which has no rows of its own |

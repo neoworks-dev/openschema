@@ -514,6 +514,18 @@ The overlay's fields are added to the base model's output, namespaced by
 company (`acme_loyalty_tier`), so different companies' generated artifacts never
 collide.
 
+## Abstract models
+
+An `@abstract` model is a GraphQL `interface` that its subtypes implement
+(`type Video implements Media & Record`), a TypeScript interface they extend, a
+Zod schema they `.extend()`, and a Go struct they embed. The database targets
+give it no table, and a value typed with it is any concrete subtype (`anyOf` in
+JSON Schema, `oneOf` in OpenAPI, a `z.union` in Zod, `any` in Go). The codec
+rejects such a value (`OSC009`) and Kotlin stays flattened. The full table is in
+[Abstract models](./language-reference.md#abstract-models).
+
+---
+
 ## Type aliases and unions
 
 Non-union aliases are inlined into the referencing type before emission (a

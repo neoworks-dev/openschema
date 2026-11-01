@@ -5,7 +5,7 @@
 
 import type { ScalarKind, Span, TypeExpr } from "../../parser/ast.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { resolveAliasInline, unwrapNullable } from "../typeMapping.js";
+import { abstractModelOf, resolveAliasInline, unwrapNullable } from "../typeMapping.js";
 import { CodecUnsupportedError } from "./errors.js";
 import {
   MAX_ORDINAL, SCALAR_CODEC_TS, SCALAR_WIRE, WireType,
@@ -212,6 +212,11 @@ function planValue(model: string, field: ResolvedField, type: TypeExpr, schema: 
   if (resolved.kind === "union") {
     throw new CodecUnsupportedError("OSC001", model, field.name,
       "an untagged union has no discriminant on the wire; use `oneof { 1 a: A  2 b: B }`", field.span);
+  }
+  if (abstractModelOf(resolved, schema) !== null) {
+    throw new CodecUnsupportedError("OSC009", model, field.name,
+      "a value of an @abstract model may be any of its subtypes, and the wire carries no discriminant; " +
+      "use a oneof of the subtypes or ref<Model>", field.span);
   }
   if (resolved.kind === "named") {
     const named = classifyNamed(resolved, schema);

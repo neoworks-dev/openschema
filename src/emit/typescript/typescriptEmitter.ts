@@ -5,7 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, ModelDecl, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, nearestAbstractAncestor, fieldsBeyond,
   unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS,
 } from "../typeMapping.js";
 
@@ -53,18 +53,22 @@ function emitUnionAlias(name: string, alias: TypeAlias, schema: ResolvedSchema):
   return `export type ${name} = ${members.join(" | ")};`;
 }
 
+// A model extending an @abstract model extends its interface and lists only the
+// fields it adds; extending a plain model still flattens the inherited fields.
 function emitInterface(record: ResolvedModel, context: EmitContext): string {
   const params = typeParamList(record);
+  const base = nearestAbstractAncestor(record, context.schema);
   const lines: string[] = [];
 
-  for (const field of baseFieldsToEmit(record, context)) {
+  for (const field of fieldsBeyond(baseFieldsToEmit(record, context), base)) {
     lines.push(fieldLine(field, context.schema));
   }
   for (const field of overlayFieldsToEmit(context.schema, record, context.company)) {
     lines.push(fieldLine(field, context.schema));
   }
 
-  return `export interface ${record.symbol.localName}${params} {\n${lines.join("\n")}\n}`;
+  const heritage = base === null ? "" : ` extends ${base.symbol.localName}`;
+  return `export interface ${record.symbol.localName}${params}${heritage} {\n${lines.join("\n")}\n}`;
 }
 
 function typeParamList(record: ResolvedModel): string {

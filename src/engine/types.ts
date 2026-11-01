@@ -36,6 +36,7 @@ export type ChangeKind =
   | "declaration_added"
   | "declaration_removed"
   | "declaration_renamed"
+  | "declaration_abstract_changed"
   // Record / field
   | "field_added_nullable"
   | "field_added_required_with_default"

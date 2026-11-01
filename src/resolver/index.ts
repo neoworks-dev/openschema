@@ -12,7 +12,7 @@ import type {
 } from "./types.js";
 import {
   aliasByLocalName, substituteTypeParams, unionAliases, isInputModel,
-  resolveAliasInline, findDecorator,
+  resolveAliasInline, findDecorator, modelByLocalName, isAbstractModel, extendsModel, isVisibleInInput,
 } from "../emit/typeMapping.js";
 import { expandReserved, EMPTY_RESERVED, type ReservedSet } from "./reserved.js";
 import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "./packages.js";
@@ -125,6 +125,7 @@ export function resolveModules(modules: Module[]): ResolvedSchema {
   schema.operations = normalizeAliases(schema, diagnostics);
   lintUnionAliases(schema, diagnostics);
   lintRemovedLinkDecorators(schema, diagnostics);
+  lintAbstractModels(schema, diagnostics);
 
   schema.hasErrors = diagnostics.items.some(d => d.severity === "error");
   return schema;
@@ -941,6 +942,46 @@ function lintRemovedOnField(field: ResolvedField, diagnostics: Diagnostics): voi
       `@${decorator.name} was removed; type the field '${field.name}' as ref<Model> (or [ref<Model>]) instead`,
       decorator.span);
   }
+}
+
+// An @abstract model has no input form: GraphQL interfaces are output-only and
+// no target can tell which subtype an input value is (OS1020). One no model
+// extends is never stored anywhere (warning OS1021).
+function lintAbstractModels(schema: ResolvedSchema, diagnostics: Diagnostics): void {
+  for (const record of schema.records.values()) {
+    if (!isAbstractModel(record) || record.symbol.packageName !== null) continue;
+    const extended = [...schema.records.values()].some(candidate => extendsModel(candidate, record));
+    if (!extended) {
+      diagnostics.warning("OS1021", `@abstract model '${record.symbol.localName}' has no subtypes, so it is never stored`, record.symbol.span);
+    }
+  }
+  for (const op of schema.operations) {
+    for (const param of op.params) {
+      const abstract = abstractModelInInput(param.type, schema, new Set());
+      if (abstract === null) continue;
+      diagnostics.error("OS1020",
+        `The @abstract model '${abstract}' cannot be an operation input (parameter '${param.name}' of '${op.name}'); use a concrete subtype or ref<${abstract}>`,
+        param.span);
+    }
+  }
+}
+
+/** The first abstract model an input of this type would contain, following input-visible fields. */
+function abstractModelInInput(type: TypeExpr, schema: ResolvedSchema, seen: Set<string>): string | null {
+  if (type.kind === "nullable") return abstractModelInInput(type.inner, schema, seen);
+  if (type.kind === "array") return abstractModelInInput(type.element, schema, seen);
+  if (type.kind === "map") return abstractModelInInput(type.value, schema, seen);
+  if (type.kind !== "named") return null;
+  const model = modelByLocalName(type.path[type.path.length - 1], schema);
+  if (model === null || seen.has(model.symbol.qualifiedName)) return null;
+  if (isAbstractModel(model)) return model.symbol.localName;
+  seen.add(model.symbol.qualifiedName);
+  for (const field of model.fields) {
+    if (field.isPrivate || !isVisibleInInput(field.decorators)) continue;
+    const found = abstractModelInInput(field.type, schema, seen);
+    if (found !== null) return found;
+  }
+  return null;
 }
 
 function isObjectModelRef(type: TypeExpr, schema: ResolvedSchema): boolean {

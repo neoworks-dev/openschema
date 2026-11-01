@@ -12,7 +12,8 @@ export type CodecErrorCode =
   | "OSC005"   // --company: overlay ordinals collide with the base record's
   | "OSC006"   // a field named $unknown collides with the unknown-field bag
   | "OSC007"   // unresolvable named reference or unsubstituted type parameter
-  | "OSC008";  // duplicate localName across namespaces
+  | "OSC008"   // duplicate localName across namespaces
+  | "OSC009";  // a value typed as an @abstract model — no discriminant on the wire
 
 export class CodecUnsupportedError extends Error {
   constructor(

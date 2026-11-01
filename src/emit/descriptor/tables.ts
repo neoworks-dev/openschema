@@ -10,7 +10,9 @@
 import { createHash } from "node:crypto";
 import type { Decorator, TypeExpr } from "../../parser/ast.js";
 import type { ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { allDecorators, firstStringArg, namedStringListArg, referencedModel as referencedRecord } from "../typeMapping.js";
+import {
+  allDecorators, firstStringArg, namedStringListArg, isAbstractModel, referencedModel as referencedRecord,
+} from "../typeMapping.js";
 import { MAX_ORDINAL } from "../codec/wireFormat.js";
 import type {
   FacetDescriptor, FieldDescriptor, IndexDescriptor, ModelDescriptor, TableDescriptor,
@@ -81,6 +83,10 @@ export function isTable(record: ResolvedModel): boolean {
   if (decorators.length > 1 || decorators[0].args.length > 0) {
     throw new DescriptorError("OSD002", record.symbol.localName, null,
       `@${TABLE_DECORATOR} takes no arguments and appears once`, decorators[0].span);
+  }
+  if (isAbstractModel(record)) {
+    throw new DescriptorError("OSD015", record.symbol.localName, null,
+      `an @abstract model has no rows of its own, so it cannot be a @${TABLE_DECORATOR}; mark its subtypes`, decorators[0].span);
   }
   return true;
 }

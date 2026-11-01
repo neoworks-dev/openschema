@@ -5,7 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, modelByLocalName, isAbstractModel, concreteSubtypes,
   firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
 
@@ -40,7 +40,7 @@ export const jsonSchemaEmitter: Emitter = {
     }
     for (const { name, alias } of unionAliases(context.schema)) {
       if (alias.type.kind !== "union") continue;
-      defs[name] = { anyOf: alias.type.variants.map(v => mapType(resolveAliasInline(v, context.schema))) };
+      defs[name] = { anyOf: alias.type.variants.map(v => mapType(resolveAliasInline(v, context.schema), context.schema)) };
     }
     const doc: Json = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -64,7 +64,7 @@ function recordSchema(record: ResolvedModel, context: EmitContext): Json {
   ];
   for (const field of fields) {
     const { inner, nullable } = unwrapNullable(field.type);
-    properties[field.name] = fieldSchema(inner, field);
+    properties[field.name] = fieldSchema(inner, field, context.schema);
     if (!nullable) required.push(field.name);
   }
 
@@ -73,8 +73,8 @@ function recordSchema(record: ResolvedModel, context: EmitContext): Json {
   return schema;
 }
 
-function fieldSchema(type: TypeExpr, field: ResolvedField): Json {
-  const base = mapType(type);
+function fieldSchema(type: TypeExpr, field: ResolvedField, schema: ResolvedSchema): Json {
+  const base = mapType(type, schema);
   applyConstraints(base, field);
   return base;
 }
@@ -100,22 +100,31 @@ function applyNumericBound(schema: Json, field: ResolvedField, decorator: string
   schema[keyword] = value.value;
 }
 
-function mapType(type: TypeExpr): Json {
+function mapType(type: TypeExpr, schema: ResolvedSchema): Json {
   switch (type.kind) {
     case "scalar":   return { ...SCALAR_JSON[type.scalar] };
     case "decimal":  return { type: "string" };
-    case "named":    return { $ref: `#/$defs/${type.path[type.path.length - 1]}` };
+    case "named":    return namedSchema(type.path[type.path.length - 1], schema);
     case "array": {
-      const arraySchema: Json = { type: "array", items: mapType(type.element) };
+      const arraySchema: Json = { type: "array", items: mapType(type.element, schema) };
       if (type.minItems !== undefined) arraySchema.minItems = type.minItems;
       if (type.maxItems !== undefined) arraySchema.maxItems = type.maxItems;
       return arraySchema;
     }
-    case "map":      return { type: "object", additionalProperties: mapType(type.value) };
-    case "nullable": return mapType(type.inner);
+    case "map":      return { type: "object", additionalProperties: mapType(type.value, schema) };
+    case "nullable": return mapType(type.inner, schema);
     case "null":     return { type: "null" };
     case "file":     return structuredClone(FILE_JSON_SCHEMA);
-    case "union":    return { anyOf: type.variants.map(mapType) };
-    case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type)) };
+    case "union":    return { anyOf: type.variants.map(variant => mapType(variant, schema)) };
+    case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type, schema)) };
   }
+}
+
+// A value typed as an @abstract model is one of its concrete subtypes.
+function namedSchema(name: string, schema: ResolvedSchema): Json {
+  const model = modelByLocalName(name, schema);
+  if (model === null || !isAbstractModel(model)) return { $ref: `#/$defs/${name}` };
+  const subtypes = concreteSubtypes(model, schema);
+  if (subtypes.length === 0) return { $ref: `#/$defs/${name}` };
+  return { anyOf: subtypes.map(subtype => ({ $ref: `#/$defs/${subtype.symbol.localName}` })) };
 }

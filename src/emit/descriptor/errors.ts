@@ -15,7 +15,8 @@ export type DescriptorErrorCode =
   | "OSD011"   // invalid @belongsTo
   | "OSD012"   // invalid @onDelete
   | "OSD013"   // invalid @neoworks.index
-  | "OSD014";  // ref<T> naming a model that is not @neoworks.table
+  | "OSD014"   // ref<T> naming a model that is not @neoworks.table
+  | "OSD015";  // @neoworks.table on an @abstract model
 
 export class DescriptorError extends Error {
   constructor(

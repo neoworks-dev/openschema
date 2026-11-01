@@ -169,6 +169,28 @@ export function abstractAncestors(record: ResolvedModel, schema: ResolvedSchema)
   return ancestors;
 }
 
+/** The closest @abstract model in a record's extends chain, or null. */
+export function nearestAbstractAncestor(record: ResolvedModel, schema: ResolvedSchema): ResolvedModel | null {
+  const ancestors = abstractAncestors(record, schema);
+  if (ancestors.length === 0) return null;
+  return ancestors[0];
+}
+
+/** The fields a record adds on top of `base` (all of them when there is no base). */
+export function fieldsBeyond(fields: ResolvedField[], base: ResolvedModel | null): ResolvedField[] {
+  if (base === null) return fields;
+  const inherited = new Set(base.fields.map(field => field.ordinal));
+  return fields.filter(field => !inherited.has(field.ordinal));
+}
+
+/** Records reordered so every @abstract base comes before the models extending it. */
+export function abstractBasesFirst(records: ResolvedModel[], schema: ResolvedSchema): ResolvedModel[] {
+  const depth = (record: ResolvedModel) => abstractAncestors(record, schema).length;
+  return records.map((record, position) => ({ record, position }))
+    .sort((left, right) => depth(left.record) - depth(right.record) || left.position - right.position)
+    .map(entry => entry.record);
+}
+
 /** The abstract model a named type points at, or null. */
 export function abstractModelOf(type: TypeExpr, schema: ResolvedSchema): ResolvedModel | null {
   if (type.kind !== "named") return null;

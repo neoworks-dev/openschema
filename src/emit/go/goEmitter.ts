@@ -4,7 +4,10 @@
 import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl } from "../../parser/ast.js";
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases } from "../typeMapping.js";
+import {
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases,
+  nearestAbstractAncestor, fieldsBeyond, abstractModelOf,
+} from "../typeMapping.js";
 
 const SCALAR_GO: Record<ScalarKind, string> = {
   bool: "bool",
@@ -45,10 +48,14 @@ function emitEnum(decl: EnumDecl): string {
   return `type ${decl.name} int32\n\nconst (\n${consts}\n)`;
 }
 
+// A model extending an @abstract model embeds that model's struct (Go promotes
+// its fields, in Go and in JSON) and declares only the fields it adds.
 function emitStruct(record: ResolvedModel, context: EmitContext): string {
+  const base = nearestAbstractAncestor(record, context.schema);
   const lines: string[] = [];
+  if (base !== null) lines.push(`\t${pascalCase(base.symbol.localName)}`);
   const fields = [
-    ...baseFieldsToEmit(record, context),
+    ...fieldsBeyond(baseFieldsToEmit(record, context), base),
     ...overlayFieldsToEmit(context.schema, record, context.company),
   ];
   for (const field of fields) {
@@ -59,12 +66,19 @@ function emitStruct(record: ResolvedModel, context: EmitContext): string {
 
 function fieldLine(field: ResolvedField, schema: ResolvedSchema): string {
   const { inner, nullable } = unwrapNullable(field.type);
-  const goType = nullable ? `*${mapType(inner, schema)}` : mapType(inner, schema);
+  const goType = nullable && !isAbstractValue(inner, schema) ? `*${mapType(inner, schema)}` : mapType(inner, schema);
   const tag = nullable ? `${field.name},omitempty` : field.name;
   return `\t${pascalCase(field.name)} ${goType} \`json:"${tag}"\``;
 }
 
+// A value typed as an @abstract model may be any of its subtypes, which Go can
+// only hold as `any`; a nil `any` already means absent, so it needs no pointer.
+function isAbstractValue(type: TypeExpr, schema: ResolvedSchema): boolean {
+  return abstractModelOf(type, schema) !== null;
+}
+
 function mapType(type: TypeExpr, schema: ResolvedSchema): string {
+  if (isAbstractValue(type, schema)) return "any";
   switch (type.kind) {
     case "scalar":   return SCALAR_GO[type.scalar];
     case "decimal":  return "string";

@@ -198,6 +198,7 @@ The set is empty today; the [ordinal ledger](./ordinal-ledger.md) is what will f
 | `OSC006` | a field named `$unknown` |
 | `OSC007` | an unresolvable named reference or unsubstituted type parameter |
 | `OSC008` | the same local name declared in two namespaces |
+| `OSC009` | a value typed as an `@abstract` model — any subtype fits, and nothing on the wire says which; use a `oneof` or `ref<Model>` |
 
 Rejection is at the use site: a union alias no encoded model references does not
 fail the build. Generic models are skipped, matching the `zod` target.

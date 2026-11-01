@@ -12,7 +12,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, EnumDecl, OperationDecl, ParamDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, unwrapNullable,
-  isVisibleInInput, isVisibleInOutput, isInputModel,
+  isVisibleInInput, isVisibleInOutput, isInputModel, isAbstractModel, concreteSubtypes,
   unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN,
 } from "../typeMapping.js";
 
@@ -131,7 +131,7 @@ function mapType(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): Js
   switch (type.kind) {
     case "scalar":   return { ...SCALAR_JSON[type.scalar] };
     case "decimal":  return { type: "string", format: "decimal" };
-    case "named":    return { $ref: refFor(type.path[type.path.length - 1], inputMode, schema) };
+    case "named":    return namedSchema(type.path[type.path.length - 1], inputMode, schema);
     case "array": {
       const arraySchema: Json = { type: "array", items: mapType(type.element, inputMode, schema) };
       if (type.minItems !== undefined) arraySchema.minItems = type.minItems;
@@ -145,6 +145,16 @@ function mapType(type: TypeExpr, inputMode: boolean, schema: ResolvedSchema): Js
     case "union":    return { oneOf: type.variants.map(v => mapType(v, inputMode, schema)) };
     case "oneof":    return { oneOf: type.variants.map(v => mapType(v.type, inputMode, schema)) };
   }
+}
+
+// A value typed as an @abstract model is one of its concrete subtypes. The
+// resolver rejects abstract models in inputs, so only output position gets here.
+function namedSchema(name: string, inputMode: boolean, schema: ResolvedSchema): Json {
+  const model = findModel(schema, name);
+  if (model === null || !isAbstractModel(model)) return { $ref: refFor(name, inputMode, schema) };
+  const subtypes = concreteSubtypes(model, schema);
+  if (subtypes.length === 0) return { $ref: refFor(name, inputMode, schema) };
+  return { oneOf: subtypes.map(subtype => ({ $ref: refFor(subtype.symbol.localName, inputMode, schema) })) };
 }
 
 // In input position, model references point to their Input variant; enums,

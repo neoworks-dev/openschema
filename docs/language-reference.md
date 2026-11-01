@@ -450,6 +450,50 @@ cycles, and reports an error if two models in the chain reuse the same ordinal.
 > Ordinals must stay unique **across** the whole inheritance chain. If `Entity`
 > uses 1 and 2, `Product` must not reuse them.
 
+### Abstract models
+
+`@abstract` marks a base that is never stored on its own, like an abstract
+class: only the models extending it are. A field typed with it holds any of
+its concrete subtypes.
+
+```openschema
+@abstract
+model Media {
+  @primaryKey 1 id: uuid
+  2 title: string
+}
+
+model Video extends Media { 10 durationSeconds: f64? }
+model Gallery extends Media { 10 imageCount: i32 }
+
+model Pick {
+  1 media: ref<Media>      // the id of a Video or a Gallery
+  2 preview: Media?        // an embedded Video or Gallery
+}
+```
+
+Every target uses only the names written in the schema:
+
+| Target | `Media` | `Video` | a field typed `Media` |
+|---|---|---|---|
+| GraphQL | `interface Media` | `type Video implements Media` (every abstract ancestor listed) | `Media` |
+| TypeScript | `interface Media` | `interface Video extends Media` with only its own fields | `Media` |
+| Zod | `MediaSchema` | `MediaSchema.extend({ … })` | `z.union([VideoSchema, GallerySchema])` |
+| JSON Schema, OpenAPI | a definition with its fields | flattened, as before | `anyOf` / `oneOf` of the subtypes |
+| Go | `type Media struct` | `type Video struct { Media; … }` | `any` |
+| SQL, SQLite, SurrealDB, descriptor | no table | a table with all inherited fields | JSON column |
+
+- A model extending a plain (non-abstract) model is still flattened in every
+  target, as above.
+- An abstract model cannot be an operation input, directly or inside an input
+  model (`OS1020`): GraphQL interfaces are output-only, and nothing says which
+  subtype an input is. Take a concrete subtype or `ref<Media>` instead.
+- An abstract model nothing extends is never stored anywhere (warning `OS1021`).
+- The codec target rejects a value typed as an abstract model (`OSC009`); Kotlin
+  data classes are generated flattened, one per model.
+- Making a model abstract, or no longer abstract, is breaking (`R021`): its
+  table goes away or appears.
+
 ---
 
 ## Generics (templates)

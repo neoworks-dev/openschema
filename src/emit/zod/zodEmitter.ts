@@ -5,7 +5,8 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
 import type { TypeExpr, ScalarKind, EnumDecl, TypeAlias } from "../../parser/ast.js";
 import {
-  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable,
+  baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, nearestAbstractAncestor, fieldsBeyond, abstractBasesFirst,
+  modelByLocalName, isAbstractModel, concreteSubtypes,
   firstStringArg, findDecorator, unionAliases, resolveAliasInline, SEMVER_ZOD,
 } from "../typeMapping.js";
 
@@ -47,7 +48,8 @@ export const zodEmitter: Emitter = {
     for (const symbol of context.schema.enums.values()) {
       blocks.push(emitEnum(symbol.localName, symbol.decl as EnumDecl));
     }
-    for (const record of context.schema.records.values()) {
+    // A schema built with .extend() needs its base defined first.
+    for (const record of abstractBasesFirst([...context.schema.records.values()], context.schema)) {
       if (record.isGeneric) continue; // generic models are not directly emittable
       blocks.push(emitObject(record, context));
     }
@@ -70,12 +72,15 @@ function emitEnum(localName: string, decl: EnumDecl): string {
     `export type ${localName} = z.infer<typeof ${name}>;`;
 }
 
+// A model extending an @abstract model extends that model's schema with the
+// fields it adds; extending a plain model still flattens the inherited fields.
 function emitObject(record: ResolvedModel, context: EmitContext): string {
   const localName = record.symbol.localName;
   const name = schemaName(localName);
+  const base = nearestAbstractAncestor(record, context.schema);
 
   const lines: string[] = [];
-  for (const field of baseFieldsToEmit(record, context)) {
+  for (const field of fieldsBeyond(baseFieldsToEmit(record, context), base)) {
     lines.push(fieldLine(field, context.schema));
   }
   for (const field of overlayFieldsToEmit(context.schema, record, context.company)) {
@@ -83,7 +88,8 @@ function emitObject(record: ResolvedModel, context: EmitContext): string {
   }
 
   const body = lines.join("\n");
-  return `export const ${name} = z.object({\n${body}\n});\n` +
+  const builder = base === null ? "z.object" : `${schemaName(base.symbol.localName)}.extend`;
+  return `export const ${name} = ${builder}({\n${body}\n});\n` +
     `export type ${localName} = z.infer<typeof ${name}>;`;
 }
 
@@ -182,9 +188,16 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
 
 // Named references are wrapped in z.lazy so emission order and recursive schemas
 // both work regardless of declaration position.
+// A value typed as an @abstract model is one of its concrete subtypes; parsing
+// it as the base alone would strip the subtype's fields.
 function mapNamed(path: string[], schema: ResolvedSchema): string {
   const base = path[path.length - 1];
-  return `z.lazy(() => ${schemaName(base)})`;
+  const abstract = modelByLocalName(base, schema);
+  if (abstract === null || !isAbstractModel(abstract)) return `z.lazy(() => ${schemaName(base)})`;
+  const subtypes = concreteSubtypes(abstract, schema).map(subtype => schemaName(subtype.symbol.localName));
+  if (subtypes.length === 0) return `z.lazy(() => ${schemaName(base)})`;
+  if (subtypes.length === 1) return `z.lazy(() => ${subtypes[0]})`;
+  return `z.lazy(() => z.union([${subtypes.join(", ")}]))`;
 }
 
 function mapOneof(

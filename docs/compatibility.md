@@ -141,6 +141,7 @@ Each change kind has a stable rule ID, so you can reference it (and suppress it)
 | `R018` | `ref<T>` target changed (`ref<A>` → `ref<B>`, also in lists) | breaking_both |
 | `R019` | field marked `@deprecated` | warning |
 | `R020` | model renamed (via `@renamed`) | warning |
+| `R021` | model became `@abstract`, or stopped being one | breaking_both |
 
 ### Enums
 

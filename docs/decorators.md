@@ -127,6 +127,7 @@ CREATE TABLE user_accounts (
 | Decorator | Applies to | Effect |
 |-----------|-----------|--------|
 | `@value` | model | An embedded value object: stored inline, as a JSON column, in every model that uses it. The `sql`, `sqlite` and `surrealdb` targets and the migration planner never give it a table. |
+| `@abstract` | model | A shared base never stored on its own: no table in any database target, a GraphQL `interface`, extended rather than flattened in TypeScript, Zod and Go. See [Abstract models](./language-reference.md#abstract-models). |
 | `@index(fields: [...], unique: true, name: "…")` | model | A table index over the named fields (in order). `unique` defaults to `false`; `name` defaults to `<table>_<columns>_idx`. Repeatable. Renders as `CREATE [UNIQUE] INDEX … ON <table> (…)` after the table in `sql` and `sqlite`, `DEFINE INDEX` in `surrealdb`; migrations drop and create indexes as the declarations change. |
 | `@sqlite.strict` | model | `sqlite` target: make the table `STRICT` (SQLite 3.37+). |
 

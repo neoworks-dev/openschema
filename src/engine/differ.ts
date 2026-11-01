@@ -42,6 +42,7 @@ const R = {
   REFERENCES_CHANGED:            "R018",
   FIELD_DEPRECATED:              "R019",
   RECORD_RENAMED:                "R020",
+  RECORD_ABSTRACT_CHANGED:       "R021",
 } as const;
 
 const E = {
@@ -157,6 +158,7 @@ export class Differ {
   private diffRecords(oldRec: AST.ModelDecl, newRec: AST.ModelDecl): void {
     // Use the new name so a renamed model reports its fields under the new name.
     const name = newRec.name;
+    this.diffAbstractness(oldRec, newRec);
 
     // ── Fields (matched by ordinal) ──────────────────────────────────────────
 
@@ -223,6 +225,22 @@ export class Differ {
           `Field '${newField.name}' made non-nullable. Existing null values will violate the new schema.`);
       }
     }
+  }
+
+  // An abstract model has no table and no records of its own, so marking a model
+  // @abstract drops its stored records, and unmarking it adds a table its
+  // subtypes' records are not in.
+  private diffAbstractness(oldRec: AST.ModelDecl, newRec: AST.ModelDecl): void {
+    const wasAbstract = oldRec.decorators.some(decorator => decorator.name === "abstract");
+    const isAbstract = newRec.decorators.some(decorator => decorator.name === "abstract");
+    if (wasAbstract === isAbstract) return;
+    if (isAbstract) {
+      this.emit(newRec.name, R.RECORD_ABSTRACT_CHANGED, "declaration_abstract_changed", "breaking_both",
+        `Model '${newRec.name}' became @abstract: it is no longer stored on its own, so its table and records go away.`);
+      return;
+    }
+    this.emit(newRec.name, R.RECORD_ABSTRACT_CHANGED, "declaration_abstract_changed", "breaking_both",
+      `Model '${newRec.name}' is no longer @abstract: it is stored on its own now, and readers of the interface see a concrete type.`);
   }
 
   // ── Constraint changes (decorator-driven) ──────────────────────────────────
