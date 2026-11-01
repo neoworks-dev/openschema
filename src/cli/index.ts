@@ -22,6 +22,7 @@ import { diff as engineDiff } from "../engine/index.js";
 import { resolveModules, loadProject } from "../resolver/index.js";
 import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
+import { GO_PACKAGE_OPTION } from "../emit/go/goEmitter.js";
 import { getMigrationEmitter, MIGRATION_TARGETS, type MigrationEmitter } from "../emit/migration/index.js";
 import { buildMigrationPlan, type MigrationPlan } from "../engine/migration.js";
 import {
@@ -61,6 +62,8 @@ interface GenerateOptions {
   out: string;
   company?: string;
   includePrivate?: boolean;
+  /** The Go package name, from --package. */
+  package?: string;
   /** A path from --lock, or `false` from --no-lock. */
   lock?: string | boolean;
   frozen?: boolean;
@@ -165,7 +168,7 @@ function emitAll(emitters: Emitter[], schema: ResolvedSchema, opts: GenerateOpti
         schema,
         company: opts.company ?? null,
         includePrivate: opts.includePrivate === true,
-        options: emitOptions(emitter, schemaPath, modules),
+        options: emitOptions(emitter, schemaPath, modules, opts),
       });
       rejectSharedPaths(emitter.target, emitted, writers);
       recordModules(emitter, emitted, modules);
@@ -201,7 +204,8 @@ function recordModules(emitter: Emitter, emitted: OutputFile[], modules: Emitted
   if (emitter.target === "versions") modules.versions.push(...emitted.map(file => file.path));
 }
 
-function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModules): Record<string, string> {
+function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModules, opts: GenerateOptions): Record<string, string> {
+  if (emitter.target === "go") return goOptions(opts);
   if (emitter.target === "versions") return versionsOptions(schemaPath, modules);
   if (emitter.target === "kotlin") return kotlinOptions(schemaPath);
   if (emitter.target !== "collection") return {};
@@ -210,6 +214,12 @@ function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModul
   if (modules.codec.length > 0) options[CODEC_MODULE_OPTION] = modules.codec[0];
   if (modules.versions.length > 0) options[VERSIONS_MODULE_OPTION] = modules.versions[0];
   return options;
+}
+
+/** The Go target's package name, when --package names one. */
+function goOptions(opts: GenerateOptions): Record<string, string> {
+  if (opts.package === undefined) return {};
+  return { [GO_PACKAGE_OPTION]: opts.package };
 }
 
 /** The Kotlin target writes the schema object only for a schema with a manifest beside it. */
@@ -1228,6 +1238,7 @@ program
   .option("-o, --out <dir>", "output directory", ".")
   .option("--company <id>", "include this company's overlay fields")
   .option("--include-private", "include base-record private fields")
+  .option("--package <name>", "Go package name for the go target (default: schema)")
   .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
   .option("--frozen", "never write the ordinal ledger; fail if it is missing or stale")
   .option("--write-lock", "write the ordinal ledger even when CI is set")

@@ -104,9 +104,9 @@ describe("@abstract in JSON Schema, OpenAPI and Go", () => {
 
   it("go: embeds the nearest abstract base and holds an abstract value as any", () => {
     const out = emit("go");
-    expect(out).toContain("type Media struct {\n\tRecord\n\tTitle string");
+    expect(out).toContain("type Media struct {\n\tRecord\n\tTitle  string");
     expect(out).toContain("type Video struct {\n\tMedia\n\tDuration *float64");
-    expect(out).toContain("\tInline any `json:\"inline,omitempty\"`");
+    expect(out).toContain("\tInline any    `json:\"inline,omitempty\"`");
   });
 });
 

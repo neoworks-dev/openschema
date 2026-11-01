@@ -66,7 +66,7 @@ describe("the semver type", () => {
     expect(emit("openapi", RELEASE)).toContain("(0|[1-9][0-9]*)");
     expect(emit("graphql", RELEASE)).toContain("scalar Semver");
     expect(emit("graphql", RELEASE)).toContain("version: Semver!");
-    expect(emit("go", RELEASE)).toContain("Version string `json:\"version\"`");
+    expect(emit("go", RELEASE)).toContain("Version  string   `json:\"version\"`");
   });
 });
 

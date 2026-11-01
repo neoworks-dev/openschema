@@ -27,6 +27,7 @@ the older `openschema gen` are aliases for the same command.
 | `-o`, `--out <dir>` | output directory (created if missing) | `.` |
 | `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
 | `--include-private` | include the schema's own `private` fields | off |
+| `--package <name>` | Go package name for the `go` target | `schema` |
 | `--lock <path>` | ordinal lockfile | `<schema dir>/openschema.lock` |
 | `--frozen` | never write the ordinal ledger; fail if it is missing or stale | off |
 | `--write-lock` | write the ordinal ledger even when `CI` is set | off |
