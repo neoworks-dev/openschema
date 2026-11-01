@@ -1,5 +1,6 @@
 // src/parser.ts
 // Recursive-descent parser that converts a token stream into an AST.
+import { isKeywordToken } from "../lexer/lexer.js";
 // ── Error type ────────────────────────────────────────────────────────────────
 export class ParseError extends Error {
     constructor(message, token) {
@@ -306,10 +307,10 @@ export class Parser {
         const ordinal = this.at("IntLit" /* TokenKind.IntLit */)
             ? parseInt(this.advance().value, 10)
             : null;
-        const isPrivate = this.at("private" /* TokenKind.Private */)
+        const isPrivate = this.atPrivateModifier()
             ? (this.advance(), true)
             : false;
-        const name = this.expectIdent("field name");
+        const name = this.expectMemberName("field name");
         this.expect(":" /* TokenKind.Colon */);
         const type = this.parseTypeExpr();
         return {
@@ -337,7 +338,7 @@ export class Parser {
             const vspan = this.span();
             const decorators = this.parseDecorators();
             const ordinal = this.expectInt("enum variant ordinal");
-            const vname = this.expectIdent("enum variant name");
+            const vname = this.expectMemberName("enum variant name");
             variants.push({ ordinal, name: vname, decorators, span: vspan });
         }
         this.expect("}" /* TokenKind.RBrace */);
@@ -376,7 +377,7 @@ export class Parser {
     parseParam() {
         const span = this.span();
         const doc = this.lastDocComment();
-        const name = this.expectIdent("parameter name");
+        const name = this.expectMemberName("parameter name");
         this.expect(":" /* TokenKind.Colon */);
         const type = this.parseTypeExpr();
         return { name, type, doc, span };
@@ -582,7 +583,7 @@ export class Parser {
             while (!this.at("}" /* TokenKind.RBrace */) && !this.at("EOF" /* TokenKind.EOF */)) {
                 const vspan = this.span();
                 const ordinal = this.expectInt("oneof variant ordinal");
-                const name = this.expectIdent("oneof variant name");
+                const name = this.expectMemberName("oneof variant name");
                 this.expect(":" /* TokenKind.Colon */);
                 const type = this.parseTypeExpr();
                 variants.push({ ordinal, name, type, span: vspan });
@@ -783,6 +784,21 @@ export class Parser {
             throw new ParseError(`Expected ${role} (identifier)`, tok);
         }
         return this.advance().value;
+    }
+    // Member names (fields, enum and oneof variants, parameters) stand where no
+    // keyword can, so keyword words like `date` or `type` are names there.
+    expectMemberName(role) {
+        const tok = this.peek();
+        if (tok.kind !== "Ident" /* TokenKind.Ident */ && !isKeywordToken(tok.kind)) {
+            throw new ParseError(`Expected ${role} (identifier)`, tok);
+        }
+        return this.advance().value;
+    }
+    // `private` is the modifier unless a colon follows, then it names the field.
+    atPrivateModifier() {
+        if (!this.at("private" /* TokenKind.Private */))
+            return false;
+        return this.peekAt(1).kind !== ":" /* TokenKind.Colon */;
     }
     // Array length spec after `;`: `N` (fixed), `min..max`, `min..`, or `..max`.
     parseArrayBounds() {

@@ -4,6 +4,7 @@ import { migrationHeader } from "./types.js";
 import { describeType } from "../../engine/type-compat.js";
 import { unwrapNullable, toSnakeCase } from "../typeMapping.js";
 import { renderCreateTable, renderCreateEnum, enumTypeName, columnDefinition, columnTypeFor, sqlColumnName } from "../sql/sqlDdl.js";
+import { renderCreateIndex, renderDropIndex } from "../sql/sqlIndexes.js";
 export const sqlMigrationEmitter = {
     target: "migration-sql",
     fileExtension: "sql",
@@ -70,6 +71,10 @@ function renderOp(op, ctx) {
                 `-- CREATE TYPE ${type} AS ENUM (...) with the remaining values, then repoint back.`,
             ].join("\n");
         }
+        case "CreateIndex":
+            return renderCreateIndex(op.index);
+        case "DropIndex":
+            return renderDropIndex(op.index);
     }
 }
 function renderChangeFieldType(op, ctx) {

@@ -66,6 +66,8 @@ export declare class Parser {
     private expect;
     /** Expect an Ident token; `role` is used only in error messages. */
     private expectIdent;
+    private expectMemberName;
+    private atPrivateModifier;
     private parseArrayBounds;
     private expectInt;
     private expectString;

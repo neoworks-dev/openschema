@@ -1,4 +1,6 @@
-import { Token } from "./tokens.js";
+import { Token, TokenKind } from "./tokens.js";
+/** Whether a token kind is a keyword word (`date`, `type`, `model`, …). */
+export declare function isKeywordToken(kind: TokenKind): boolean;
 export declare class LexError extends Error {
     readonly line: number;
     readonly col: number;

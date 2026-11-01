@@ -1,6 +1,7 @@
 // src/emit/index.ts
 // Emitter registry. Look up an emitter by target name.
 import { sqlEmitter } from "./sql/sqlEmitter.js";
+import { sqliteEmitter } from "./sql/sqliteEmitter.js";
 import { typescriptEmitter } from "./typescript/typescriptEmitter.js";
 import { jsonSchemaEmitter } from "./jsonSchema/jsonSchemaEmitter.js";
 import { goEmitter } from "./go/goEmitter.js";
@@ -15,6 +16,7 @@ import { kotlinEmitter } from "./kotlin/kotlinEmitter.js";
 import { versionsEmitter } from "./versions/versionsEmitter.js";
 const EMITTERS = {
     [sqlEmitter.target]: sqlEmitter,
+    [sqliteEmitter.target]: sqliteEmitter,
     [typescriptEmitter.target]: typescriptEmitter,
     [jsonSchemaEmitter.target]: jsonSchemaEmitter,
     [goEmitter.target]: goEmitter,

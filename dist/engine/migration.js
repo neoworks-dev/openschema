@@ -9,7 +9,8 @@
 // full inlined TypeExpr, decorators and @table name that DDL rendering needs.
 import { compareTypes } from "./type-compat.js";
 import { matchDeclarations, pairByOrdinal } from "./match.js";
-import { isInputModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { isTableModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { tableIndexes, indexIdentity } from "../emit/sql/sqlIndexes.js";
 /** The logical table name for a model — same rule both DDL emitters use. */
 export function migrationTableName(model) {
     const explicit = firstStringArg(model.decorators, "table");
@@ -35,7 +36,11 @@ function planModels(ops, oldSchema, newSchema) {
         ops.push({ kind: "DropModel", table: migrationTableName(removed.model), model: removed.model, safety: "destructive" });
     }
     for (const added of match.added) {
-        ops.push({ kind: "CreateModel", table: migrationTableName(added.model), model: added.model, safety: "safe" });
+        const table = migrationTableName(added.model);
+        ops.push({ kind: "CreateModel", table, model: added.model, safety: "safe" });
+        for (const index of tableIndexes(added.model)) {
+            ops.push({ kind: "CreateIndex", table, index, model: added.model, safety: "safe" });
+        }
     }
     for (const pair of match.pairs) {
         const oldModel = pair.oldDecl.model;
@@ -46,6 +51,24 @@ function planModels(ops, oldSchema, newSchema) {
             ops.push({ kind: "RenameModel", oldTable, newTable, model: newModel, safety: "safe" });
         }
         planFields(ops, newTable, oldModel, newModel);
+        planIndexes(ops, newTable, oldModel, newModel);
+    }
+}
+// An index whose name, columns or uniqueness changed is dropped and recreated.
+function planIndexes(ops, table, oldModel, newModel) {
+    const oldIndexes = tableIndexes(oldModel);
+    const newIndexes = tableIndexes(newModel);
+    const oldIdentities = new Set(oldIndexes.map(indexIdentity));
+    const newIdentities = new Set(newIndexes.map(indexIdentity));
+    for (const index of oldIndexes) {
+        if (newIdentities.has(indexIdentity(index)))
+            continue;
+        ops.push({ kind: "DropIndex", table, index, model: newModel, safety: "safe" });
+    }
+    for (const index of newIndexes) {
+        if (oldIdentities.has(indexIdentity(index)))
+            continue;
+        ops.push({ kind: "CreateIndex", table, index, model: newModel, safety: "safe" });
     }
 }
 function planFields(ops, table, oldModel, newModel) {
@@ -115,11 +138,19 @@ function planEnums(ops, oldSchema, newSchema) {
         }
     }
 }
+/** The old model a new model continues (same name, or @renamed from it), or null when it is new. */
+export function previousModel(oldSchema, newSchema, newModel) {
+    const match = matchDeclarations(modelEntries(oldSchema), modelEntries(newSchema));
+    const pair = match.pairs.find(candidate => candidate.newDecl.model === newModel);
+    if (pair === undefined)
+        return null;
+    return pair.oldDecl.model;
+}
 // ── Adapters ──────────────────────────────────────────────────────────────────
 function modelEntries(schema) {
     const map = new Map();
     for (const model of schema.records.values()) {
-        if (model.isGeneric || isInputModel(model))
+        if (!isTableModel(model))
             continue;
         map.set(model.symbol.localName, { name: model.symbol.localName, decorators: model.decorators, model });
     }
@@ -139,6 +170,7 @@ function enumEntries(schema) {
 // rename a field before any op that targets the new name; destructive drops last
 // so a forward migration is expand-then-contract safe.
 const PHASE = {
+    DropIndex: -1, // before any column it covers changes or goes away
     CreateEnum: 0, // a type must exist before a table/column uses it
     CreateModel: 1,
     RenameModel: 2,
@@ -149,6 +181,7 @@ const PHASE = {
     AddField: 6,
     ChangeFieldType: 7,
     ChangeFieldNullability: 7,
+    CreateIndex: 8, // after the columns it covers exist in their final shape
     DropField: 9,
     DropEnumVariant: 10,
     DropModel: 11,

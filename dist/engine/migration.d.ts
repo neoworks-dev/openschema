@@ -1,6 +1,7 @@
 import type { TypeExpr, EnumDecl } from "../parser/ast.js";
 import type { ResolvedSchema, ResolvedModel, ResolvedField } from "../resolver/types.js";
 import { type TypeRelation } from "./type-compat.js";
+import { type TableIndex } from "../emit/sql/sqlIndexes.js";
 export type Safety = "safe" | "needs_backfill" | "lossy" | "destructive";
 export type MigrationOp = {
     kind: "CreateModel";
@@ -87,6 +88,18 @@ export type MigrationOp = {
     newVariant: string;
     decl: EnumDecl;
     safety: "safe";
+} | {
+    kind: "CreateIndex";
+    table: string;
+    index: TableIndex;
+    model: ResolvedModel;
+    safety: "safe";
+} | {
+    kind: "DropIndex";
+    table: string;
+    index: TableIndex;
+    model: ResolvedModel;
+    safety: "safe";
 };
 export interface MigrationPlan {
     ops: MigrationOp[];
@@ -96,4 +109,6 @@ export interface MigrationPlan {
 /** The logical table name for a model — same rule both DDL emitters use. */
 export declare function migrationTableName(model: ResolvedModel): string;
 export declare function buildMigrationPlan(oldSchema: ResolvedSchema, newSchema: ResolvedSchema): MigrationPlan;
+/** The old model a new model continues (same name, or @renamed from it), or null when it is new. */
+export declare function previousModel(oldSchema: ResolvedSchema, newSchema: ResolvedSchema, newModel: ResolvedModel): ResolvedModel | null;
 //# sourceMappingURL=migration.d.ts.map

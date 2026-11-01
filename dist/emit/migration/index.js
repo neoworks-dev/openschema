@@ -2,9 +2,11 @@
 // Registry of migration emitters, kept separate from the CREATE-schema EMITTERS
 // so `gen` doesn't offer migration targets and vice versa.
 import { sqlMigrationEmitter } from "./sqlMigrationEmitter.js";
+import { sqliteMigrationEmitter } from "./sqliteMigrationEmitter.js";
 import { surrealMigrationEmitter } from "./surrealMigrationEmitter.js";
 const MIGRATION_EMITTERS = {
     [sqlMigrationEmitter.target]: sqlMigrationEmitter,
+    [sqliteMigrationEmitter.target]: sqliteMigrationEmitter,
     [surrealMigrationEmitter.target]: surrealMigrationEmitter,
 };
 export function getMigrationEmitter(target) {

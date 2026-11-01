@@ -37,6 +37,11 @@ const KEYWORDS = new Map([
     ["private", "private" /* TokenKind.Private */],
     ["extends", "extends" /* TokenKind.Extends */],
 ]);
+const KEYWORD_KINDS = new Set(KEYWORDS.values());
+/** Whether a token kind is a keyword word (`date`, `type`, `model`, …). */
+export function isKeywordToken(kind) {
+    return KEYWORD_KINDS.has(kind);
+}
 // ── Single-character punctuation table ───────────────────────────────────────
 const SINGLE = {
     "{": "{" /* TokenKind.LBrace */,

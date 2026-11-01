@@ -1,8 +1,9 @@
 // src/emit/surrealdb/surrealEmitter.ts
 // Emits SurrealQL schema definitions (DEFINE TABLE / DEFINE FIELD / DEFINE INDEX)
 // from a resolved schema. Targets SurrealDB 2.x SCHEMAFULL tables.
-import { isInputModel } from "../typeMapping.js";
-import { renderCreateTable, collectEmbeddedModels } from "./surrealDdl.js";
+import { isTableModel } from "../typeMapping.js";
+import { tableIndexes } from "../sql/sqlIndexes.js";
+import { renderCreateTable, collectEmbeddedModels, renderModelIndexDefine } from "./surrealDdl.js";
 export const surrealEmitter = {
     target: "surrealdb",
     fileExtension: "surql",
@@ -10,10 +11,8 @@ export const surrealEmitter = {
         const embedded = collectEmbeddedModels(context.schema);
         const blocks = [];
         for (const record of context.schema.records.values()) {
-            if (record.isGeneric)
-                continue; // generic records are not directly emittable
-            if (isInputModel(record))
-                continue; // input-only model: not a table
+            if (!isTableModel(record))
+                continue; // generic, @input and @value models have no table
             if (embedded.has(record.symbol.localName))
                 continue; // value object: embedded, not a table
             blocks.push(renderTable(record, context));
@@ -23,6 +22,7 @@ export const surrealEmitter = {
     },
 };
 function renderTable(record, context) {
-    return renderCreateTable(record, context.schema, context.company, context.includePrivate);
+    const table = renderCreateTable(record, context.schema, context.company, context.includePrivate);
+    return [table, ...tableIndexes(record).map(renderModelIndexDefine)].join("\n");
 }
 //# sourceMappingURL=surrealEmitter.js.map

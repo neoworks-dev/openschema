@@ -5,6 +5,7 @@ export declare function tableNameFor(record: ResolvedModel): string;
 /** The physical column name: explicit @sql.column, else snake_cased field name. */
 export declare function sqlColumnName(field: ResolvedField, fallbackName?: string): string;
 export declare function columnDefinition(columnName: string, field: ResolvedField, schema: ResolvedSchema): string;
+export declare function linkReferencesClause(field: ResolvedField, schema: ResolvedSchema): string | null;
 export declare function columnTypeFor(type: TypeExpr, decorators: Decorator[], schema: ResolvedSchema): string;
 /** The PostgreSQL native enum type name for a DSL enum. */
 export declare function enumTypeName(localName: string): string;

@@ -3,8 +3,8 @@
 // no native table/field rename, so those become clearly-marked -- MANUAL blocks.
 import { migrationHeader } from "./types.js";
 import { describeType } from "../../engine/type-compat.js";
-import { unwrapNullable, isInputModel } from "../typeMapping.js";
-import { renderCreateTable, renderField, renderFieldDefine, surrealFieldName, tableNameFor, } from "../surrealdb/surrealDdl.js";
+import { unwrapNullable, isTableModel } from "../typeMapping.js";
+import { renderCreateTable, renderField, renderFieldDefine, renderModelIndexDefine, surrealFieldName, tableNameFor, } from "../surrealdb/surrealDdl.js";
 export const surrealMigrationEmitter = {
     target: "migration-surreal",
     fileExtension: "surql",
@@ -74,6 +74,10 @@ function renderOp(op, ctx) {
                 return header;
             return [header, ...redefines].join("\n");
         }
+        case "CreateIndex":
+            return renderModelIndexDefine(op.index);
+        case "DropIndex":
+            return `REMOVE INDEX ${op.index.name} ON TABLE ${op.table};`;
     }
 }
 function renderChangeFieldType(op, ctx) {
@@ -98,7 +102,7 @@ function renderChangeFieldType(op, ctx) {
 function enumDependentRedefines(enumName, ctx) {
     const lines = [];
     for (const model of ctx.newSchema.records.values()) {
-        if (model.isGeneric || isInputModel(model))
+        if (!isTableModel(model))
             continue;
         const table = tableNameFor(model);
         for (const field of model.fields) {

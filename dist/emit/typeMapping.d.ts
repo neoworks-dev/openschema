@@ -59,6 +59,13 @@ export declare function isVisibleInOutput(decorators: Decorator[]): boolean;
  * output type / database table and emit it only as an input shape.
  */
 export declare function isInputModel(model: ResolvedModel): boolean;
+/**
+ * A model-level @value marks an embedded value object: it is stored inline (as
+ * JSON) in every model that uses it and never gets a table of its own.
+ */
+export declare function isValueModel(model: ResolvedModel): boolean;
+/** True when a database target gives this model a table: not generic, @input or @value. */
+export declare function isTableModel(model: ResolvedModel): boolean;
 /** Find a decorator by its dotted name, e.g. "sql.type" or "table". */
 export declare function findDecorator(decorators: Decorator[], name: string): Decorator | null;
 export declare function hasDecorator(decorators: Decorator[], name: string): boolean;

@@ -50,6 +50,13 @@ export function renderFieldIndex(tableName, fieldName, field) {
     const indexName = `${tableName}_${toSnakeCase(surrealName)}_unique`;
     return `DEFINE INDEX ${indexName} ON TABLE ${tableName} FIELDS ${surrealName} UNIQUE;`;
 }
+/** The `DEFINE INDEX` for a model-level @index. */
+export function renderModelIndexDefine(index) {
+    const fields = index.fields.map(field => surrealFieldName(field)).join(", ");
+    if (index.unique)
+        return `DEFINE INDEX ${index.name} ON TABLE ${index.table} FIELDS ${fields} UNIQUE;`;
+    return `DEFINE INDEX ${index.name} ON TABLE ${index.table} FIELDS ${fields};`;
+}
 /** Both lines a field contributes to a table definition, in order. A field whose
  * type is an embedded value object expands into a typed nested object instead. */
 export function renderField(tableName, fieldName, field, schema, seen = new Set()) {

@@ -1,4 +1,5 @@
 import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolver/types.js";
+import type { TableIndex } from "../sql/sqlIndexes.js";
 export declare function tableNameFor(record: ResolvedModel): string;
 export declare function surrealFieldName(field: ResolvedField, fallbackName?: string): string;
 /** The `DEFINE FIELD … ;` line for a field. `fieldName` is the logical name
@@ -6,6 +7,8 @@ export declare function surrealFieldName(field: ResolvedField, fallbackName?: st
 export declare function renderFieldDefine(tableName: string, fieldName: string, field: ResolvedField, schema: ResolvedSchema): string;
 /** The `DEFINE INDEX … UNIQUE;` line for a unique/pk field, or null. */
 export declare function renderFieldIndex(tableName: string, fieldName: string, field: ResolvedField): string | null;
+/** The `DEFINE INDEX` for a model-level @index. */
+export declare function renderModelIndexDefine(index: TableIndex): string;
 /** Both lines a field contributes to a table definition, in order. A field whose
  * type is an embedded value object expands into a typed nested object instead. */
 export declare function renderField(tableName: string, fieldName: string, field: ResolvedField, schema: ResolvedSchema, seen?: Set<string>): string[];
