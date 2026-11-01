@@ -108,6 +108,12 @@ model Account {
 
 ## Escaped identifiers
 
+Field, enum variant, `oneof` variant and parameter names may be keyword words
+as they are (`1 date: date?`, `enum Sort { 1 date }`): no keyword can stand
+there, so they need no escaping. `private` directly before the colon is the
+field's name, not the modifier. Declaration names (models, enums, aliases,
+operations) still have to escape them.
+
 Any name — a model, field, enum variant, or type — can be wrapped in backticks
 to use text that is otherwise illegal as an identifier: a reserved keyword, or a
 name containing spaces or symbols.

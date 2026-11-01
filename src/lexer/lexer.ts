@@ -42,6 +42,13 @@ const KEYWORDS = new Map<string, TokenKind>([
   ["extends",     TokenKind.Extends],
 ]);
 
+const KEYWORD_KINDS = new Set<TokenKind>(KEYWORDS.values());
+
+/** Whether a token kind is a keyword word (`date`, `type`, `model`, …). */
+export function isKeywordToken(kind: TokenKind): boolean {
+  return KEYWORD_KINDS.has(kind);
+}
+
 // ── Single-character punctuation table ───────────────────────────────────────
 
 const SINGLE: Record<string, TokenKind> = {

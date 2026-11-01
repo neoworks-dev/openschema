@@ -326,6 +326,40 @@ describe("compound types", () => {
   });
 });
 
+// ── Keyword words as member names ─────────────────────────────────────────────
+
+describe("keyword words as member names", () => {
+  it("accepts keywords as field names", () => {
+    const fs = fields("model R { 1 date: date?  2 type: string  3 model: i32 }");
+    expect(fs.map(f => f.name)).toEqual(["date", "type", "model"]);
+    expect((fs[0].type as NullableTypeExpr).inner.kind).toBe("scalar");
+  });
+
+  it("accepts keywords as enum variant names", () => {
+    const names = enumDecl("enum SortField { 1 date  2 duration  3 title }").variants.map(v => v.name);
+    expect(names).toEqual(["date", "duration", "title"]);
+  });
+
+  it("accepts keywords as oneof variant and parameter names", () => {
+    const variant = (firstField("model R { 1 at: oneof { 1 date: date  2 time: time } }").type as OneofTypeExpr).variants[0];
+    expect(variant.name).toBe("date");
+    const operation = parse("op find(date: date, type: string): R").declarations[0] as { params: { name: string }[] };
+    expect(operation.params.map(param => param.name)).toEqual(["date", "type"]);
+  });
+
+  it("reads `private` before a colon as a field name", () => {
+    const [named, modifier] = fields("model R { 1 private: bool  2 private secret: string }");
+    expect(named.name).toBe("private");
+    expect(named.private).toBe(false);
+    expect(modifier.name).toBe("secret");
+    expect(modifier.private).toBe(true);
+  });
+
+  it("still rejects keywords as declaration names", () => {
+    expect(() => parse("model date { 1 x: i32 }")).toThrow(ParseError);
+  });
+});
+
 // ── Decorators ────────────────────────────────────────────────────────────────
 
 describe("decorators", () => {
