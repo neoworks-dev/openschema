@@ -30,7 +30,7 @@ record User [compatibility: backward, table: "users"] {
 
 record Order [compatibility: backward, table: "orders"] {
   1 id:         uuid          [primary_key, default: gen_uuid()]
-  2 user_id:    i64           [not_null, references: User.id]
+  2 user_id:    ref<User>     [not_null]
   3 status:     OrderStatus   [not_null]
   4 total:      Money         [not_null, check: total >= 0]
   5 address:    Address

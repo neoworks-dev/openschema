@@ -8,7 +8,7 @@ import { migrationHeader } from "./types.js";
 import { previousModel } from "../../engine/migration.js";
 import { pairByOrdinal } from "../../engine/match.js";
 import { describeType } from "../../engine/type-compat.js";
-import { applyLink, hasDecorator, isTableModel, unwrapNullable } from "../typeMapping.js";
+import { hasDecorator, isTableModel, unwrapNullable } from "../typeMapping.js";
 import { quoteSqliteIdentifier as quote } from "../sql/sqlIdentifiers.js";
 import { tableNameFor } from "../sql/sqlDdl.js";
 import { renderCreateIndex, renderDropIndex, tableIndexes } from "../sql/sqlIndexes.js";
@@ -249,7 +249,7 @@ function convertedValue(source, previousField, field, ctx) {
     return `CAST(${source} AS ${newType})`;
 }
 function columnTypeOf(field, schema) {
-    const inner = unwrapNullable(applyLink(field.type, field, schema)).inner;
+    const inner = unwrapNullable(field.type).inner;
     return sqliteColumnType(inner, field.decorators, schema);
 }
 /** Maps renamed enum values to their new names while copying. */

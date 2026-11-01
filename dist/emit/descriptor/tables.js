@@ -7,7 +7,7 @@
 // on one of them makes the row part of its target. @neoworks.index declares the
 // sorted indexes a client keeps for queries; the @belongsTo field always has one.
 import { createHash } from "node:crypto";
-import { allDecorators, firstStringArg, namedStringListArg } from "../typeMapping.js";
+import { allDecorators, firstStringArg, namedStringListArg, isAbstractModel, referencedModel as referencedRecord, } from "../typeMapping.js";
 import { MAX_ORDINAL } from "../codec/wireFormat.js";
 import { DescriptorError } from "./errors.js";
 export const DEFAULT_FACET = "default";
@@ -38,6 +38,7 @@ export function describeTables(schema, models) {
         // A dependency's tables belong to its own collection; here they are only types.
         if (record.symbol.packageName !== null)
             continue;
+        rejectReferencesToNonTables(record, schema);
         if (!isTable(record)) {
             rejectTableOnlyDecorators(record);
             continue;
@@ -46,6 +47,27 @@ export function describeTables(schema, models) {
     }
     return tables;
 }
+/** A Neoworks reference opens the row it names, so every `ref<T>` must name a @neoworks.table model (OSD014). */
+function rejectReferencesToNonTables(record, schema) {
+    for (const field of record.fields) {
+        const target = referencedRecord(referenceOf(field.type), schema);
+        if (target === null)
+            continue;
+        if (allDecorators(target.decorators, TABLE_DECORATOR).length > 0)
+            continue;
+        throw new DescriptorError("OSD014", record.symbol.localName, field.name, `ref<${target.symbol.localName}> must name a model marked @${TABLE_DECORATOR}`, field.span);
+    }
+}
+/** The reference a field holds, looking through nullable and list wrappers. */
+function referenceOf(type) {
+    if (type.kind === "nullable")
+        return referenceOf(type.inner);
+    if (type.kind === "array")
+        return referenceOf(type.element);
+    if (type.kind === "map")
+        return referenceOf(type.value);
+    return type;
+}
 /** Whether the model is marked @neoworks.table, rejecting a marker that carries arguments or repeats. */
 export function isTable(record) {
     const decorators = allDecorators(record.decorators, TABLE_DECORATOR);
@@ -53,6 +75,9 @@ export function isTable(record) {
         return false;
     if (decorators.length > 1 || decorators[0].args.length > 0) {
         throw new DescriptorError("OSD002", record.symbol.localName, null, `@${TABLE_DECORATOR} takes no arguments and appears once`, decorators[0].span);
+    }
+    if (isAbstractModel(record)) {
+        throw new DescriptorError("OSD015", record.symbol.localName, null, `an @abstract model has no rows of its own, so it cannot be a @${TABLE_DECORATOR}; mark its subtypes`, decorators[0].span);
     }
     return true;
 }

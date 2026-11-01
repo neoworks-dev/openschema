@@ -1,7 +1,7 @@
 // src/resolver/index.ts
 // Semantic resolver: symbol table, name resolution, extends flattening,
 // ordinal validation, and per-company overlay merging.
-import { aliasByLocalName, substituteTypeParams, unionAliases, isInputModel, resolveAliasInline, findDecorator, hasDecorator, modelByLocalName, } from "../emit/typeMapping.js";
+import { aliasByLocalName, substituteTypeParams, unionAliases, isInputModel, resolveAliasInline, findDecorator, modelByLocalName, isAbstractModel, extendsModel, isVisibleInInput, } from "../emit/typeMapping.js";
 import { expandReserved, EMPTY_RESERVED } from "./reserved.js";
 import { DEPENDENCIES_DIRECTORY, isPackageSpecifier } from "./packages.js";
 export { expandReserved, MAX_ORDINAL } from "./reserved.js";
@@ -94,7 +94,8 @@ export function resolveModules(modules) {
     // is fully built.
     schema.operations = normalizeAliases(schema, diagnostics);
     lintUnionAliases(schema, diagnostics);
-    lintLinks(schema, diagnostics);
+    lintRemovedLinkDecorators(schema, diagnostics);
+    lintAbstractModels(schema, diagnostics);
     schema.hasErrors = diagnostics.items.some(d => d.severity === "error");
     return schema;
 }
@@ -240,18 +241,31 @@ function checkNamedReference(type, typeParams, byLocal, byQualified, diagnostics
         return;
     diagnostics.error("OS1003", `Undefined type '${type.path.join(".")}'`, type.span);
 }
-/** `ref<Model>` names a row, so the model must exist and be marked @neoworks.table. */
+/**
+ * `ref<Model>` names a stored record, so the target must be a model that is
+ * stored on its own or through its subtypes: not an enum, alias, generic or
+ * @value model (OS1017).
+ */
 function checkReferenceTarget(path, span, byLocal, byQualified, diagnostics) {
     const target = resolveName(path, byLocal, byQualified);
     if (target === null) {
         diagnostics.error("OS1003", `Undefined type '${path.join(".")}'`, span);
         return;
     }
-    const isTable = target.decl.kind === "model" &&
-        target.decl.decorators.some(decorator => decorator.name === "neoworks.table");
-    if (!isTable) {
-        diagnostics.error("OS1017", `ref<${path.join(".")}> must name a model marked @neoworks.table`, span);
+    const problem = referenceTargetProblem(target);
+    if (problem !== null) {
+        diagnostics.error("OS1017", `ref<${path.join(".")}> must name a stored model; ${problem}`, span);
     }
+}
+function referenceTargetProblem(target) {
+    if (target.decl.kind !== "model")
+        return `'${target.localName}' is not a model`;
+    if (target.decl.typeParams.length > 0)
+        return `'${target.localName}' is generic`;
+    if (target.decl.decorators.some(decorator => decorator.name === "value")) {
+        return `'${target.localName}' is a @value model, stored inline`;
+    }
+    return null;
 }
 function resolveName(path, byLocal, byQualified) {
     if (path.length === 1) {
@@ -712,42 +726,75 @@ function lintUnionAliases(schema, diagnostics) {
         }
     }
 }
-/** A @link field stores the target model's primary-key id, so the target must be
- * a model with exactly one @primaryKey field — otherwise the id type is undefined.
- * OS1015: not a model reference. OS1016: zero or composite primary key. */
-function lintLinks(schema, diagnostics) {
+// @link and @references were the old ways to link records; `ref<T>` replaced
+// both. Ignoring them would silently change the output of an older schema, so
+// using either is an error (OS1019).
+const REMOVED_LINK_DECORATORS = ["link", "references"];
+function lintRemovedLinkDecorators(schema, diagnostics) {
     for (const record of schema.records.values()) {
-        for (const field of record.fields) {
-            if (!hasDecorator(field.decorators, "link"))
-                continue;
-            lintLinkField(field, schema, diagnostics);
+        if (record.symbol.packageName !== null)
+            continue;
+        for (const field of record.fields)
+            lintRemovedOnField(field, diagnostics);
+    }
+    for (const byCompany of schema.overlays.values()) {
+        for (const overlay of byCompany.values()) {
+            for (const field of overlay.fields)
+                lintRemovedOnField(field, diagnostics);
         }
     }
 }
-function lintLinkField(field, schema, diagnostics) {
-    const named = unwrapToNamed(field.type);
-    const target = named === null ? null : modelByLocalName(named.path[named.path.length - 1], schema);
-    if (target === null) {
-        diagnostics.error("OS1015", `@link field '${field.name}' must reference a model`, field.span);
-        return;
-    }
-    const primaryKeys = target.fields.filter(f => hasDecorator(f.decorators, "primaryKey"));
-    if (primaryKeys.length === 0) {
-        diagnostics.error("OS1016", `@link target '${target.symbol.localName}' has no @primaryKey; the link id type is undefined`, field.span);
-        return;
-    }
-    if (primaryKeys.length > 1) {
-        diagnostics.error("OS1016", `@link target '${target.symbol.localName}' has a composite primary key; a scalar link needs exactly one @primaryKey`, field.span);
+function lintRemovedOnField(field, diagnostics) {
+    for (const decorator of field.decorators) {
+        if (!REMOVED_LINK_DECORATORS.includes(decorator.name))
+            continue;
+        diagnostics.error("OS1019", `@${decorator.name} was removed; type the field '${field.name}' as ref<Model> (or [ref<Model>]) instead`, decorator.span);
     }
 }
-/** Peel nullable/array wrappers to the underlying named type, or null. */
-function unwrapToNamed(type) {
-    if (type.kind === "named")
-        return type;
+// An @abstract model has no input form: GraphQL interfaces are output-only and
+// no target can tell which subtype an input value is (OS1020). One no model
+// extends is never stored anywhere (warning OS1021).
+function lintAbstractModels(schema, diagnostics) {
+    for (const record of schema.records.values()) {
+        if (!isAbstractModel(record) || record.symbol.packageName !== null)
+            continue;
+        const extended = [...schema.records.values()].some(candidate => extendsModel(candidate, record));
+        if (!extended) {
+            diagnostics.warning("OS1021", `@abstract model '${record.symbol.localName}' has no subtypes, so it is never stored`, record.symbol.span);
+        }
+    }
+    for (const op of schema.operations) {
+        for (const param of op.params) {
+            const abstract = abstractModelInInput(param.type, schema, new Set());
+            if (abstract === null)
+                continue;
+            diagnostics.error("OS1020", `The @abstract model '${abstract}' cannot be an operation input (parameter '${param.name}' of '${op.name}'); use a concrete subtype or ref<${abstract}>`, param.span);
+        }
+    }
+}
+/** The first abstract model an input of this type would contain, following input-visible fields. */
+function abstractModelInInput(type, schema, seen) {
     if (type.kind === "nullable")
-        return unwrapToNamed(type.inner);
+        return abstractModelInInput(type.inner, schema, seen);
     if (type.kind === "array")
-        return unwrapToNamed(type.element);
+        return abstractModelInInput(type.element, schema, seen);
+    if (type.kind === "map")
+        return abstractModelInInput(type.value, schema, seen);
+    if (type.kind !== "named")
+        return null;
+    const model = modelByLocalName(type.path[type.path.length - 1], schema);
+    if (model === null || seen.has(model.symbol.qualifiedName))
+        return null;
+    if (isAbstractModel(model))
+        return model.symbol.localName;
+    seen.add(model.symbol.qualifiedName);
+    for (const field of model.fields) {
+        if (field.isPrivate || !isVisibleInInput(field.decorators))
+            continue;
+        const found = abstractModelInInput(field.type, schema, seen);
+        if (found !== null)
+            return found;
+    }
     return null;
 }
 function isObjectModelRef(type, schema) {

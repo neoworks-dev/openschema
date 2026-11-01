@@ -117,6 +117,7 @@ const LATE_TARGETS = ["versions", "collection"];
 function emitAll(emitters, schema, opts, schemaPath) {
     const files = [];
     const modules = { codec: [], versions: [] };
+    const writers = new Map();
     for (const emitter of inEmitOrder(emitters)) {
         try {
             const emitted = emitter.emit({
@@ -125,6 +126,7 @@ function emitAll(emitters, schema, opts, schemaPath) {
                 includePrivate: opts.includePrivate === true,
                 options: emitOptions(emitter, schemaPath, modules),
             });
+            rejectSharedPaths(emitter.target, emitted, writers);
             recordModules(emitter, emitted, modules);
             files.push(...emitted);
         }
@@ -134,6 +136,17 @@ function emitAll(emitters, schema, opts, schemaPath) {
         }
     }
     return files;
+}
+// Two targets writing the same file (sql and sqlite both write schema.sql, ts
+// and zod schema.ts) would leave only the last one's output.
+function rejectSharedPaths(target, emitted, writers) {
+    for (const file of emitted) {
+        const earlier = writers.get(file.path);
+        if (earlier !== undefined) {
+            throw new Error(`targets ${earlier} and ${target} both write ${file.path}; generate them into separate --out directories`);
+        }
+        writers.set(file.path, target);
+    }
 }
 function inEmitOrder(emitters) {
     const early = emitters.filter(emitter => !LATE_TARGETS.includes(emitter.target));

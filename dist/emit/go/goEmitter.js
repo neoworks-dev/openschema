@@ -1,6 +1,6 @@
 // src/emit/go/goEmitter.ts
 // Emits Go structs and enum constants from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases, nearestAbstractAncestor, fieldsBeyond, abstractModelOf, } from "../typeMapping.js";
 const SCALAR_GO = {
     bool: "bool",
     i8: "int8", i16: "int16", i32: "int32", i64: "int64",
@@ -37,10 +37,15 @@ function emitEnum(decl) {
         .join("\n");
     return `type ${decl.name} int32\n\nconst (\n${consts}\n)`;
 }
+// A model extending an @abstract model embeds that model's struct (Go promotes
+// its fields, in Go and in JSON) and declares only the fields it adds.
 function emitStruct(record, context) {
+    const base = nearestAbstractAncestor(record, context.schema);
     const lines = [];
+    if (base !== null)
+        lines.push(`\t${pascalCase(base.symbol.localName)}`);
     const fields = [
-        ...baseFieldsToEmit(record, context),
+        ...fieldsBeyond(baseFieldsToEmit(record, context), base),
         ...overlayFieldsToEmit(context.schema, record, context.company),
     ];
     for (const field of fields) {
@@ -50,11 +55,18 @@ function emitStruct(record, context) {
 }
 function fieldLine(field, schema) {
     const { inner, nullable } = unwrapNullable(field.type);
-    const goType = nullable ? `*${mapType(inner, schema)}` : mapType(inner, schema);
+    const goType = nullable && !isAbstractValue(inner, schema) ? `*${mapType(inner, schema)}` : mapType(inner, schema);
     const tag = nullable ? `${field.name},omitempty` : field.name;
     return `\t${pascalCase(field.name)} ${goType} \`json:"${tag}"\``;
 }
+// A value typed as an @abstract model may be any of its subtypes, which Go can
+// only hold as `any`; a nil `any` already means absent, so it needs no pointer.
+function isAbstractValue(type, schema) {
+    return abstractModelOf(type, schema) !== null;
+}
 function mapType(type, schema) {
+    if (isAbstractValue(type, schema))
+        return "any";
     switch (type.kind) {
         case "scalar": return SCALAR_GO[type.scalar];
         case "decimal": return "string";

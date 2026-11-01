@@ -2,7 +2,7 @@
 // Emits GraphQL SDL (types, enums, inputs, and Query/Mutation roots) from a
 // resolved schema. GraphQL is nullable-by-default, so non-nullable openschema
 // fields gain a trailing '!'.
-import { baseFieldsToEmit, overlayFieldsToEmit, hasDecorator, applyLink, isVisibleInOutput, isVisibleInInput, isInputModel, unionAliases, isUnionAlias, resolveAliasInline, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, hasDecorator, isVisibleInOutput, isVisibleInInput, isInputModel, isAbstractModel, abstractAncestors, unionAliases, isUnionAlias, resolveAliasInline, } from "../typeMapping.js";
 const SCALAR_GQL = {
     bool: "Boolean",
     i8: "Int", i16: "Int", i32: "Int", i64: "Int",
@@ -52,8 +52,21 @@ function emitObjectType(record, context) {
         ...baseFieldsToEmit(record, context),
         ...overlayFieldsToEmit(context.schema, record, context.company),
     ].filter(f => isVisibleInOutput(f.decorators));
-    const lines = fields.map(f => `  ${f.name}: ${renderType(applyLink(f.type, f, context.schema), false, context.schema)}`);
-    return `type ${record.symbol.localName} {\n${lines.join("\n")}\n}`;
+    const lines = fields.map(f => `  ${f.name}: ${renderType(f.type, false, context.schema)}`);
+    return `${objectKeyword(record)} ${record.symbol.localName}${implementsClause(record, context.schema)} {\n${lines.join("\n")}\n}`;
+}
+// An @abstract model is an interface; every model extending abstract models
+// implements all of them, as GraphQL requires transitively implemented ones listed.
+function objectKeyword(record) {
+    if (isAbstractModel(record))
+        return "interface";
+    return "type";
+}
+function implementsClause(record, schema) {
+    const interfaces = abstractAncestors(record, schema).map(base => base.symbol.localName);
+    if (interfaces.length === 0)
+        return "";
+    return ` implements ${interfaces.join(" & ")}`;
 }
 function emitInputType(record, context) {
     // Inputs exclude private fields and fields not visible in any input phase
@@ -61,7 +74,7 @@ function emitInputType(record, context) {
     const fields = record.fields
         .filter(f => !f.isPrivate)
         .filter(f => isVisibleInInput(f.decorators));
-    const lines = fields.map(f => `  ${f.name}: ${renderType(applyLink(f.type, f, context.schema), true, context.schema)}`);
+    const lines = fields.map(f => `  ${f.name}: ${renderType(f.type, true, context.schema)}`);
     return `input ${inputTypeName(record)} {\n${lines.join("\n")}\n}`;
 }
 // An input-only (@input) model keeps its bare name; a dual-use model gets the
@@ -79,12 +92,27 @@ function emitRoots(schema) {
         buckets[root].push(`  ${operationField(op, schema)}`);
     }
     const blocks = [];
+    const roots = [];
     for (const root of ["Query", "Mutation", "Subscription"]) {
         if (buckets[root].length === 0)
             continue;
         blocks.push(`type ${root} {\n${buckets[root].join("\n")}\n}`);
+        roots.push(root);
     }
+    const definition = schemaDefinition(roots);
+    if (definition !== null)
+        blocks.unshift(definition);
     return blocks;
+}
+// Without a schema definition, GraphQL takes any type named Query, Mutation or
+// Subscription as that root, so a model named Subscription would become the
+// subscription root. Naming the roots explicitly keeps such a model a plain type.
+// A schema definition needs a query root, so without one nothing is declared.
+function schemaDefinition(roots) {
+    if (!roots.includes("Query"))
+        return null;
+    const lines = roots.map(root => `  ${root.toLowerCase()}: ${root}`);
+    return `schema {\n${lines.join("\n")}\n}`;
 }
 function rootForOperation(op) {
     if (hasDecorator(op.decorators, "mutation"))
@@ -127,7 +155,7 @@ function collectInputRecords(schema) {
                 continue;
             if (!isVisibleInInput(field.decorators))
                 continue;
-            collectRecordNames(applyLink(field.type, field, schema), schema, found, queue);
+            collectRecordNames(field.type, schema, found, queue);
         }
     }
     return [...found];

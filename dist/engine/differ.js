@@ -37,6 +37,7 @@ const R = {
     REFERENCES_CHANGED: "R018",
     FIELD_DEPRECATED: "R019",
     RECORD_RENAMED: "R020",
+    RECORD_ABSTRACT_CHANGED: "R021",
 };
 const E = {
     VARIANT_ADDED: "E001",
@@ -127,6 +128,7 @@ export class Differ {
     diffRecords(oldRec, newRec) {
         // Use the new name so a renamed model reports its fields under the new name.
         const name = newRec.name;
+        this.diffAbstractness(oldRec, newRec);
         // ── Fields (matched by ordinal) ──────────────────────────────────────────
         const oldFields = indexBy(oldRec.members, f => f.ordinal);
         const newFields = indexBy(newRec.members, f => f.ordinal);
@@ -152,7 +154,7 @@ export class Differ {
             }
             // Type
             this.diffFieldTypes(`${name}.${newField.name}`, oldField, newField);
-            // Constraints carried by decorators (@primaryKey, @unique, @check, @references)
+            // Constraints carried by decorators (@primaryKey, @unique, @check)
             this.diffFieldConstraints(`${name}.${newField.name}`, oldField, newField);
             // Nullability (surfaced separately for clarity)
             const wasNullable = oldField.type.kind === "nullable";
@@ -164,6 +166,20 @@ export class Differ {
                 this.emit(`${name}.${newField.name}`, R.FIELD_MADE_REQUIRED, "field_made_required", "breaking_writer", `Field '${newField.name}' made non-nullable. Existing null values will violate the new schema.`);
             }
         }
+    }
+    // An abstract model has no table and no records of its own, so marking a model
+    // @abstract drops its stored records, and unmarking it adds a table its
+    // subtypes' records are not in.
+    diffAbstractness(oldRec, newRec) {
+        const wasAbstract = oldRec.decorators.some(decorator => decorator.name === "abstract");
+        const isAbstract = newRec.decorators.some(decorator => decorator.name === "abstract");
+        if (wasAbstract === isAbstract)
+            return;
+        if (isAbstract) {
+            this.emit(newRec.name, R.RECORD_ABSTRACT_CHANGED, "declaration_abstract_changed", "breaking_both", `Model '${newRec.name}' became @abstract: it is no longer stored on its own, so its table and records go away.`);
+            return;
+        }
+        this.emit(newRec.name, R.RECORD_ABSTRACT_CHANGED, "declaration_abstract_changed", "breaking_both", `Model '${newRec.name}' is no longer @abstract: it is stored on its own now, and readers of the interface see a concrete type.`);
     }
     // ── Constraint changes (decorator-driven) ──────────────────────────────────
     diffFieldConstraints(path, oldField, newField) {
@@ -188,11 +204,6 @@ export class Differ {
         if (hadPk !== hasPk) {
             this.emit(path, R.PRIMARY_KEY_CHANGED, "field_type_incompatible", "breaking_both", `The primary-key status of '${newField.name}' changed. This alters row identity for all consumers.`);
         }
-        const oldRef = referencesTarget(oldField);
-        const newRef = referencesTarget(newField);
-        if (oldRef !== newRef && (oldRef !== null || newRef !== null)) {
-            this.emit(path, R.REFERENCES_CHANGED, "field_type_incompatible", "breaking_both", `The foreign-key reference on '${newField.name}' changed from ${oldRef ?? "none"} to ${newRef ?? "none"}.`);
-        }
         if (!hasDecorator(oldField, "deprecated") && hasDecorator(newField, "deprecated")) {
             this.emit(path, R.FIELD_DEPRECATED, "field_type_same", "warning", `Field '${newField.name}' was marked @deprecated.`);
         }
@@ -214,6 +225,12 @@ export class Differ {
         const rel = compareTypes(oldField.type, newField.type);
         const oldDesc = describeType(oldField.type, true);
         const newDesc = describeType(newField.type, true);
+        const oldTarget = referenceTarget(oldField.type);
+        const newTarget = referenceTarget(newField.type);
+        if (oldTarget !== null && newTarget !== null && oldTarget !== newTarget) {
+            this.emit(path, R.REFERENCES_CHANGED, "field_type_incompatible", "breaking_both", `The reference '${newField.name}' now points at ${newTarget} instead of ${oldTarget}; stored ids name rows of the old model.`, oldDesc, newDesc);
+            return;
+        }
         switch (rel) {
             case "same": return; // no change
             case "widened":
@@ -345,17 +362,15 @@ function describeField(f) {
 function hasDecorator(field, name) {
     return field.decorators.some(d => d.name === name);
 }
-function referencesTarget(field) {
-    for (const decorator of field.decorators) {
-        if (decorator.name !== "references")
-            continue;
-        if (decorator.args.length === 0)
-            return null;
-        const value = decorator.args[0].value;
-        if (value.kind === "ident" || value.kind === "string")
-            return value.value;
-    }
-    return null;
+/** The model a `ref<T>` (or a list of them, possibly nullable) names, or null. */
+function referenceTarget(type) {
+    if (type.kind === "nullable")
+        return referenceTarget(type.inner);
+    if (type.kind === "array")
+        return referenceTarget(type.element);
+    if (type.kind !== "scalar" || type.reference === undefined)
+        return null;
+    return type.reference.join(".");
 }
 function collectSuppressions(program) {
     const suppressions = [];

@@ -14,7 +14,7 @@ export declare function renderModelIndexDefine(index: TableIndex): string;
 export declare function renderField(tableName: string, fieldName: string, field: ResolvedField, schema: ResolvedSchema, seen?: Set<string>): string[];
 /** Local names of every model embedded somewhere as a value object. The schema
  * emitter skips these: they live inside their host tables, not as tables. A model
- * that is @link'd anywhere is an entity (it owns the table the link points at), so
+ * a `ref<T>` points at is an entity (it owns the table the record link names), so
  * it is excluded even if some other field embeds it. */
 export declare function collectEmbeddedModels(schema: ResolvedSchema): Set<string>;
 /** Render a full DEFINE TABLE + fields — reused by the schema emitter and the

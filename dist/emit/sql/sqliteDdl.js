@@ -3,8 +3,8 @@
 // `migration-sqlite` emitter. SQLite has no native enum, JSON or UUID types:
 // enums become TEXT with an IN-list CHECK, JSON-shaped values become TEXT with
 // a json_valid CHECK, and every other scalar maps onto SQLite's storage classes.
-import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, applyLink, overlayFieldsToEmit, } from "../typeMapping.js";
-import { checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName, } from "./sqlDdl.js";
+import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, overlayFieldsToEmit, } from "../typeMapping.js";
+import { checkClauseFor, referenceForeignKeyClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName, } from "./sqlDdl.js";
 import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 // u64 does not fit SQLite's signed 64-bit INTEGER, so it is kept exact as text.
 export const SCALAR_SQLITE = {
@@ -45,7 +45,7 @@ export function sqliteColumnName(field) {
 }
 /** One column definition, e.g. `status TEXT NOT NULL CHECK (status IN ('a', 'b'))`. */
 export function sqliteColumnDefinition(columnName, field, schema) {
-    const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+    const { inner, nullable } = unwrapNullable(field.type);
     const shape = sqliteColumnShape(inner, field.decorators, schema);
     const column = quoteSqliteIdentifier(columnName);
     const parts = [column, shape.sqlType];
@@ -59,8 +59,7 @@ export function sqliteColumnDefinition(columnName, field, schema) {
     if (defaultClause !== null)
         parts.push(defaultClause);
     const optionalClauses = [
-        referencesClauseFor(field.decorators, quoteSqliteIdentifier),
-        linkReferencesClause(field, schema, quoteSqliteIdentifier),
+        referenceForeignKeyClause(field, schema, quoteSqliteIdentifier),
         checkClauseFor(field.decorators),
     ];
     for (const clause of optionalClauses) {
@@ -155,7 +154,7 @@ export function needsRebuildToAdd(field, schema) {
         return false;
     if (defaultClause === null)
         return true;
-    return referencesClauseFor(decorators) !== null || linkReferencesClause(field, schema) !== null;
+    return referenceForeignKeyClause(field, schema) !== null;
 }
 /** A single-quoted SQLite string literal. */
 export function sqliteString(text) {

@@ -1,5 +1,5 @@
 import type { Span } from "../../parser/ast.js";
-export type CodecErrorCode = "OSC001" | "OSC002" | "OSC003" | "OSC004" | "OSC005" | "OSC006" | "OSC007" | "OSC008";
+export type CodecErrorCode = "OSC001" | "OSC002" | "OSC003" | "OSC004" | "OSC005" | "OSC006" | "OSC007" | "OSC008" | "OSC009";
 export declare class CodecUnsupportedError extends Error {
     readonly code: CodecErrorCode;
     readonly model: string;

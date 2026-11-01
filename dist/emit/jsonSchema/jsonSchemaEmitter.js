@@ -1,6 +1,6 @@
 // src/emit/jsonSchema/jsonSchemaEmitter.ts
 // Emits a JSON Schema document (draft 2020-12) from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, modelByLocalName, isAbstractModel, concreteSubtypes, firstStringArg, findDecorator, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
 const SCALAR_JSON = {
     bool: { type: "boolean" },
     i8: { type: "integer" }, i16: { type: "integer" }, i32: { type: "integer" }, i64: { type: "integer" },
@@ -30,7 +30,7 @@ export const jsonSchemaEmitter = {
         for (const { name, alias } of unionAliases(context.schema)) {
             if (alias.type.kind !== "union")
                 continue;
-            defs[name] = { anyOf: alias.type.variants.map(v => mapType(resolveAliasInline(v, context.schema))) };
+            defs[name] = { anyOf: alias.type.variants.map(v => mapType(resolveAliasInline(v, context.schema), context.schema)) };
         }
         const doc = {
             $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -50,8 +50,8 @@ function recordSchema(record, context) {
         ...overlayFieldsToEmit(context.schema, record, context.company),
     ];
     for (const field of fields) {
-        const { inner, nullable } = unwrapNullable(applyLink(field.type, field, context.schema));
-        properties[field.name] = fieldSchema(inner, field);
+        const { inner, nullable } = unwrapNullable(field.type);
+        properties[field.name] = fieldSchema(inner, field, context.schema);
         if (!nullable)
             required.push(field.name);
     }
@@ -60,8 +60,8 @@ function recordSchema(record, context) {
         schema.required = required;
     return schema;
 }
-function fieldSchema(type, field) {
-    const base = mapType(type);
+function fieldSchema(type, field, schema) {
+    const base = mapType(type, schema);
     applyConstraints(base, field);
     return base;
 }
@@ -86,25 +86,35 @@ function applyNumericBound(schema, field, decorator, keyword) {
         return;
     schema[keyword] = value.value;
 }
-function mapType(type) {
+function mapType(type, schema) {
     switch (type.kind) {
         case "scalar": return { ...SCALAR_JSON[type.scalar] };
         case "decimal": return { type: "string" };
-        case "named": return { $ref: `#/$defs/${type.path[type.path.length - 1]}` };
+        case "named": return namedSchema(type.path[type.path.length - 1], schema);
         case "array": {
-            const arraySchema = { type: "array", items: mapType(type.element) };
+            const arraySchema = { type: "array", items: mapType(type.element, schema) };
             if (type.minItems !== undefined)
                 arraySchema.minItems = type.minItems;
             if (type.maxItems !== undefined)
                 arraySchema.maxItems = type.maxItems;
             return arraySchema;
         }
-        case "map": return { type: "object", additionalProperties: mapType(type.value) };
-        case "nullable": return mapType(type.inner);
+        case "map": return { type: "object", additionalProperties: mapType(type.value, schema) };
+        case "nullable": return mapType(type.inner, schema);
         case "null": return { type: "null" };
         case "file": return structuredClone(FILE_JSON_SCHEMA);
-        case "union": return { anyOf: type.variants.map(mapType) };
-        case "oneof": return { oneOf: type.variants.map(v => mapType(v.type)) };
+        case "union": return { anyOf: type.variants.map(variant => mapType(variant, schema)) };
+        case "oneof": return { oneOf: type.variants.map(v => mapType(v.type, schema)) };
     }
+}
+// A value typed as an @abstract model is one of its concrete subtypes.
+function namedSchema(name, schema) {
+    const model = modelByLocalName(name, schema);
+    if (model === null || !isAbstractModel(model))
+        return { $ref: `#/$defs/${name}` };
+    const subtypes = concreteSubtypes(model, schema);
+    if (subtypes.length === 0)
+        return { $ref: `#/$defs/${name}` };
+    return { anyOf: subtypes.map(subtype => ({ $ref: `#/$defs/${subtype.symbol.localName}` })) };
 }
 //# sourceMappingURL=jsonSchemaEmitter.js.map

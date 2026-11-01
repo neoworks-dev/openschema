@@ -1,6 +1,6 @@
 // src/emit/typescript/typescriptEmitter.ts
 // Emits TypeScript interfaces and enums from a resolved schema.
-import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, applyLink, unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS, } from "../typeMapping.js";
+import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, nearestAbstractAncestor, fieldsBeyond, unionAliases, resolveAliasInline, FILE_TS, SEMVER_TS, } from "../typeMapping.js";
 const SCALAR_TS = {
     bool: "boolean",
     i8: "number", i16: "number", i32: "number", i64: "number",
@@ -41,16 +41,20 @@ function emitUnionAlias(name, alias, schema) {
     const members = alias.type.variants.map(v => mapType(resolveAliasInline(v, schema), schema));
     return `export type ${name} = ${members.join(" | ")};`;
 }
+// A model extending an @abstract model extends its interface and lists only the
+// fields it adds; extending a plain model still flattens the inherited fields.
 function emitInterface(record, context) {
     const params = typeParamList(record);
+    const base = nearestAbstractAncestor(record, context.schema);
     const lines = [];
-    for (const field of baseFieldsToEmit(record, context)) {
+    for (const field of fieldsBeyond(baseFieldsToEmit(record, context), base)) {
         lines.push(fieldLine(field, context.schema));
     }
     for (const field of overlayFieldsToEmit(context.schema, record, context.company)) {
         lines.push(fieldLine(field, context.schema));
     }
-    return `export interface ${record.symbol.localName}${params} {\n${lines.join("\n")}\n}`;
+    const heritage = base === null ? "" : ` extends ${base.symbol.localName}`;
+    return `export interface ${record.symbol.localName}${params}${heritage} {\n${lines.join("\n")}\n}`;
 }
 function typeParamList(record) {
     const decl = record.symbol.decl;
@@ -61,7 +65,7 @@ function typeParamList(record) {
 // `T?` in the DSL means the field may be absent, which is `undefined` — an
 // optional property says exactly that. It does not mean the field may hold null.
 function fieldLine(field, schema) {
-    const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+    const { inner, nullable } = unwrapNullable(field.type);
     const optional = nullable ? "?" : "";
     const tsType = mapType(inner, schema);
     const docPrefix = field.isPrivate ? "  /** @private */\n" : "";
@@ -73,13 +77,20 @@ function mapType(type, schema) {
         case "decimal": return "number";
         case "named": return mapNamed(type.path, type.typeArgs, schema);
         case "array": return `${arrayElement(type.element, schema)}[]`;
-        case "map": return `Record<${mapType(type.key, schema)}, ${mapType(type.value, schema)}>`;
+        case "map": return `{ [key in ${mapKey(type.key, schema)}]: ${mapType(type.value, schema)} }`;
         case "nullable": return `${mapType(type.inner, schema)} | null`;
         case "null": return "null";
         case "file": return FILE_TS;
         case "union": return type.variants.map(v => mapType(v, schema)).join(" | ");
         case "oneof": return mapOneof(type.variants, schema);
     }
+}
+// A map is a mapped type rather than the built-in `Record<K, V>`, which a model
+// named `Record` would shadow. A boolean key travels as the text of its value.
+function mapKey(type, schema) {
+    if (type.kind === "scalar" && type.scalar === "bool")
+        return `"true" | "false"`;
+    return mapType(type, schema);
 }
 // Array element types whose rendering contains a top-level `|` (unions, oneofs,
 // nullables) must be parenthesised before the `[]` so `[A | B]` becomes

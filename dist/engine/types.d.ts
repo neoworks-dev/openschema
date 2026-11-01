@@ -1,6 +1,6 @@
 import type { CompatMode } from "../parser/ast.js";
 export type Severity = "safe" | "warning" | "breaking_reader" | "breaking_writer" | "breaking_both";
-export type ChangeKind = "declaration_added" | "declaration_removed" | "declaration_renamed" | "field_added_nullable" | "field_added_required_with_default" | "field_added_required_no_default" | "field_removed" | "field_renamed" | "field_type_same" | "field_type_widened" | "field_type_narrowed" | "field_type_incompatible" | "field_made_nullable" | "field_made_required" | "field_added_required" | "variant_added" | "variant_removed" | "variant_renamed" | "variant_renumbered" | "type_alias_changed";
+export type ChangeKind = "declaration_added" | "declaration_removed" | "declaration_renamed" | "declaration_abstract_changed" | "field_added_nullable" | "field_added_required_with_default" | "field_added_required_no_default" | "field_removed" | "field_renamed" | "field_type_same" | "field_type_widened" | "field_type_narrowed" | "field_type_incompatible" | "field_made_nullable" | "field_made_required" | "field_added_required" | "variant_added" | "variant_removed" | "variant_renamed" | "variant_renumbered" | "type_alias_changed";
 export interface Change {
     /** Dotted path to the changed element, e.g. "Order.total" or "OrderStatus.cancelled" */
     path: string;

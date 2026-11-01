@@ -24,6 +24,7 @@ export const SCALAR_TYPES = [
     { label: "duration", detail: "scalar", documentation: "Span of time." },
     { label: "semver", detail: "scalar", documentation: "Semantic version major.minor.patch, without pre-release or build suffixes." },
     { label: "File", detail: "type", documentation: "A file in object storage: name, media type, size and named variants." },
+    { label: "ref", detail: "type", documentation: "ref<Model> — the id of a Model record (a uuid). A foreign key in SQL, a record link in SurrealDB. The only way to link records." },
 ];
 export const KEYWORDS = [
     { label: "namespace", detail: "keyword", documentation: "Declares the namespace for this file's types." },
@@ -45,8 +46,9 @@ export const DECORATORS = [
     { label: "table", detail: "decorator", documentation: '@table("name") — physical table name for SQL/SurrealDB.' },
     { label: "primaryKey", detail: "decorator", documentation: "@primaryKey — marks the primary key field." },
     { label: "unique", detail: "decorator", documentation: "@unique — adds a uniqueness constraint." },
-    { label: "references", detail: "decorator", documentation: "@references(Model.field) — foreign-key / record link." },
-    { label: "link", detail: "decorator", documentation: "@link — store a named-model field as a SurrealDB record<table> link instead of an embedded value object." },
+    { label: "abstract", detail: "decorator", documentation: "@abstract — a shared base model that is never stored on its own; only the models extending it are. A GraphQL interface." },
+    { label: "value", detail: "decorator", documentation: "@value — a value object stored inline as JSON wherever it is used; never a table." },
+    { label: "index", detail: "decorator", documentation: '@index(fields: ["a", "b"], unique: true) — a composite index on the model\'s table.' },
     { label: "default", detail: "decorator", documentation: "@default(value) — default value expression." },
     { label: "check", detail: "decorator", documentation: "@check(expr) — value constraint expression." },
     { label: "format", detail: "decorator", documentation: '@format("email") — semantic string format.' },

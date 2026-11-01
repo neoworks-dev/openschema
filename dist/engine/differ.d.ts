@@ -5,6 +5,7 @@ export declare class Differ {
     diff(oldProg: AST.Program, newProg: AST.Program): DiffResult;
     private diffPrograms;
     private diffRecords;
+    private diffAbstractness;
     private diffFieldConstraints;
     private diffAddedField;
     private diffFieldTypes;

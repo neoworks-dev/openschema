@@ -2,7 +2,7 @@
 // Classify each field once, so the encoder and the decoder are generated from a
 // single description. Two independent classifications could disagree, and a
 // disagreement between encode and decode is silent data loss.
-import { applyLink, resolveAliasInline, unwrapNullable } from "../typeMapping.js";
+import { abstractModelOf, resolveAliasInline, unwrapNullable } from "../typeMapping.js";
 import { CodecUnsupportedError } from "./errors.js";
 import { MAX_ORDINAL, SCALAR_CODEC_TS, SCALAR_WIRE, WireType, classifyNamed, isPackable, mapKeyScalar, ordinalProblem, } from "./wireFormat.js";
 export const UNKNOWN_PROPERTY = "$unknown";
@@ -22,7 +22,7 @@ export function planModel(model, fields, schema) {
 function planField(model, field, schema) {
     rejectBadOrdinal(model, field);
     rejectUnknownCollision(model, field);
-    const type = resolveAliasInline(applyLink(field.type, field, schema), schema);
+    const type = resolveAliasInline(field.type, schema);
     const { container, value } = planShape(model, field, type, schema);
     return {
         ordinal: field.ordinal,
@@ -131,6 +131,10 @@ function planValue(model, field, type, schema) {
     }
     if (resolved.kind === "union") {
         throw new CodecUnsupportedError("OSC001", model, field.name, "an untagged union has no discriminant on the wire; use `oneof { 1 a: A  2 b: B }`", field.span);
+    }
+    if (abstractModelOf(resolved, schema) !== null) {
+        throw new CodecUnsupportedError("OSC009", model, field.name, "a value of an @abstract model may be any of its subtypes, and the wire carries no discriminant; " +
+            "use a oneof of the subtypes or ref<Model>", field.span);
     }
     if (resolved.kind === "named") {
         const named = classifyNamed(resolved, schema);

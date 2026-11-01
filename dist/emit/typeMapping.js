@@ -5,7 +5,7 @@
 // The built-in `File` type as the API-surface targets render it. The codec and
 // descriptor targets describe the same value on the wire (see codec/filePlan.ts).
 export const FILE_TS = "{ objectId: string; name: string; mediaType: string; size: number; " +
-    "variants: Record<string, { objectId: string; size: number }> }";
+    "variants: { [variant: string]: { objectId: string; size: number } } }";
 const FILE_OBJECT_ID = { type: "string", format: "uuid" };
 export const FILE_JSON_SCHEMA = {
     type: "object",
@@ -97,13 +97,86 @@ export function isInputModel(model) {
 export function isValueModel(model) {
     return hasDecorator(model.decorators, "value");
 }
-/** True when a database target gives this model a table: not generic, @input or @value. */
+/**
+ * A model-level @abstract marks a shared base that is never stored on its own:
+ * only the models extending it are. GraphQL renders it as an interface.
+ */
+export function isAbstractModel(model) {
+    return hasDecorator(model.decorators, "abstract");
+}
+/** True when a database target gives this model a table: not generic, @input, @value or @abstract. */
 export function isTableModel(model) {
     if (model.isGeneric)
         return false;
     if (isInputModel(model))
         return false;
+    if (isAbstractModel(model))
+        return false;
     return !isValueModel(model);
+}
+/** The model a `ref<T>` type names, or null when the type is not a reference. */
+export function referencedModel(type, schema) {
+    if (type.kind !== "scalar" || type.reference === undefined)
+        return null;
+    const qualified = schema.records.get(type.reference.join("."));
+    if (qualified !== undefined)
+        return qualified;
+    return modelByLocalName(type.reference[type.reference.length - 1], schema);
+}
+/** Every concrete (non-abstract) model extending `base`, directly or through other bases. */
+export function concreteSubtypes(base, schema) {
+    const subtypes = [];
+    for (const record of schema.records.values()) {
+        if (record.isGeneric || isAbstractModel(record))
+            continue;
+        if (extendsModel(record, base))
+            subtypes.push(record);
+    }
+    return subtypes;
+}
+/** True when `record` has `base` somewhere in its extends chain. */
+export function extendsModel(record, base) {
+    return record.baseChain.some(symbol => symbol.qualifiedName === base.symbol.qualifiedName);
+}
+/** The abstract models in a record's extends chain, nearest first. */
+export function abstractAncestors(record, schema) {
+    const ancestors = [];
+    for (const symbol of record.baseChain) {
+        const base = schema.records.get(symbol.qualifiedName);
+        if (base !== undefined && isAbstractModel(base))
+            ancestors.push(base);
+    }
+    return ancestors;
+}
+/** The closest @abstract model in a record's extends chain, or null. */
+export function nearestAbstractAncestor(record, schema) {
+    const ancestors = abstractAncestors(record, schema);
+    if (ancestors.length === 0)
+        return null;
+    return ancestors[0];
+}
+/** The fields a record adds on top of `base` (all of them when there is no base). */
+export function fieldsBeyond(fields, base) {
+    if (base === null)
+        return fields;
+    const inherited = new Set(base.fields.map(field => field.ordinal));
+    return fields.filter(field => !inherited.has(field.ordinal));
+}
+/** Records reordered so every @abstract base comes before the models extending it. */
+export function abstractBasesFirst(records, schema) {
+    const depth = (record) => abstractAncestors(record, schema).length;
+    return records.map((record, position) => ({ record, position }))
+        .sort((left, right) => depth(left.record) - depth(right.record) || left.position - right.position)
+        .map(entry => entry.record);
+}
+/** The abstract model a named type points at, or null. */
+export function abstractModelOf(type, schema) {
+    if (type.kind !== "named")
+        return null;
+    const model = modelByLocalName(type.path[type.path.length - 1], schema);
+    if (model === null || !isAbstractModel(model))
+        return null;
+    return model;
 }
 /** Find a decorator by its dotted name, e.g. "sql.type" or "table". */
 export function findDecorator(decorators, name) {
@@ -167,57 +240,12 @@ export function unwrapNullable(type) {
         return { inner: type.inner, nullable: true };
     return { inner: type, nullable: false };
 }
-// ── @link (store a model field by its primary-key id) ──────────────────────────
-//
-// A @link field references another model by id instead of embedding it. For most
-// targets the field renders as the linked model's primary-key scalar (uuid by
-// default); array/nullable wrappers are preserved. SurrealDB instead emits its
-// native record<table> link (see surrealDdl), and SQL adds a foreign-key clause.
-const SYNTHETIC_SPAN = { line: 0, col: 0 };
-/** A model's primary-key field, or null when none is marked @primaryKey. */
-export function primaryKeyField(model) {
-    for (const field of model.fields) {
-        if (hasDecorator(field.decorators, "primaryKey"))
-            return field;
-    }
-    return null;
-}
-/** The non-nullable type of a model's primary key. The resolver (OS1016) rejects
- * @link targets that lack exactly one @primaryKey, so the uuid branch is only a
- * defensive fallback for already-invalid schemas. */
-export function primaryKeyType(model) {
-    const field = primaryKeyField(model);
-    if (field !== null)
-        return unwrapNullable(field.type).inner;
-    return { kind: "scalar", scalar: "uuid", span: SYNTHETIC_SPAN };
-}
 export function modelByLocalName(name, schema) {
     for (const record of schema.records.values()) {
         if (record.symbol.localName === name)
             return record;
     }
     return null;
-}
-/** If `field` is @link, rewrite each named-model reference in its type to that
- * model's primary-key scalar, preserving array/nullable wrappers. Otherwise
- * returns the type unchanged. */
-export function applyLink(type, field, schema) {
-    if (!hasDecorator(field.decorators, "link"))
-        return type;
-    return rewriteLinks(type, schema);
-}
-function rewriteLinks(type, schema) {
-    if (type.kind === "named") {
-        const model = modelByLocalName(type.path[type.path.length - 1], schema);
-        if (model !== null)
-            return primaryKeyType(model);
-        return type;
-    }
-    if (type.kind === "array")
-        return { ...type, element: rewriteLinks(type.element, schema) };
-    if (type.kind === "nullable")
-        return { ...type, inner: rewriteLinks(type.inner, schema) };
-    return type;
 }
 /** snake_case a camelCase or PascalCase identifier. */
 export function toSnakeCase(name) {

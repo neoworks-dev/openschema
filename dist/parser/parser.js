@@ -138,7 +138,7 @@ export class Parser {
         if (this.at("[" /* TokenKind.LBracket */)) {
             return this.parseDecoratorList();
         }
-        // Qualified identifier value, e.g. @references(User.id).
+        // Qualified identifier value, e.g. @source(User.id).
         if (this.at("Ident" /* TokenKind.Ident */) && this.peekAt(1).kind === "." /* TokenKind.Dot */) {
             const path = this.parseQualifiedIdent();
             return { kind: "ident", value: path.join(".") };

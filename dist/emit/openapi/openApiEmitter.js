@@ -6,7 +6,7 @@
 //   @route("/users/{id}")                     sets the path and path params
 // Request bodies use input visibility (create/update/query); responses use
 // output visibility (read) — see @visibility in the docs.
-import { findDecorator, hasDecorator, firstStringArg, unwrapNullable, applyLink, isVisibleInInput, isVisibleInOutput, isInputModel, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
+import { findDecorator, hasDecorator, firstStringArg, unwrapNullable, isVisibleInInput, isVisibleInOutput, isInputModel, isAbstractModel, concreteSubtypes, unionAliases, resolveAliasInline, FILE_JSON_SCHEMA, SEMVER_PATTERN, } from "../typeMapping.js";
 const SCALAR_JSON = {
     bool: { type: "boolean" },
     i8: { type: "integer", format: "int32" }, i16: { type: "integer", format: "int32" },
@@ -82,7 +82,7 @@ function objectSchema(fields, inputMode, schema) {
     const properties = {};
     const required = [];
     for (const field of fields) {
-        const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
+        const { inner, nullable } = unwrapNullable(field.type);
         properties[field.name] = applyFieldConstraints(mapType(inner, inputMode, schema), field);
         if (!nullable)
             required.push(field.name);
@@ -118,7 +118,7 @@ function mapType(type, inputMode, schema) {
     switch (type.kind) {
         case "scalar": return { ...SCALAR_JSON[type.scalar] };
         case "decimal": return { type: "string", format: "decimal" };
-        case "named": return { $ref: refFor(type.path[type.path.length - 1], inputMode, schema) };
+        case "named": return namedSchema(type.path[type.path.length - 1], inputMode, schema);
         case "array": {
             const arraySchema = { type: "array", items: mapType(type.element, inputMode, schema) };
             if (type.minItems !== undefined)
@@ -134,6 +134,17 @@ function mapType(type, inputMode, schema) {
         case "union": return { oneOf: type.variants.map(v => mapType(v, inputMode, schema)) };
         case "oneof": return { oneOf: type.variants.map(v => mapType(v.type, inputMode, schema)) };
     }
+}
+// A value typed as an @abstract model is one of its concrete subtypes. The
+// resolver rejects abstract models in inputs, so only output position gets here.
+function namedSchema(name, inputMode, schema) {
+    const model = findModel(schema, name);
+    if (model === null || !isAbstractModel(model))
+        return { $ref: refFor(name, inputMode, schema) };
+    const subtypes = concreteSubtypes(model, schema);
+    if (subtypes.length === 0)
+        return { $ref: refFor(name, inputMode, schema) };
+    return { oneOf: subtypes.map(subtype => ({ $ref: refFor(subtype.symbol.localName, inputMode, schema) })) };
 }
 // In input position, model references point to their Input variant; enums,
 // aliases, and input-only (@input) models keep their single schema name.
@@ -273,7 +284,7 @@ function collectInputModels(schema) {
                 continue;
             if (!isVisibleInInput(field.decorators))
                 continue;
-            collectModelNames(applyLink(field.type, field, schema), schema, found, queue);
+            collectModelNames(field.type, schema, found, queue);
         }
     }
     return [...found];

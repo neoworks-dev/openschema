@@ -64,8 +64,29 @@ export declare function isInputModel(model: ResolvedModel): boolean;
  * JSON) in every model that uses it and never gets a table of its own.
  */
 export declare function isValueModel(model: ResolvedModel): boolean;
-/** True when a database target gives this model a table: not generic, @input or @value. */
+/**
+ * A model-level @abstract marks a shared base that is never stored on its own:
+ * only the models extending it are. GraphQL renders it as an interface.
+ */
+export declare function isAbstractModel(model: ResolvedModel): boolean;
+/** True when a database target gives this model a table: not generic, @input, @value or @abstract. */
 export declare function isTableModel(model: ResolvedModel): boolean;
+/** The model a `ref<T>` type names, or null when the type is not a reference. */
+export declare function referencedModel(type: TypeExpr, schema: ResolvedSchema): ResolvedModel | null;
+/** Every concrete (non-abstract) model extending `base`, directly or through other bases. */
+export declare function concreteSubtypes(base: ResolvedModel, schema: ResolvedSchema): ResolvedModel[];
+/** True when `record` has `base` somewhere in its extends chain. */
+export declare function extendsModel(record: ResolvedModel, base: ResolvedModel): boolean;
+/** The abstract models in a record's extends chain, nearest first. */
+export declare function abstractAncestors(record: ResolvedModel, schema: ResolvedSchema): ResolvedModel[];
+/** The closest @abstract model in a record's extends chain, or null. */
+export declare function nearestAbstractAncestor(record: ResolvedModel, schema: ResolvedSchema): ResolvedModel | null;
+/** The fields a record adds on top of `base` (all of them when there is no base). */
+export declare function fieldsBeyond(fields: ResolvedField[], base: ResolvedModel | null): ResolvedField[];
+/** Records reordered so every @abstract base comes before the models extending it. */
+export declare function abstractBasesFirst(records: ResolvedModel[], schema: ResolvedSchema): ResolvedModel[];
+/** The abstract model a named type points at, or null. */
+export declare function abstractModelOf(type: TypeExpr, schema: ResolvedSchema): ResolvedModel | null;
 /** Find a decorator by its dotted name, e.g. "sql.type" or "table". */
 export declare function findDecorator(decorators: Decorator[], name: string): Decorator | null;
 export declare function hasDecorator(decorators: Decorator[], name: string): boolean;
@@ -84,17 +105,7 @@ export declare function unwrapNullable(type: TypeExpr): {
     inner: TypeExpr;
     nullable: boolean;
 };
-/** A model's primary-key field, or null when none is marked @primaryKey. */
-export declare function primaryKeyField(model: ResolvedModel): ResolvedField | null;
-/** The non-nullable type of a model's primary key. The resolver (OS1016) rejects
- * @link targets that lack exactly one @primaryKey, so the uuid branch is only a
- * defensive fallback for already-invalid schemas. */
-export declare function primaryKeyType(model: ResolvedModel): TypeExpr;
 export declare function modelByLocalName(name: string, schema: ResolvedSchema): ResolvedModel | null;
-/** If `field` is @link, rewrite each named-model reference in its type to that
- * model's primary-key scalar, preserving array/nullable wrappers. Otherwise
- * returns the type unchanged. */
-export declare function applyLink(type: TypeExpr, field: ResolvedField, schema: ResolvedSchema): TypeExpr;
 /** snake_case a camelCase or PascalCase identifier. */
 export declare function toSnakeCase(name: string): string;
 /** The alias whose local name matches `name`, or null. Matches the enum/record
