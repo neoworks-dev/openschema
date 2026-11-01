@@ -106,7 +106,7 @@ export interface MigrationPlan {
     hasDestructive: boolean;
     hasManualSteps: boolean;
 }
-/** The logical table name for a model — same rule both DDL emitters use. */
+/** The logical table name for a model — @table, else the model name as written, as every DDL emitter uses. */
 export declare function migrationTableName(model: ResolvedModel): string;
 export declare function buildMigrationPlan(oldSchema: ResolvedSchema, newSchema: ResolvedSchema): MigrationPlan;
 /** The old model a new model continues (same name, or @renamed from it), or null when it is new. */

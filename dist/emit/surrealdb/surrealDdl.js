@@ -1,7 +1,7 @@
 // src/emit/surrealdb/surrealDdl.ts
 // Shared SurrealQL DDL rendering used by both the schema (DEFINE TABLE) emitter
 // and the migration emitter, so a field renders identically either way.
-import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, toSnakeCase, } from "../typeMapping.js";
+import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, } from "../typeMapping.js";
 // SurrealDB has a small set of primitive types; several DSL scalars collapse onto one.
 const SCALAR_SURREAL = {
     bool: "bool",
@@ -16,7 +16,7 @@ export function tableNameFor(record) {
     const explicit = firstStringArg(record.decorators, "table");
     if (explicit !== null)
         return explicit;
-    return toSnakeCase(record.symbol.localName);
+    return record.symbol.localName;
 }
 export function surrealFieldName(field, fallbackName = field.name) {
     return firstStringArg(field.decorators, "surreal.field") ?? fallbackName;
@@ -47,7 +47,7 @@ export function renderFieldIndex(tableName, fieldName, field) {
     if (!unique)
         return null;
     const surrealName = surrealFieldName(field, fieldName);
-    const indexName = `${tableName}_${toSnakeCase(surrealName)}_unique`;
+    const indexName = `${tableName}_${surrealName}_unique`;
     return `DEFINE INDEX ${indexName} ON TABLE ${tableName} FIELDS ${surrealName} UNIQUE;`;
 }
 /** The `DEFINE INDEX` for a model-level @index. */
@@ -231,7 +231,7 @@ function mapNamedType(path, schema) {
 }
 function referencedTable(reference) {
     const segments = reference.split(".");
-    return toSnakeCase(segments[0]);
+    return segments[0];
 }
 function defaultClauseFor(decorators) {
     const decorator = findDecorator(decorators, "default");
@@ -347,7 +347,7 @@ export function renderCreateTable(record, schema, company, includePrivate) {
         const overlay = byCompany?.get(company);
         if (overlay !== undefined) {
             for (const field of overlay.fields) {
-                const fieldName = `${toSnakeCase(company)}_${field.name}`;
+                const fieldName = `${company}_${field.name}`;
                 lines.push(...renderField(tableName, fieldName, field, schema));
             }
         }

@@ -9,9 +9,9 @@ export interface SqliteColumn {
     field: ResolvedField;
     fromOverlay: boolean;
 }
-/** The columns of a model's table in order, overlay columns (namespaced by company) last. */
+/** The columns of a model's table in order, overlay columns (prefixed by company) last. */
 export declare function sqliteColumns(record: ResolvedModel, schema: ResolvedSchema, company: string | null, includePrivate: boolean): SqliteColumn[];
-/** The physical column name: explicit @sql.column, else the snake_cased field name. */
+/** The physical column name, unquoted: explicit @sql.column, else the field name as written. */
 export declare function sqliteColumnName(field: ResolvedField): string;
 /** One column definition, e.g. `status TEXT NOT NULL CHECK (status IN ('a', 'b'))`. */
 export declare function sqliteColumnDefinition(columnName: string, field: ResolvedField, schema: ResolvedSchema): string;

@@ -2,6 +2,7 @@
 // Emits PostgreSQL CREATE TABLE statements from a resolved schema.
 import { isTableModel } from "../typeMapping.js";
 import { renderCreateTable, renderCreateEnum } from "./sqlDdl.js";
+import { quotePostgresIdentifier } from "./sqlIdentifiers.js";
 import { renderCreateIndex, tableIndexes } from "./sqlIndexes.js";
 export const sqlEmitter = {
     target: "sql",
@@ -23,6 +24,7 @@ export const sqlEmitter = {
 };
 function renderTable(record, context) {
     const table = renderCreateTable(record, context.schema, context.company, context.includePrivate);
-    return [table, ...tableIndexes(record).map(renderCreateIndex)].join("\n");
+    const indexes = tableIndexes(record).map(index => renderCreateIndex(index, quotePostgresIdentifier));
+    return [table, ...indexes].join("\n");
 }
 //# sourceMappingURL=sqlEmitter.js.map

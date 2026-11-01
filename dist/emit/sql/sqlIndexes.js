@@ -43,16 +43,17 @@ function namedArgIsTrue(decorator, argName) {
         return false;
     return arg.value.kind === "bool" && arg.value.value;
 }
-/** `CREATE [UNIQUE] INDEX name ON table (a, b);` — the same in PostgreSQL and SQLite. */
-export function renderCreateIndex(index) {
-    const columns = index.columns.join(", ");
+/** `CREATE [UNIQUE] INDEX name ON table (a, b);` — the same in PostgreSQL and SQLite but for quoting. */
+export function renderCreateIndex(index, quote) {
+    const columns = index.columns.map(quote).join(", ");
+    const target = `${quote(index.name)} ON ${quote(index.table)} (${columns});`;
     if (index.unique)
-        return `CREATE UNIQUE INDEX ${index.name} ON ${index.table} (${columns});`;
-    return `CREATE INDEX ${index.name} ON ${index.table} (${columns});`;
+        return `CREATE UNIQUE INDEX ${target}`;
+    return `CREATE INDEX ${target}`;
 }
 /** `DROP INDEX name;` */
-export function renderDropIndex(index) {
-    return `DROP INDEX ${index.name};`;
+export function renderDropIndex(index, quote) {
+    return `DROP INDEX ${quote(index.name)};`;
 }
 /** A key that changes whenever anything about the index does. */
 export function indexIdentity(index) {

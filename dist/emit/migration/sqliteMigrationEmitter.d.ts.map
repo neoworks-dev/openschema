@@ -1,1 +1,1 @@
-{"version":3,"file":"sqliteMigrationEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/migration/sqliteMigrationEmitter.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAwB,gBAAgB,EAAE,MAAM,YAAY,CAAC;AAczE,eAAO,MAAM,sBAAsB,EAAE,gBAwBpC,CAAC"}
+{"version":3,"file":"sqliteMigrationEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/migration/sqliteMigrationEmitter.ts"],"names":[],"mappings":"AAQA,OAAO,KAAK,EAAwB,gBAAgB,EAAE,MAAM,YAAY,CAAC;AAezE,eAAO,MAAM,sBAAsB,EAAE,gBAwBpC,CAAC"}

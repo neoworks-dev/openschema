@@ -2,6 +2,7 @@
 // Emits SQLite CREATE TABLE statements from a resolved schema.
 import { isTableModel } from "../typeMapping.js";
 import { renderCreateTableSqlite } from "./sqliteDdl.js";
+import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 import { renderCreateIndex, tableIndexes } from "./sqlIndexes.js";
 export const sqliteEmitter = {
     target: "sqlite",
@@ -19,6 +20,7 @@ export const sqliteEmitter = {
 };
 function renderTable(record, context) {
     const table = renderCreateTableSqlite(record, context.schema, context.company, context.includePrivate);
-    return [table, ...tableIndexes(record).map(renderCreateIndex)].join("\n");
+    const indexes = tableIndexes(record).map(index => renderCreateIndex(index, quoteSqliteIdentifier));
+    return [table, ...indexes].join("\n");
 }
 //# sourceMappingURL=sqliteEmitter.js.map

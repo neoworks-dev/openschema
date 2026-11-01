@@ -1,7 +1,10 @@
 // src/emit/sql/sqlDdl.ts
 // Shared PostgreSQL DDL rendering used by both the CREATE-TABLE emitter and the
 // migration (ALTER TABLE) emitter, so a column renders identically either way.
-import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, toSnakeCase, applyLink, modelByLocalName, primaryKeyField, } from "../typeMapping.js";
+// Table, column and type names are the schema's names as written (or their
+// @table / @sql.column overrides), quoted where PostgreSQL needs it.
+import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, applyLink, modelByLocalName, primaryKeyField, } from "../typeMapping.js";
+import { quotePostgresIdentifier } from "./sqlIdentifiers.js";
 export const SCALAR_SQL = {
     bool: "BOOLEAN",
     i8: "SMALLINT", i16: "SMALLINT", i32: "INTEGER", i64: "BIGINT",
@@ -11,22 +14,32 @@ export const SCALAR_SQL = {
     date: "DATE", time: "TIME", timestamp: "TIMESTAMPTZ", duration: "INTERVAL",
     semver: "TEXT",
 };
+/** The table name: explicit @table, else the model name as written. */
 export function tableNameFor(record) {
     const explicit = firstStringArg(record.decorators, "table");
     if (explicit !== null)
         return explicit;
-    return toSnakeCase(record.symbol.localName);
+    return record.symbol.localName;
 }
-/** The physical column name: explicit @sql.column, else snake_cased field name. */
+/** The physical column name: explicit @sql.column, else the field name as written. */
 export function sqlColumnName(field, fallbackName = field.name) {
-    return firstStringArg(field.decorators, "sql.column") ?? toSnakeCase(fallbackName);
+    const explicit = firstStringArg(field.decorators, "sql.column");
+    if (explicit !== null)
+        return explicit;
+    return fallbackName;
+}
+/** The column an overlay field gets: prefixed by its company, so it can never collide with a base field. */
+export function overlayColumnName(company, field) {
+    const explicit = firstStringArg(field.decorators, "sql.column");
+    if (explicit !== null)
+        return explicit;
+    return `${company}_${field.name}`;
 }
 export function columnDefinition(columnName, field, schema) {
-    const sqlName = firstStringArg(field.decorators, "sql.column") ?? toSnakeCase(columnName);
     // @link stores the foreign primary-key value: render the column as the linked
     // model's id type, then add the REFERENCES clause below.
     const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
-    const parts = [sqlName, columnTypeFor(inner, field.decorators, schema)];
+    const parts = [quotePostgresIdentifier(columnName), columnTypeFor(inner, field.decorators, schema)];
     if (!nullable)
         parts.push("NOT NULL");
     if (hasDecorator(field.decorators, "primaryKey"))
@@ -50,7 +63,7 @@ export function columnDefinition(columnName, field, schema) {
 // A scalar @link field becomes a foreign key to the linked model's primary key.
 // Array links degrade to a JSONB id list (no FK), and an explicit @references
 // wins, so both are skipped here.
-export function linkReferencesClause(field, schema) {
+export function linkReferencesClause(field, schema, quote = quotePostgresIdentifier) {
     if (!hasDecorator(field.decorators, "link"))
         return null;
     if (hasDecorator(field.decorators, "references"))
@@ -63,7 +76,7 @@ export function linkReferencesClause(field, schema) {
         return null;
     const primaryKey = primaryKeyField(model);
     const pkColumn = primaryKey !== null ? sqlColumnName(primaryKey) : "id";
-    return `REFERENCES ${tableNameFor(model)}(${pkColumn})`;
+    return `REFERENCES ${quote(tableNameFor(model))}(${quote(pkColumn)})`;
 }
 export function columnTypeFor(type, decorators, schema) {
     const override = firstStringArg(decorators, "sql.type");
@@ -89,9 +102,9 @@ function mapNamedType(path, schema) {
     }
     return "JSONB";
 }
-/** The PostgreSQL native enum type name for a DSL enum. */
+/** The PostgreSQL native enum type for a DSL enum: its name as written, quoted as needed. */
 export function enumTypeName(localName) {
-    return toSnakeCase(localName);
+    return quotePostgresIdentifier(localName);
 }
 /** `CREATE TYPE <name> AS ENUM ('a', 'b');` for a native PostgreSQL enum. */
 export function renderCreateEnum(decl) {
@@ -121,16 +134,15 @@ export function checkClauseFor(decorators) {
         return null;
     return `CHECK (${exprToSql(value.expr)})`;
 }
-export function referencesClauseFor(decorators) {
+/** `REFERENCES Table(column)` for @references(Table.column), names as written. */
+export function referencesClauseFor(decorators, quote = quotePostgresIdentifier) {
     const target = firstStringArg(decorators, "references");
     if (target === null)
         return null;
     const segments = target.split(".");
     if (segments.length < 2)
-        return `REFERENCES ${toSnakeCase(target)}`;
-    const table = toSnakeCase(segments[0]);
-    const column = toSnakeCase(segments[1]);
-    return `REFERENCES ${table}(${column})`;
+        return `REFERENCES ${quote(target)}`;
+    return `REFERENCES ${quote(segments[0])}(${quote(segments[1])})`;
 }
 export function exprToSql(expr) {
     if (expr.kind === "literal") {
@@ -147,25 +159,23 @@ export function exprToSql(expr) {
     return `${exprToSql(expr.left)} ${expr.op} ${exprToSql(expr.right)}`;
 }
 /** Render a full CREATE TABLE — reused by the CREATE emitter and the migration
- * emitter's CreateModel op. Overlay columns are namespaced by company. */
+ * emitter's CreateModel op. Overlay columns are prefixed by their company. */
 export function renderCreateTable(record, schema, company, includePrivate) {
-    const tableName = tableNameFor(record);
     const lines = [];
     for (const field of record.fields) {
         if (field.isPrivate && !includePrivate)
             continue;
-        lines.push("  " + columnDefinition(field.name, field, schema));
+        lines.push("  " + columnDefinition(sqlColumnName(field), field, schema));
     }
     if (company !== null) {
         const byCompany = schema.overlays.get(record.symbol.qualifiedName);
         const overlay = byCompany?.get(company);
         if (overlay !== undefined) {
             for (const field of overlay.fields) {
-                const columnName = `${toSnakeCase(company)}_${toSnakeCase(field.name)}`;
-                lines.push("  " + columnDefinition(columnName, field, schema));
+                lines.push("  " + columnDefinition(overlayColumnName(company, field), field, schema));
             }
         }
     }
-    return `CREATE TABLE ${tableName} (\n${lines.join(",\n")}\n);`;
+    return `CREATE TABLE ${quotePostgresIdentifier(tableNameFor(record))} (\n${lines.join(",\n")}\n);`;
 }
 //# sourceMappingURL=sqlDdl.js.map

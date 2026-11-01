@@ -9,14 +9,14 @@
 // full inlined TypeExpr, decorators and @table name that DDL rendering needs.
 import { compareTypes } from "./type-compat.js";
 import { matchDeclarations, pairByOrdinal } from "./match.js";
-import { isTableModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { isTableModel, hasDecorator, unwrapNullable, firstStringArg } from "../emit/typeMapping.js";
 import { tableIndexes, indexIdentity } from "../emit/sql/sqlIndexes.js";
-/** The logical table name for a model — same rule both DDL emitters use. */
+/** The logical table name for a model — @table, else the model name as written, as every DDL emitter uses. */
 export function migrationTableName(model) {
     const explicit = firstStringArg(model.decorators, "table");
     if (explicit !== null)
         return explicit;
-    return toSnakeCase(model.symbol.localName);
+    return model.symbol.localName;
 }
 export function buildMigrationPlan(oldSchema, newSchema) {
     const ops = [];

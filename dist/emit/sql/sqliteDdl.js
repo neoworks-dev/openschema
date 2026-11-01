@@ -3,8 +3,9 @@
 // `migration-sqlite` emitter. SQLite has no native enum, JSON or UUID types:
 // enums become TEXT with an IN-list CHECK, JSON-shaped values become TEXT with
 // a json_valid CHECK, and every other scalar maps onto SQLite's storage classes.
-import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, toSnakeCase, applyLink, overlayFieldsToEmit, } from "../typeMapping.js";
-import { checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor } from "./sqlDdl.js";
+import { findDecorator, hasDecorator, firstStringArg, decoratorValueToString, unwrapNullable, applyLink, overlayFieldsToEmit, } from "../typeMapping.js";
+import { checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName, } from "./sqlDdl.js";
+import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 // u64 does not fit SQLite's signed 64-bit INTEGER, so it is kept exact as text.
 export const SCALAR_SQLITE = {
     bool: "INTEGER",
@@ -21,9 +22,9 @@ export function renderCreateTableSqlite(record, schema, company, includePrivate,
     const lines = sqliteColumns(record, schema, company, includePrivate)
         .map(column => "  " + sqliteColumnDefinition(column.name, column.field, schema));
     const strict = hasDecorator(record.decorators, "sqlite.strict") ? " STRICT" : "";
-    return `CREATE TABLE ${tableName} (\n${lines.join(",\n")}\n)${strict};`;
+    return `CREATE TABLE ${quoteSqliteIdentifier(tableName)} (\n${lines.join(",\n")}\n)${strict};`;
 }
-/** The columns of a model's table in order, overlay columns (namespaced by company) last. */
+/** The columns of a model's table in order, overlay columns (prefixed by company) last. */
 export function sqliteColumns(record, schema, company, includePrivate) {
     const columns = [];
     for (const field of record.fields) {
@@ -31,24 +32,23 @@ export function sqliteColumns(record, schema, company, includePrivate) {
             continue;
         columns.push({ name: sqliteColumnName(field), field, fromOverlay: false });
     }
+    if (company === null)
+        return columns;
     for (const field of overlayFieldsToEmit(schema, record, company)) {
-        const name = `${toSnakeCase(company ?? "")}_${toSnakeCase(field.name)}`;
-        columns.push({ name, field, fromOverlay: true });
+        columns.push({ name: overlayColumnName(company, field), field, fromOverlay: true });
     }
     return columns;
 }
-/** The physical column name: explicit @sql.column, else the snake_cased field name. */
+/** The physical column name, unquoted: explicit @sql.column, else the field name as written. */
 export function sqliteColumnName(field) {
-    const explicit = firstStringArg(field.decorators, "sql.column");
-    if (explicit !== null)
-        return explicit;
-    return toSnakeCase(field.name);
+    return sqlColumnName(field);
 }
 /** One column definition, e.g. `status TEXT NOT NULL CHECK (status IN ('a', 'b'))`. */
 export function sqliteColumnDefinition(columnName, field, schema) {
     const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
     const shape = sqliteColumnShape(inner, field.decorators, schema);
-    const parts = [columnName, shape.sqlType];
+    const column = quoteSqliteIdentifier(columnName);
+    const parts = [column, shape.sqlType];
     if (!nullable)
         parts.push("NOT NULL");
     if (hasDecorator(field.decorators, "primaryKey"))
@@ -59,8 +59,8 @@ export function sqliteColumnDefinition(columnName, field, schema) {
     if (defaultClause !== null)
         parts.push(defaultClause);
     const optionalClauses = [
-        referencesClauseFor(field.decorators),
-        linkReferencesClause(field, schema),
+        referencesClauseFor(field.decorators, quoteSqliteIdentifier),
+        linkReferencesClause(field, schema, quoteSqliteIdentifier),
         checkClauseFor(field.decorators),
     ];
     for (const clause of optionalClauses) {
@@ -68,7 +68,7 @@ export function sqliteColumnDefinition(columnName, field, schema) {
             parts.push(clause);
     }
     if (shape.implicitCheck !== null)
-        parts.push(shape.implicitCheck(columnName));
+        parts.push(shape.implicitCheck(column));
     return parts.join(" ");
 }
 /** The SQLite column type a field type renders to, ignoring its CHECK. */
