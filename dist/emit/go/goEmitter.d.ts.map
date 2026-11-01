@@ -1,1 +1,1 @@
-{"version":3,"file":"goEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/go/goEmitter.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,OAAO,EAA2B,MAAM,aAAa,CAAC;AAkBpE,eAAO,MAAM,SAAS,EAAE,OAoBvB,CAAC"}
+{"version":3,"file":"goEmitter.d.ts","sourceRoot":"","sources":["../../../src/emit/go/goEmitter.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAE,OAAO,EAA2B,MAAM,aAAa,CAAC;AAkBpE,kEAAkE;AAClE,eAAO,MAAM,iBAAiB,YAAY,CAAC;AAI3C,eAAO,MAAM,SAAS,EAAE,OAmBvB,CAAC"}

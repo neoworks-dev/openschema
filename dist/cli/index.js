@@ -20,6 +20,7 @@ import { Parser, ParseError } from "../parser/parser.js";
 import { diff as engineDiff } from "../engine/index.js";
 import { resolveModules, loadProject } from "../resolver/index.js";
 import { getEmitter, listTargets } from "../emit/index.js";
+import { GO_PACKAGE_OPTION } from "../emit/go/goEmitter.js";
 import { getMigrationEmitter, MIGRATION_TARGETS } from "../emit/migration/index.js";
 import { buildMigrationPlan } from "../engine/migration.js";
 import { SNAPSHOT_FILE, emptyMigration, emptySchema, loadWithSnapshot, nextMigrationFileName, numberedFiles, readSnapshot, resolveSnapshot, snapshotPathIn, writeSnapshot, } from "./numberedMigrations.js";
@@ -124,7 +125,7 @@ function emitAll(emitters, schema, opts, schemaPath) {
                 schema,
                 company: opts.company ?? null,
                 includePrivate: opts.includePrivate === true,
-                options: emitOptions(emitter, schemaPath, modules),
+                options: emitOptions(emitter, schemaPath, modules, opts),
             });
             rejectSharedPaths(emitter.target, emitted, writers);
             recordModules(emitter, emitted, modules);
@@ -159,7 +160,9 @@ function recordModules(emitter, emitted, modules) {
     if (emitter.target === "versions")
         modules.versions.push(...emitted.map(file => file.path));
 }
-function emitOptions(emitter, schemaPath, modules) {
+function emitOptions(emitter, schemaPath, modules, opts) {
+    if (emitter.target === "go")
+        return goOptions(opts);
     if (emitter.target === "versions")
         return versionsOptions(schemaPath, modules);
     if (emitter.target === "kotlin")
@@ -173,6 +176,12 @@ function emitOptions(emitter, schemaPath, modules) {
     if (modules.versions.length > 0)
         options[VERSIONS_MODULE_OPTION] = modules.versions[0];
     return options;
+}
+/** The Go target's package name, when --package names one. */
+function goOptions(opts) {
+    if (opts.package === undefined)
+        return {};
+    return { [GO_PACKAGE_OPTION]: opts.package };
 }
 /** The Kotlin target writes the schema object only for a schema with a manifest beside it. */
 function kotlinOptions(schemaPath) {
@@ -1004,6 +1013,7 @@ program
     .option("-o, --out <dir>", "output directory", ".")
     .option("--company <id>", "include this company's overlay fields")
     .option("--include-private", "include base-record private fields")
+    .option("--package <name>", "Go package name for the go target (default: schema)")
     .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
     .option("--frozen", "never write the ordinal ledger; fail if it is missing or stale")
     .option("--write-lock", "write the ordinal ledger even when CI is set")
