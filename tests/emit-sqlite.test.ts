@@ -36,7 +36,7 @@ describe("sqlite emitter", () => {
     const out = sqlite("model Inner { 1 x: i32 } model R { 1 tags: [string]  2 meta: json?  3 inner: Inner }");
     expect(out).toContain("tags TEXT NOT NULL CHECK (json_valid(tags))");
     expect(out).toContain("meta TEXT CHECK (json_valid(meta))");
-    expect(out).toContain("inner TEXT NOT NULL CHECK (json_valid(inner))");
+    expect(out).toContain("\"inner\" TEXT NOT NULL CHECK (json_valid(\"inner\"))");
   });
 
   it("turns enums into an IN-list CHECK, with no CREATE TYPE", () => {
@@ -59,7 +59,7 @@ describe("sqlite emitter", () => {
       model Video { @primaryKey 1 id: uuid  @link 2 studio: Studio?  @unique 3 slug: string }
     `);
     expect(out).toContain("id TEXT NOT NULL PRIMARY KEY");
-    expect(out).toContain("studio TEXT REFERENCES studio(id)");
+    expect(out).toContain("studio TEXT REFERENCES Studio(id)");
     expect(out).toContain("slug TEXT NOT NULL UNIQUE");
     expect(out).toContain(") STRICT;");
   });
@@ -78,8 +78,8 @@ describe("sqlite emitter", () => {
         @default(now()) 5 createdAt: timestamp
       }
     `));
-    db.exec("INSERT INTO video (id, status, tags) VALUES ('v', 'live', '[]')");
-    expect(() => db.exec("INSERT INTO video (id, status, tags) VALUES ('w', 'gone', '[]')")).toThrow();
-    expect(() => db.exec("INSERT INTO video (id, status, tags) VALUES ('x', 'live', 'not json')")).toThrow();
+    db.exec("INSERT INTO Video (id, status, tags) VALUES ('v', 'live', '[]')");
+    expect(() => db.exec("INSERT INTO Video (id, status, tags) VALUES ('w', 'gone', '[]')")).toThrow();
+    expect(() => db.exec("INSERT INTO Video (id, status, tags) VALUES ('x', 'live', 'not json')")).toThrow();
   });
 });

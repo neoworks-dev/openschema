@@ -8,9 +8,12 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, Decorator, Expr, EnumDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
-  unwrapNullable, toSnakeCase, applyLink, overlayFieldsToEmit,
+  unwrapNullable, applyLink, overlayFieldsToEmit,
 } from "../typeMapping.js";
-import { checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor } from "./sqlDdl.js";
+import {
+  checkClauseFor, referencesClauseFor, linkReferencesClause, exprToSql, tableNameFor, sqlColumnName, overlayColumnName,
+} from "./sqlDdl.js";
+import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 
 // u64 does not fit SQLite's signed 64-bit INTEGER, so it is kept exact as text.
 export const SCALAR_SQLITE: Record<ScalarKind, string> = {
@@ -42,7 +45,7 @@ export function renderCreateTableSqlite(
   const lines = sqliteColumns(record, schema, company, includePrivate)
     .map(column => "  " + sqliteColumnDefinition(column.name, column.field, schema));
   const strict = hasDecorator(record.decorators, "sqlite.strict") ? " STRICT" : "";
-  return `CREATE TABLE ${tableName} (\n${lines.join(",\n")}\n)${strict};`;
+  return `CREATE TABLE ${quoteSqliteIdentifier(tableName)} (\n${lines.join(",\n")}\n)${strict};`;
 }
 
 /** A physical column of a table: its name and the field it stores. */
@@ -52,7 +55,7 @@ export interface SqliteColumn {
   fromOverlay: boolean;
 }
 
-/** The columns of a model's table in order, overlay columns (namespaced by company) last. */
+/** The columns of a model's table in order, overlay columns (prefixed by company) last. */
 export function sqliteColumns(
   record: ResolvedModel,
   schema: ResolvedSchema,
@@ -64,26 +67,25 @@ export function sqliteColumns(
     if (field.isPrivate && !includePrivate) continue;
     columns.push({ name: sqliteColumnName(field), field, fromOverlay: false });
   }
+  if (company === null) return columns;
   for (const field of overlayFieldsToEmit(schema, record, company)) {
-    const name = `${toSnakeCase(company ?? "")}_${toSnakeCase(field.name)}`;
-    columns.push({ name, field, fromOverlay: true });
+    columns.push({ name: overlayColumnName(company, field), field, fromOverlay: true });
   }
   return columns;
 }
 
-/** The physical column name: explicit @sql.column, else the snake_cased field name. */
+/** The physical column name, unquoted: explicit @sql.column, else the field name as written. */
 export function sqliteColumnName(field: ResolvedField): string {
-  const explicit = firstStringArg(field.decorators, "sql.column");
-  if (explicit !== null) return explicit;
-  return toSnakeCase(field.name);
+  return sqlColumnName(field);
 }
 
 /** One column definition, e.g. `status TEXT NOT NULL CHECK (status IN ('a', 'b'))`. */
 export function sqliteColumnDefinition(columnName: string, field: ResolvedField, schema: ResolvedSchema): string {
   const { inner, nullable } = unwrapNullable(applyLink(field.type, field, schema));
   const shape = sqliteColumnShape(inner, field.decorators, schema);
+  const column = quoteSqliteIdentifier(columnName);
 
-  const parts: string[] = [columnName, shape.sqlType];
+  const parts: string[] = [column, shape.sqlType];
   if (!nullable) parts.push("NOT NULL");
   if (hasDecorator(field.decorators, "primaryKey")) parts.push("PRIMARY KEY");
   if (hasDecorator(field.decorators, "unique")) parts.push("UNIQUE");
@@ -92,14 +94,14 @@ export function sqliteColumnDefinition(columnName: string, field: ResolvedField,
   if (defaultClause !== null) parts.push(defaultClause);
 
   const optionalClauses = [
-    referencesClauseFor(field.decorators),
-    linkReferencesClause(field, schema),
+    referencesClauseFor(field.decorators, quoteSqliteIdentifier),
+    linkReferencesClause(field, schema, quoteSqliteIdentifier),
     checkClauseFor(field.decorators),
   ];
   for (const clause of optionalClauses) {
     if (clause !== null) parts.push(clause);
   }
-  if (shape.implicitCheck !== null) parts.push(shape.implicitCheck(columnName));
+  if (shape.implicitCheck !== null) parts.push(shape.implicitCheck(column));
   return parts.join(" ");
 }
 

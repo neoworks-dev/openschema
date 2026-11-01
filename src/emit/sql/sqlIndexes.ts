@@ -6,7 +6,7 @@
 import type { Decorator } from "../../parser/ast.js";
 import type { ResolvedField, ResolvedModel } from "../../resolver/types.js";
 import { allDecorators, namedStringListArg } from "../typeMapping.js";
-import { sqlColumnName, tableNameFor } from "./sqlDdl.js";
+import { sqlColumnName, tableNameFor, type QuoteIdentifier } from "./sqlDdl.js";
 
 /** One index of a table. */
 export interface TableIndex {
@@ -59,16 +59,17 @@ function namedArgIsTrue(decorator: Decorator, argName: string): boolean {
   return arg.value.kind === "bool" && arg.value.value;
 }
 
-/** `CREATE [UNIQUE] INDEX name ON table (a, b);` — the same in PostgreSQL and SQLite. */
-export function renderCreateIndex(index: TableIndex): string {
-  const columns = index.columns.join(", ");
-  if (index.unique) return `CREATE UNIQUE INDEX ${index.name} ON ${index.table} (${columns});`;
-  return `CREATE INDEX ${index.name} ON ${index.table} (${columns});`;
+/** `CREATE [UNIQUE] INDEX name ON table (a, b);` — the same in PostgreSQL and SQLite but for quoting. */
+export function renderCreateIndex(index: TableIndex, quote: QuoteIdentifier): string {
+  const columns = index.columns.map(quote).join(", ");
+  const target = `${quote(index.name)} ON ${quote(index.table)} (${columns});`;
+  if (index.unique) return `CREATE UNIQUE INDEX ${target}`;
+  return `CREATE INDEX ${target}`;
 }
 
 /** `DROP INDEX name;` */
-export function renderDropIndex(index: TableIndex): string {
-  return `DROP INDEX ${index.name};`;
+export function renderDropIndex(index: TableIndex, quote: QuoteIdentifier): string {
+  return `DROP INDEX ${quote(index.name)};`;
 }
 
 /** A key that changes whenever anything about the index does. */

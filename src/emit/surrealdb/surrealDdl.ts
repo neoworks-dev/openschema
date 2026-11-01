@@ -6,7 +6,7 @@ import type { ResolvedModel, ResolvedField, ResolvedSchema } from "../../resolve
 import type { TypeExpr, ScalarKind, Decorator, Expr, EnumDecl } from "../../parser/ast.js";
 import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
-  unwrapNullable, toSnakeCase,
+  unwrapNullable,
 } from "../typeMapping.js";
 import type { TableIndex } from "../sql/sqlIndexes.js";
 
@@ -24,7 +24,7 @@ const SCALAR_SURREAL: Record<ScalarKind, string> = {
 export function tableNameFor(record: ResolvedModel): string {
   const explicit = firstStringArg(record.decorators, "table");
   if (explicit !== null) return explicit;
-  return toSnakeCase(record.symbol.localName);
+  return record.symbol.localName;
 }
 
 export function surrealFieldName(field: ResolvedField, fallbackName: string = field.name): string {
@@ -69,7 +69,7 @@ export function renderFieldIndex(
   const unique = hasDecorator(field.decorators, "unique") || hasDecorator(field.decorators, "primaryKey");
   if (!unique) return null;
   const surrealName = surrealFieldName(field, fieldName);
-  const indexName = `${tableName}_${toSnakeCase(surrealName)}_unique`;
+  const indexName = `${tableName}_${surrealName}_unique`;
   return `DEFINE INDEX ${indexName} ON TABLE ${tableName} FIELDS ${surrealName} UNIQUE;`;
 }
 
@@ -285,7 +285,7 @@ function mapNamedType(path: string[], schema: ResolvedSchema): string {
 
 function referencedTable(reference: string): string {
   const segments = reference.split(".");
-  return toSnakeCase(segments[0]);
+  return segments[0];
 }
 
 function defaultClauseFor(decorators: Decorator[]): string | null {
@@ -403,7 +403,7 @@ export function renderCreateTable(
     const overlay = byCompany?.get(company);
     if (overlay !== undefined) {
       for (const field of overlay.fields) {
-        const fieldName = `${toSnakeCase(company)}_${field.name}`;
+        const fieldName = `${company}_${field.name}`;
         lines.push(...renderField(tableName, fieldName, field, schema));
       }
     }

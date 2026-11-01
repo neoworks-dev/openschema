@@ -5,6 +5,7 @@ import type { Emitter, EmitContext, OutputFile } from "../types.js";
 import type { ResolvedModel } from "../../resolver/types.js";
 import { isTableModel } from "../typeMapping.js";
 import { renderCreateTableSqlite } from "./sqliteDdl.js";
+import { quoteSqliteIdentifier } from "./sqlIdentifiers.js";
 import { renderCreateIndex, tableIndexes } from "./sqlIndexes.js";
 
 export const sqliteEmitter: Emitter = {
@@ -24,5 +25,6 @@ export const sqliteEmitter: Emitter = {
 
 function renderTable(record: ResolvedModel, context: EmitContext): string {
   const table = renderCreateTableSqlite(record, context.schema, context.company, context.includePrivate);
-  return [table, ...tableIndexes(record).map(renderCreateIndex)].join("\n");
+  const indexes = tableIndexes(record).map(index => renderCreateIndex(index, quoteSqliteIdentifier));
+  return [table, ...indexes].join("\n");
 }

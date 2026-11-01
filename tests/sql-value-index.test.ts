@@ -32,8 +32,8 @@ describe("@value models", () => {
   it("get no table in sql, sqlite or surrealdb", () => {
     for (const target of ["sql", "sqlite", "surrealdb"]) {
       const out = generate(target, WITH_VALUE);
-      expect(out).not.toMatch(/TABLE money\b/);
-      expect(out).toMatch(/TABLE order\b/);
+      expect(out).not.toMatch(/TABLE "?Money\b/);
+      expect(out).toMatch(/TABLE "?Order\b/);
     }
   });
 
@@ -44,7 +44,7 @@ describe("@value models", () => {
 
   it("never become a migration table", () => {
     const out = migration("migration-sql", "model Order { 1 id: uuid }", WITH_VALUE);
-    expect(out).not.toContain("CREATE TABLE money");
+    expect(out).not.toContain("Money");
     expect(out).toContain("ADD COLUMN total JSONB");
   });
 });
@@ -53,7 +53,7 @@ const INDEXED = `
   @index(fields: ["studio", "date"])
   @index(fields: ["slug"], unique: true)
   @index(fields: ["title"], name: "video_title_search")
-  model Video { 1 id: uuid  2 studio: string  3 date: string  4 slug: string  5 title: string }
+  model video { 1 id: uuid  2 studio: string  3 date: string  4 slug: string  5 title: string }
 `;
 
 describe("@index", () => {
@@ -67,9 +67,10 @@ describe("@index", () => {
     }
   });
 
-  it("uses column names, not field names", () => {
-    const out = generate("sql", '@index(fields: ["createdAt"]) model R { 1 createdAt: string }');
-    expect(out).toContain("CREATE INDEX r_created_at_idx ON r (created_at);");
+  it("derives its name from the exact table and column names, quoted as each dialect needs", () => {
+    const src = '@index(fields: ["createdAt"]) model R { @sql.column("created") 1 createdAt: string  2 b: string }';
+    expect(generate("sql", src)).toContain("CREATE INDEX \"R_created_idx\" ON \"R\" (created);");
+    expect(generate("sqlite", src)).toContain("CREATE INDEX R_created_idx ON R (created);");
   });
 
   it("renders as DEFINE INDEX in surrealdb", () => {
@@ -87,8 +88,8 @@ describe("@index", () => {
   });
 
   it("is added, dropped and recreated when the declarations change", () => {
-    const oldSrc = '@index(fields: ["a"]) @index(fields: ["b"]) model R { 1 a: string  2 b: string  3 c: string }';
-    const newSrc = '@index(fields: ["a"], unique: true) @index(fields: ["c"]) model R { 1 a: string  2 b: string  3 c: string }';
+    const oldSrc = '@index(fields: ["a"]) @index(fields: ["b"]) model r { 1 a: string  2 b: string  3 c: string }';
+    const newSrc = '@index(fields: ["a"], unique: true) @index(fields: ["c"]) model r { 1 a: string  2 b: string  3 c: string }';
     for (const target of ["migration-sql", "migration-sqlite"]) {
       const out = migration(target, oldSrc, newSrc);
       expect(out).toContain("DROP INDEX r_a_idx;");
@@ -106,7 +107,7 @@ describe("@index", () => {
     const db = new Database(":memory:");
     db.exec(generate("sqlite", oldSrc));
     db.exec(migration("migration-sqlite", oldSrc, newSrc));
-    const indexes = db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'r'").all();
-    expect(indexes).toEqual([{ name: "r_a_idx" }]);
+    const indexes = db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'R'").all();
+    expect(indexes).toEqual([{ name: "R_a_idx" }]);
   });
 });

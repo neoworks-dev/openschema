@@ -90,16 +90,16 @@ describe("migration planner", () => {
 describe("migration-sql emitter", () => {
   it("ADD / DROP / RENAME COLUMN", () => {
     expect(migrate("migration-sql", "model R { 1 a: i32 }", "model R { 1 a: i32  2 b: string? }"))
-      .toContain("ALTER TABLE r ADD COLUMN b TEXT");
+      .toContain("ALTER TABLE \"R\" ADD COLUMN b TEXT");
     expect(migrate("migration-sql", "model R { 1 a: i32  2 b: string }", "model R { 1 a: i32 }"))
-      .toContain("ALTER TABLE r DROP COLUMN b;");
+      .toContain("ALTER TABLE \"R\" DROP COLUMN b;");
     expect(migrate("migration-sql", "model R { 1 a: i32 }", "model R { 1 b: i32 }"))
-      .toContain("ALTER TABLE r RENAME COLUMN a TO b;");
+      .toContain("ALTER TABLE \"R\" RENAME COLUMN a TO b;");
   });
 
   it("widening has no USING; narrowing has USING + LOSSY marker", () => {
     const widen = migrate("migration-sql", "model R { 1 a: i32 }", "model R { 1 a: i64 }");
-    expect(widen).toContain("ALTER TABLE r ALTER COLUMN a TYPE BIGINT;");
+    expect(widen).toContain("ALTER TABLE \"R\" ALTER COLUMN a TYPE BIGINT;");
     expect(widen).not.toContain("USING");
     const narrow = migrate("migration-sql", "model R { 1 a: i64 }", "model R { 1 a: i32 }");
     expect(narrow).toContain("USING a::INTEGER");
@@ -108,13 +108,13 @@ describe("migration-sql emitter", () => {
 
   it("CreateModel matches the gen --target sql CREATE TABLE", () => {
     const mig = migrate("migration-sql", "model A { 1 x: i32 }", "model A { 1 x: i32 } model B { 1 y: uuid }");
-    expect(mig).toContain("CREATE TABLE b (\n  y UUID NOT NULL\n);");
+    expect(mig).toContain("CREATE TABLE \"B\" (\n  y UUID NOT NULL\n);");
   });
 
   it("required column without default emits a backfill TODO", () => {
     const mig = migrate("migration-sql", "model R { 1 a: i32 }", "model R { 1 a: i32  2 b: string }");
     expect(mig).toContain("-- TODO backfill");
-    expect(mig).toContain("ALTER TABLE r ADD COLUMN b TEXT;"); // nullable-add form, no NOT NULL
+    expect(mig).toContain("ALTER TABLE \"R\" ADD COLUMN b TEXT;"); // nullable-add form, no NOT NULL
   });
 
   it("suppresses a no-op type change that collapses to the same column", () => {
@@ -127,15 +127,15 @@ describe("migration-sql emitter", () => {
 describe("migration-surreal emitter", () => {
   it("DEFINE / REMOVE FIELD", () => {
     expect(migrate("migration-surreal", "model R { 1 a: i32 }", "model R { 1 a: i32  2 b: string? }"))
-      .toContain("DEFINE FIELD b ON TABLE r TYPE option<string>;");
+      .toContain("DEFINE FIELD b ON TABLE R TYPE option<string>;");
     expect(migrate("migration-surreal", "model R { 1 a: i32  2 b: string }", "model R { 1 a: i32 }"))
-      .toContain("REMOVE FIELD b ON TABLE r;");
+      .toContain("REMOVE FIELD b ON TABLE R;");
   });
 
   it("rename is a MANUAL block", () => {
     const mig = migrate("migration-surreal", "model R { 1 a: i32 }", "model R { 1 b: i32 }");
     expect(mig).toContain("-- MANUAL");
-    expect(mig).toContain("DEFINE FIELD b ON TABLE r");
+    expect(mig).toContain("DEFINE FIELD b ON TABLE R");
   });
 
   it("enum variant add re-defines dependent fields with updated ASSERT", () => {
@@ -153,17 +153,17 @@ describe("native enum migrations (SQL)", () => {
 
   it("new enum → CREATE TYPE", () => {
     const mig = migrate("migration-sql", "model R { 1 x: i32 }", base + " ");
-    expect(mig).toContain("CREATE TYPE status AS ENUM ('a', 'b');");
+    expect(mig).toContain("CREATE TYPE \"Status\" AS ENUM ('a', 'b');");
   });
 
   it("added variant → ALTER TYPE ADD VALUE", () => {
     const mig = migrate("migration-sql", base, "enum Status { 1 a  2 b  3 c } model R { 1 s: Status }");
-    expect(mig).toContain("ALTER TYPE status ADD VALUE IF NOT EXISTS 'c';");
+    expect(mig).toContain("ALTER TYPE \"Status\" ADD VALUE IF NOT EXISTS 'c';");
   });
 
   it("renamed variant (same ordinal) → ALTER TYPE RENAME VALUE", () => {
     const mig = migrate("migration-sql", base, "enum Status { 1 a  2 bee } model R { 1 s: Status }");
-    expect(mig).toContain("ALTER TYPE status RENAME VALUE 'b' TO 'bee';");
+    expect(mig).toContain("ALTER TYPE \"Status\" RENAME VALUE 'b' TO 'bee';");
   });
 
   it("removed variant → MANUAL recreate block (PostgreSQL limitation)", () => {
@@ -177,11 +177,11 @@ describe("native enum migrations (SQL)", () => {
       "enum Status { 1 a } model R { 1 s: Status }",
       '@renamed("Status") enum State { 1 a } model R { 1 s: State }',
     );
-    expect(mig).toContain("ALTER TYPE status RENAME TO state;");
+    expect(mig).toContain("ALTER TYPE \"Status\" RENAME TO \"State\";");
   });
 
   it("removed enum → DROP TYPE", () => {
     const mig = migrate("migration-sql", base, "model R { 1 x: i32 }");
-    expect(mig).toContain("DROP TYPE status;");
+    expect(mig).toContain("DROP TYPE \"Status\";");
   });
 });

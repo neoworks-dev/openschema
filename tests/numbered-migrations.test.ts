@@ -76,14 +76,14 @@ describe("migrate --numbered", () => {
     const directory = join(workspace, "migrations");
 
     expect(run(["migrate", entry, "-t", "migration-sqlite", "--numbered", directory, "--name", "init"]).exitCode).toBe(0);
-    expect(readFileSync(join(directory, "001_init.sql"), "utf8")).toContain("CREATE TABLE r (");
+    expect(readFileSync(join(directory, "001_init.sql"), "utf8")).toContain("CREATE TABLE R (");
 
     writeSchema("main.schema", "model R { 1 a: i32  2 b: string? }");
     const check = run(["migrate", entry, "-t", "migration-sqlite", "--numbered", directory, "--check"]);
     expect(check.exitCode).toBe(1);
 
     expect(run(["migrate", entry, "-t", "migration-sqlite", "--numbered", directory, "--name", "add b"]).exitCode).toBe(0);
-    expect(readFileSync(join(directory, "002_add_b.sql"), "utf8")).toContain("ALTER TABLE r ADD COLUMN b TEXT;");
+    expect(readFileSync(join(directory, "002_add_b.sql"), "utf8")).toContain("ALTER TABLE R ADD COLUMN b TEXT;");
     expect(run(["migrate", entry, "-t", "migration-sqlite", "--numbered", directory, "--check"]).exitCode).toBe(0);
   });
 

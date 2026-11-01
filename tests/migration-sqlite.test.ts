@@ -33,14 +33,14 @@ function createdDatabase(src: string): Database {
 describe("sqlite migrations", () => {
   it("adds a nullable column in place", () => {
     const out = migration("model R { 1 a: i32 }", "model R { 1 a: i32  2 b: string? }");
-    expect(out).toContain("ALTER TABLE r ADD COLUMN b TEXT;");
+    expect(out).toContain("ALTER TABLE R ADD COLUMN b TEXT;");
     expect(out).not.toContain("PRAGMA");
   });
 
   it("renames tables and columns in place", () => {
     const out = migration("model R { 1 a: i32 }", '@renamed("R") model S { 1 b: i32 }');
-    expect(out).toContain("ALTER TABLE r RENAME TO s;");
-    expect(out).toContain("ALTER TABLE s RENAME COLUMN a TO b;");
+    expect(out).toContain("ALTER TABLE R RENAME TO S;");
+    expect(out).toContain("ALTER TABLE S RENAME COLUMN a TO b;");
   });
 
   it("treats a change that keeps the column as a no-op", () => {
@@ -53,13 +53,13 @@ describe("sqlite migrations", () => {
     const oldSrc = "model R { @primaryKey 1 id: string  2 a: string  3 gone: string?  4 n: i32? }";
     const newSrc = "model R { @primaryKey 1 id: string  2 renamed: string?  4 n: i32  5 extra: bool? }";
     const out = migration(oldSrc, newSrc);
-    expect(out.match(/CREATE TABLE r__new/g)).toHaveLength(1);
+    expect(out.match(/CREATE TABLE R__new/g)).toHaveLength(1);
     expect(out).toContain("-- DESTRUCTIVE: column \"gone\"");
 
     const db = createdDatabase(oldSrc);
-    db.exec("INSERT INTO r (id, a, gone, n) VALUES ('1', 'x', 'y', 7)");
+    db.exec("INSERT INTO R (id, a, gone, n) VALUES ('1', 'x', 'y', 7)");
     db.exec(out);
-    expect(db.query("SELECT id, renamed, n, extra FROM r").all()).toEqual([{ id: "1", renamed: "x", n: 7, extra: null }]);
+    expect(db.query("SELECT id, renamed, n, extra FROM R").all()).toEqual([{ id: "1", renamed: "x", n: 7, extra: null }]);
   });
 
   it("casts on a lossy type change", () => {
@@ -69,9 +69,9 @@ describe("sqlite migrations", () => {
     expect(out).toContain("-- LOSSY");
 
     const db = createdDatabase(oldSrc);
-    db.exec("INSERT INTO r (a) VALUES ('42')");
+    db.exec("INSERT INTO R (a) VALUES ('42')");
     db.exec(out);
-    expect(db.query("SELECT a FROM r").get()).toEqual({ a: 42 });
+    expect(db.query("SELECT a FROM R").get()).toEqual({ a: 42 });
   });
 
   it("leaves a placeholder for a required column without a default", () => {
@@ -86,10 +86,10 @@ describe("sqlite migrations", () => {
     expect(out).toContain("CASE s WHEN 'live' THEN 'published' ELSE s END");
 
     const db = createdDatabase(oldSrc);
-    db.exec("INSERT INTO r (s) VALUES ('live'), ('draft')");
+    db.exec("INSERT INTO R (s) VALUES ('live'), ('draft')");
     db.exec(out);
-    expect(db.query("SELECT s FROM r ORDER BY s").all()).toEqual([{ s: "draft" }, { s: "published" }]);
-    db.exec("INSERT INTO r (s) VALUES ('hidden')");
+    expect(db.query("SELECT s FROM R ORDER BY s").all()).toEqual([{ s: "draft" }, { s: "published" }]);
+    db.exec("INSERT INTO R (s) VALUES ('hidden')");
   });
 
   it("keeps rows referencing a rebuilt table", () => {
@@ -98,9 +98,9 @@ describe("sqlite migrations", () => {
 
     const db = createdDatabase(oldSrc);
     db.exec("PRAGMA foreign_keys = ON");
-    db.exec("INSERT INTO p VALUES ('p', 'x'); INSERT INTO c VALUES ('c', 'p')");
+    db.exec("INSERT INTO P VALUES ('p', 'x'); INSERT INTO C VALUES ('c', 'p')");
     db.exec(out);
-    expect(db.query("SELECT parent FROM c").all()).toEqual([{ parent: "p" }]);
+    expect(db.query("SELECT parent FROM C").all()).toEqual([{ parent: "p" }]);
     expect(db.query("PRAGMA foreign_key_check").all()).toEqual([]);
   });
 });

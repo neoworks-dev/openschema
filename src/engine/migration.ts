@@ -12,7 +12,7 @@ import type { TypeExpr, Decorator, EnumDecl, EnumVariant } from "../parser/ast.j
 import type { ResolvedSchema, ResolvedModel, ResolvedField, DeclSymbol } from "../resolver/types.js";
 import { compareTypes, type TypeRelation } from "./type-compat.js";
 import { matchDeclarations, pairByOrdinal, type NamedDecl } from "./match.js";
-import { isTableModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { isTableModel, hasDecorator, unwrapNullable, firstStringArg } from "../emit/typeMapping.js";
 import { tableIndexes, indexIdentity, type TableIndex } from "../emit/sql/sqlIndexes.js";
 
 export type Safety = "safe" | "needs_backfill" | "lossy" | "destructive";
@@ -41,11 +41,11 @@ export interface MigrationPlan {
   hasManualSteps: boolean; // any op with safety needs_backfill | lossy
 }
 
-/** The logical table name for a model — same rule both DDL emitters use. */
+/** The logical table name for a model — @table, else the model name as written, as every DDL emitter uses. */
 export function migrationTableName(model: ResolvedModel): string {
   const explicit = firstStringArg(model.decorators, "table");
   if (explicit !== null) return explicit;
-  return toSnakeCase(model.symbol.localName);
+  return model.symbol.localName;
 }
 
 interface ModelEntry extends NamedDecl { model: ResolvedModel }

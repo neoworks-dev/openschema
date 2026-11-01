@@ -119,8 +119,13 @@ Type mapping:
 - `@table`, `@sql.type`, `@sql.column`, `@primaryKey`, `@unique`, `@default`,
   `@check`, and `@references` all shape the output — see
   [Decorators](./decorators.md).
-- Table and column names are snake-cased (`UserAccount` → `user_account`)
-  unless overridden.
+- Names are used exactly as written: the table is the model name, a column the
+  field name, a native enum type the enum name (`UserAccount.displayName` →
+  table `"UserAccount"`, column `"displayName"`). `@table` and `@sql.column`
+  override them. A name is double-quoted only where PostgreSQL needs it: a
+  reserved word, or any upper-case letter (PostgreSQL folds bare names to lower
+  case). Overlay columns are `<company>_<field>`. `@index` names are
+  `<table>_<columns>_idx` from the same exact names.
 
 ---
 
@@ -161,6 +166,10 @@ SQLite has no enum, JSON or UUID column types, so values that need one are
   `now()` becomes `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`, an ISO 8601 UTC
   timestamp. Other functions (`gen_uuid()`) are passed through and must exist in
   the database.
+- Names are used exactly as written, as in the PostgreSQL target. SQLite
+  matches names case-insensitively, so only keywords (`group`, `order`,
+  `select`, …) and names with characters a bare name can't hold are
+  double-quoted.
 - `@sqlite.strict` on a model makes its table `STRICT` (SQLite 3.37+). It is
   opt-in because older SQLite builds, such as those of many mobile platforms,
   reject it.

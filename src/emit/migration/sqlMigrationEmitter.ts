@@ -6,7 +6,8 @@ import type { MigrationEmitContext, MigrationEmitter } from "./types.js";
 import { migrationHeader } from "./types.js";
 import type { MigrationOp } from "../../engine/migration.js";
 import { describeType } from "../../engine/type-compat.js";
-import { unwrapNullable, toSnakeCase } from "../typeMapping.js";
+import { unwrapNullable } from "../typeMapping.js";
+import { quotePostgresIdentifier as quote } from "../sql/sqlIdentifiers.js";
 import { renderCreateTable, renderCreateEnum, enumTypeName, columnDefinition, columnTypeFor, sqlColumnName } from "../sql/sqlDdl.js";
 import { renderCreateIndex, renderDropIndex } from "../sql/sqlIndexes.js";
 
@@ -30,48 +31,50 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
       return renderCreateTable(op.model, ctx.newSchema, ctx.company, ctx.includePrivate);
 
     case "DropModel":
-      return `-- DESTRUCTIVE: dropping table "${op.table}" discards all its rows.\nDROP TABLE ${op.table};`;
+      return `-- DESTRUCTIVE: dropping table "${op.table}" discards all its rows.\nDROP TABLE ${quote(op.table)};`;
 
     case "RenameModel":
-      return `ALTER TABLE ${op.oldTable} RENAME TO ${op.newTable};`;
+      return `ALTER TABLE ${quote(op.oldTable)} RENAME TO ${quote(op.newTable)};`;
 
     case "AddField": {
-      const column = sqlColumnName(op.field);
+      const columnName = sqlColumnName(op.field);
+      const table = quote(op.table);
       if (op.safety === "needs_backfill") {
         const { inner } = unwrapNullable(op.field.type);
         const type = columnTypeFor(inner, op.field.decorators, ctx.newSchema);
         return [
-          `-- TODO backfill: required column "${column}" has no @default.`,
+          `-- TODO backfill: required column "${columnName}" has no @default.`,
           `-- Add it nullable, backfill, then enforce NOT NULL:`,
-          `ALTER TABLE ${op.table} ADD COLUMN ${column} ${type};`,
-          `-- ALTER TABLE ${op.table} ALTER COLUMN ${column} SET NOT NULL;`,
+          `ALTER TABLE ${table} ADD COLUMN ${quote(columnName)} ${type};`,
+          `-- ALTER TABLE ${table} ALTER COLUMN ${quote(columnName)} SET NOT NULL;`,
         ].join("\n");
       }
-      return `ALTER TABLE ${op.table} ADD COLUMN ${columnDefinition(op.field.name, op.field, ctx.newSchema)};`;
+      return `ALTER TABLE ${table} ADD COLUMN ${columnDefinition(columnName, op.field, ctx.newSchema)};`;
     }
 
-    case "DropField":
-      return `-- DESTRUCTIVE: dropping column "${sqlColumnName(op.field)}".\nALTER TABLE ${op.table} DROP COLUMN ${sqlColumnName(op.field)};`;
+    case "DropField": {
+      const columnName = sqlColumnName(op.field);
+      return `-- DESTRUCTIVE: dropping column "${columnName}".\nALTER TABLE ${quote(op.table)} DROP COLUMN ${quote(columnName)};`;
+    }
 
     case "RenameField":
-      return `ALTER TABLE ${op.table} RENAME COLUMN ${toSnakeCase(op.oldName)} TO ${sqlColumnName(op.field)};`;
+      return `ALTER TABLE ${quote(op.table)} RENAME COLUMN ${quote(op.oldName)} TO ${quote(sqlColumnName(op.field))};`;
 
     case "ChangeFieldType":
       return renderChangeFieldType(op, ctx);
 
     case "ChangeFieldNullability": {
-      const column = sqlColumnName(op.field);
-      if (op.becameNullable) {
-        return `ALTER TABLE ${op.table} ALTER COLUMN ${column} DROP NOT NULL;`;
-      }
-      return `-- TODO: ensure no NULLs in "${column}" before enforcing NOT NULL.\nALTER TABLE ${op.table} ALTER COLUMN ${column} SET NOT NULL;`;
+      const columnName = sqlColumnName(op.field);
+      const alter = `ALTER TABLE ${quote(op.table)} ALTER COLUMN ${quote(columnName)}`;
+      if (op.becameNullable) return `${alter} DROP NOT NULL;`;
+      return `-- TODO: ensure no NULLs in "${columnName}" before enforcing NOT NULL.\n${alter} SET NOT NULL;`;
     }
 
     case "CreateEnum":
       return renderCreateEnum(op.decl);
 
     case "DropEnum":
-      return `-- DESTRUCTIVE: dropping enum type "${enumTypeName(op.enumName)}".\nDROP TYPE ${enumTypeName(op.enumName)};`;
+      return `-- DESTRUCTIVE: dropping enum type "${op.enumName}".\nDROP TYPE ${enumTypeName(op.enumName)};`;
 
     case "RenameEnum":
       return `ALTER TYPE ${enumTypeName(op.oldName)} RENAME TO ${enumTypeName(op.newName)};`;
@@ -86,17 +89,17 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
     case "DropEnumVariant": {
       const type = enumTypeName(op.enumName);
       return [
-        `-- DESTRUCTIVE/MANUAL: PostgreSQL cannot drop enum value '${op.variant}' from "${type}".`,
+        `-- DESTRUCTIVE/MANUAL: PostgreSQL cannot drop enum value '${op.variant}' from "${op.enumName}".`,
         `-- Recreate the type without it: repoint columns to TEXT, DROP TYPE ${type},`,
         `-- CREATE TYPE ${type} AS ENUM (...) with the remaining values, then repoint back.`,
       ].join("\n");
     }
 
     case "CreateIndex":
-      return renderCreateIndex(op.index);
+      return renderCreateIndex(op.index, quote);
 
     case "DropIndex":
-      return renderDropIndex(op.index);
+      return renderDropIndex(op.index, quote);
   }
 }
 
@@ -104,7 +107,8 @@ function renderChangeFieldType(
   op: Extract<MigrationOp, { kind: "ChangeFieldType" }>,
   ctx: MigrationEmitContext,
 ): string {
-  const column = sqlColumnName(op.field);
+  const columnName = sqlColumnName(op.field);
+  const column = quote(columnName);
   const newInner = unwrapNullable(op.field.type).inner;
   const oldInner = unwrapNullable(op.oldType).inner;
   const newColType = columnTypeFor(newInner, op.field.decorators, ctx.newSchema);
@@ -112,14 +116,15 @@ function renderChangeFieldType(
 
   // No-op when both DSL types collapse to the same SQL column type (e.g. [i32]→[i64] both JSONB).
   if (newColType === oldColType) {
-    return `-- no-op: "${column}" changed ${describeType(op.oldType)} → ${describeType(op.field.type)} but the SQL column type stays ${newColType}.`;
+    return `-- no-op: "${columnName}" changed ${describeType(op.oldType)} → ${describeType(op.field.type)} but the SQL column type stays ${newColType}.`;
   }
 
+  const alter = `ALTER TABLE ${quote(op.table)} ALTER COLUMN ${column} TYPE ${newColType}`;
   if (op.safety === "lossy") {
     return [
       `-- LOSSY (${op.relation}): ${describeType(op.oldType)} → ${describeType(op.field.type)}; values outside the new type will error. Review the USING cast.`,
-      `ALTER TABLE ${op.table} ALTER COLUMN ${column} TYPE ${newColType} USING ${column}::${newColType};`,
+      `${alter} USING ${column}::${newColType};`,
     ].join("\n");
   }
-  return `ALTER TABLE ${op.table} ALTER COLUMN ${column} TYPE ${newColType};`;
+  return `${alter};`;
 }

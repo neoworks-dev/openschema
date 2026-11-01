@@ -117,6 +117,12 @@ The CLI prints a summary and warns when the plan `hasDestructive` or
 
 ## Notes & limits
 
+- Table, column, enum and index names are the schema's names exactly as written
+  (or `@table` / `@sql.column`), quoted where the dialect needs it, as in the
+  [table targets](./code-generation.md#sql-postgresql). Renaming a model or
+  field therefore renames its table or column. Schemas generated before this
+  rule were snake-cased (`UserAccount` → `user_account`); pin those names with
+  `@table` / `@sql.column`, or migrate the renames once.
 - A type change that collapses to the same physical column (e.g. `[i32]`→`[i64]`,
   both a JSON column) is suppressed as a `-- no-op`.
 - Enums are native PostgreSQL types (`CREATE TYPE … AS ENUM`). Adding/renaming a

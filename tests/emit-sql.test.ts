@@ -18,10 +18,11 @@ function sql(src: string, ctx?: Partial<EmitContext>): string {
 }
 
 describe("sql emitter", () => {
-  it("creates a table per model with snake_case names", () => {
-    const out = sql("model UserAccount { 1 displayName: string }");
-    expect(out).toContain("CREATE TABLE user_account (");
-    expect(out).toContain("display_name TEXT NOT NULL");
+  it("names tables and columns exactly as written, quoting what PostgreSQL would fold", () => {
+    const out = sql("model UserAccount { 1 displayName: string  2 name: string }");
+    expect(out).toContain("CREATE TABLE \"UserAccount\" (");
+    expect(out).toContain("\"displayName\" TEXT NOT NULL");
+    expect(out).toContain("  name TEXT NOT NULL");
   });
 
   it("uses @table to override the table name", () => {
@@ -58,8 +59,8 @@ describe("sql emitter", () => {
 
   it("declares a native enum type and types the column by it", () => {
     const out = sql("enum Status { 1 a  2 b }  model R { 1 s: Status }");
-    expect(out).toContain("CREATE TYPE status AS ENUM ('a', 'b');");
-    expect(out).toContain("s status NOT NULL");
+    expect(out).toContain("CREATE TYPE \"Status\" AS ENUM ('a', 'b');");
+    expect(out).toContain("s \"Status\" NOT NULL");
   });
 
   it("maps arrays and maps to JSONB", () => {
@@ -81,18 +82,18 @@ describe("sql emitter", () => {
   it("emits namespaced overlay columns for the selected company", () => {
     const src = "model Person { 1 name: string }  overlay acme on Person { 1 spamScore: f32 }";
     const out = sql(src, { company: "acme" });
-    expect(out).toContain("acme_spam_score REAL NOT NULL");
+    expect(out).toContain("\"acme_spamScore\" REAL NOT NULL");
   });
 
   it("omits overlay columns when no company is selected", () => {
     const src = "model Person { 1 name: string }  overlay acme on Person { 1 spamScore: f32 }";
     const out = sql(src);
-    expect(out).not.toContain("spam_score");
+    expect(out).not.toContain("spamScore");
   });
 
   it("skips generic records", () => {
     const out = sql("model Page<T> { 1 items: [T] }  model R { 1 x: i32 }");
-    expect(out).not.toContain("page");
-    expect(out).toContain("CREATE TABLE r (");
+    expect(out).not.toContain("Page");
+    expect(out).toContain("CREATE TABLE \"R\" (");
   });
 });

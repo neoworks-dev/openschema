@@ -120,13 +120,17 @@ company** so they cannot collide with base columns or another company's columns:
 ```sql
 CREATE TABLE orders (
   id UUID NOT NULL PRIMARY KEY DEFAULT gen_uuid(),
-  customer_id UUID NOT NULL REFERENCES customer(id),
-  status TEXT NOT NULL,
+  "customerId" UUID NOT NULL REFERENCES "Customer"(id),
+  status "OrderStatus" NOT NULL,
   -- ... base columns ...
-  acme_loyalty_tier TEXT NOT NULL,
-  acme_account_manager_id BIGINT NOT NULL
+  "acme_loyaltyTier" TEXT NOT NULL,
+  "acme_accountManagerId" BIGINT NOT NULL
 );
 ```
+
+An overlay column is `<company>_<field>`, with the field name as written. The
+company prefix is the one name the generator adds: nothing else keeps an overlay
+field from colliding with a base field of the same name.
 
 Without `--company`, you get just the shared schema — the public view that every
 company shares. With `--company acme` you get ACME's view; with

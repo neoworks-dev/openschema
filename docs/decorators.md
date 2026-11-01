@@ -99,9 +99,9 @@ These override how a field maps to a specific target.
 
 | Decorator | Argument | Effect |
 |-----------|----------|--------|
-| `@table(name)` | string | SQL: use this table name instead of the snake-cased model name. |
+| `@table(name)` | string | SQL, SurrealDB: use this table name instead of the model name as written. |
 | `@sql.type(type)` | string | SQL: use this exact column type, overriding the default mapping. |
-| `@sql.column(name)` | string | SQL: use this column name instead of the snake-cased field name. |
+| `@sql.column(name)` | string | SQL: use this column name instead of the field name as written. |
 
 ```openschema
 @table("user_accounts")
@@ -143,15 +143,15 @@ model Purchase {
 ```
 
 ```sql
-CREATE TABLE purchase (
+CREATE TABLE "Purchase" (
   id UUID NOT NULL PRIMARY KEY,
   customer UUID NOT NULL,
-  placed_at TIMESTAMPTZ NOT NULL,
+  "placedAt" TIMESTAMPTZ NOT NULL,
   reference TEXT NOT NULL,
   total JSONB NOT NULL
 );
-CREATE INDEX purchase_customer_placed_at_idx ON purchase (customer, placed_at);
-CREATE UNIQUE INDEX purchase_reference_idx ON purchase (reference);
+CREATE INDEX "Purchase_customer_placedAt_idx" ON "Purchase" (customer, "placedAt");
+CREATE UNIQUE INDEX "Purchase_reference_idx" ON "Purchase" (reference);
 ```
 
 ## Lifecycle decorators

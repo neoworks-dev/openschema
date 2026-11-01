@@ -12,7 +12,8 @@ import { previousModel, type MigrationOp } from "../../engine/migration.js";
 import { pairByOrdinal } from "../../engine/match.js";
 import { describeType } from "../../engine/type-compat.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { applyLink, hasDecorator, isTableModel, toSnakeCase, unwrapNullable } from "../typeMapping.js";
+import { applyLink, hasDecorator, isTableModel, unwrapNullable } from "../typeMapping.js";
+import { quoteSqliteIdentifier as quote } from "../sql/sqlIdentifiers.js";
 import { tableNameFor } from "../sql/sqlDdl.js";
 import { renderCreateIndex, renderDropIndex, tableIndexes } from "../sql/sqlIndexes.js";
 import {
@@ -233,11 +234,11 @@ function renderRebuild(rebuild: Rebuild, ctx: MigrationEmitContext): string {
   if (copies.length > 0) {
     const targets = copies.map(copy => copy.target).join(", ");
     const sources = copies.map(copy => copy.source).join(", ");
-    lines.push(`INSERT INTO ${temporaryTable} (${targets})\n  SELECT ${sources} FROM ${oldTable};`);
+    lines.push(`INSERT INTO ${quote(temporaryTable)} (${targets})\n  SELECT ${sources} FROM ${quote(oldTable)};`);
   }
-  lines.push(`DROP TABLE ${oldTable};`);
-  lines.push(`ALTER TABLE ${temporaryTable} RENAME TO ${rebuild.table};`);
-  lines.push(...tableIndexes(rebuild.model).map(renderCreateIndex));
+  lines.push(`DROP TABLE ${quote(oldTable)};`);
+  lines.push(`ALTER TABLE ${quote(temporaryTable)} RENAME TO ${quote(rebuild.table)};`);
+  lines.push(...tableIndexes(rebuild.model).map(index => renderCreateIndex(index, quote)));
   return lines.join("\n");
 }
 
@@ -263,11 +264,12 @@ function columnCopies(newModel: ResolvedModel, oldModel: ResolvedModel, ctx: Mig
 
 function columnCopy(column: SqliteColumn, previousField: ResolvedField | undefined, ctx: MigrationEmitContext): ColumnCopy | null {
   // Overlays are not part of the plan, so their columns are carried over as they are.
-  if (column.fromOverlay) return { target: column.name, source: column.name };
+  const target = quote(column.name);
+  if (column.fromOverlay) return { target, source: target };
   if (previousField === undefined) return newColumnCopy(column);
 
-  const source = convertedValue(sqliteColumnName(previousField), previousField, column.field, ctx);
-  return { target: column.name, source: renamedVariants(source, column.field, ctx) };
+  const source = convertedValue(quote(sqliteColumnName(previousField)), previousField, column.field, ctx);
+  return { target, source: renamedVariants(source, column.field, ctx) };
 }
 
 // A new column takes its default, unless it is required without one: then the
@@ -275,7 +277,7 @@ function columnCopy(column: SqliteColumn, previousField: ResolvedField | undefin
 function newColumnCopy(column: SqliteColumn): ColumnCopy | null {
   const { nullable } = unwrapNullable(column.field.type);
   if (nullable || hasDecorator(column.field.decorators, "default")) return null;
-  return { target: column.name, source: "NULL /* TODO backfill */" };
+  return { target: quote(column.name), source: "NULL /* TODO backfill */" };
 }
 
 function convertedValue(source: string, previousField: ResolvedField, field: ResolvedField, ctx: MigrationEmitContext): string {
@@ -311,16 +313,16 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
       return renderCreateTableSqlite(op.model, ctx.newSchema, ctx.company, ctx.includePrivate);
 
     case "DropModel":
-      return `-- DESTRUCTIVE: dropping table "${op.table}" discards all its rows.\nDROP TABLE ${op.table};`;
+      return `-- DESTRUCTIVE: dropping table "${op.table}" discards all its rows.\nDROP TABLE ${quote(op.table)};`;
 
     case "RenameModel":
-      return `ALTER TABLE ${op.oldTable} RENAME TO ${op.newTable};`;
+      return `ALTER TABLE ${quote(op.oldTable)} RENAME TO ${quote(op.newTable)};`;
 
     case "AddField":
-      return `ALTER TABLE ${op.table} ADD COLUMN ${sqliteColumnDefinition(sqliteColumnName(op.field), op.field, ctx.newSchema)};`;
+      return `ALTER TABLE ${quote(op.table)} ADD COLUMN ${sqliteColumnDefinition(sqliteColumnName(op.field), op.field, ctx.newSchema)};`;
 
     case "RenameField":
-      return `ALTER TABLE ${op.table} RENAME COLUMN ${toSnakeCase(op.oldName)} TO ${sqliteColumnName(op.field)};`;
+      return `ALTER TABLE ${quote(op.table)} RENAME COLUMN ${quote(op.oldName)} TO ${quote(sqliteColumnName(op.field))};`;
 
     case "ChangeFieldType":
       return `-- no-op: "${sqliteColumnName(op.field)}" changed ${describeType(op.oldType)} → ${describeType(op.field.type)} but its SQLite column stays the same.`;
@@ -343,10 +345,10 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
       return `-- enum ${describeEnumChange(op)}: ${enumUsers(op.enumName, ctx)}.`;
 
     case "CreateIndex":
-      return renderCreateIndex(op.index);
+      return renderCreateIndex(op.index, quote);
 
     case "DropIndex":
-      return renderDropIndex(op.index);
+      return renderDropIndex(op.index, quote);
   }
 }
 

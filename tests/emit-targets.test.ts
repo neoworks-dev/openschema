@@ -327,14 +327,14 @@ describe("@input decorator", () => {
 
   it("sql: an @input model produces no table", () => {
     const out = emit("sql", MODEL_SRC);
-    expect(out).toContain("CREATE TABLE contact (");
-    expect(out).not.toContain("contact_filter");
+    expect(out).toContain("CREATE TABLE \"Contact\" (");
+    expect(out).not.toContain("ContactFilter");
   });
 
   it("surrealdb: an @input model produces no table", () => {
     const out = emit("surrealdb", MODEL_SRC);
-    expect(out).toContain("DEFINE TABLE contact SCHEMAFULL;");
-    expect(out).not.toContain("contact_filter");
+    expect(out).toContain("DEFINE TABLE Contact SCHEMAFULL;");
+    expect(out).not.toContain("ContactFilter");
   });
 
   it("openapi: an @input model has only an input schema (bare name)", () => {
@@ -487,13 +487,13 @@ describe("@link across targets", () => {
 
   it("sql: renders a @link field as a foreign key to the primary key", () => {
     const out = emit("sql", SRC);
-    expect(out).toContain("location UUID REFERENCES geo_point(id)");
+    expect(out).toContain("location UUID REFERENCES \"GeoPoint\"(id)");
   });
 
   it("uses a non-uuid primary-key type for the link", () => {
     const src = "model Tag { @primaryKey 1 code: i32 }  model Post { @link 1 tag: Tag }";
     expect(emit("ts", src)).toContain("tag: number;");
-    expect(emit("sql", src)).toContain("tag INTEGER NOT NULL REFERENCES tag(code)");
+    expect(emit("sql", src)).toContain("tag INTEGER NOT NULL REFERENCES \"Tag\"(code)");
   });
 });
 
