@@ -12,7 +12,8 @@ import type { TypeExpr, Decorator, EnumDecl, EnumVariant } from "../parser/ast.j
 import type { ResolvedSchema, ResolvedModel, ResolvedField, DeclSymbol } from "../resolver/types.js";
 import { compareTypes, type TypeRelation } from "./type-compat.js";
 import { matchDeclarations, pairByOrdinal, type NamedDecl } from "./match.js";
-import { isInputModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { isTableModel, hasDecorator, unwrapNullable, firstStringArg, toSnakeCase } from "../emit/typeMapping.js";
+import { tableIndexes, indexIdentity, type TableIndex } from "../emit/sql/sqlIndexes.js";
 
 export type Safety = "safe" | "needs_backfill" | "lossy" | "destructive";
 
@@ -30,7 +31,9 @@ export type MigrationOp =
   | { kind: "RenameEnum"; oldName: string; newName: string; decl: EnumDecl; safety: "safe" }
   | { kind: "AddEnumVariant"; enumName: string; variant: string; decl: EnumDecl; safety: "safe" }
   | { kind: "DropEnumVariant"; enumName: string; variant: string; decl: EnumDecl; safety: "destructive" }
-  | { kind: "RenameEnumVariant"; enumName: string; oldVariant: string; newVariant: string; decl: EnumDecl; safety: "safe" };
+  | { kind: "RenameEnumVariant"; enumName: string; oldVariant: string; newVariant: string; decl: EnumDecl; safety: "safe" }
+  | { kind: "CreateIndex"; table: string; index: TableIndex; model: ResolvedModel; safety: "safe" }
+  | { kind: "DropIndex"; table: string; index: TableIndex; model: ResolvedModel; safety: "safe" };
 
 export interface MigrationPlan {
   ops: MigrationOp[];
@@ -71,7 +74,11 @@ function planModels(ops: MigrationOp[], oldSchema: ResolvedSchema, newSchema: Re
     ops.push({ kind: "DropModel", table: migrationTableName(removed.model), model: removed.model, safety: "destructive" });
   }
   for (const added of match.added) {
-    ops.push({ kind: "CreateModel", table: migrationTableName(added.model), model: added.model, safety: "safe" });
+    const table = migrationTableName(added.model);
+    ops.push({ kind: "CreateModel", table, model: added.model, safety: "safe" });
+    for (const index of tableIndexes(added.model)) {
+      ops.push({ kind: "CreateIndex", table, index, model: added.model, safety: "safe" });
+    }
   }
   for (const pair of match.pairs) {
     const oldModel = pair.oldDecl.model;
@@ -82,6 +89,24 @@ function planModels(ops: MigrationOp[], oldSchema: ResolvedSchema, newSchema: Re
       ops.push({ kind: "RenameModel", oldTable, newTable, model: newModel, safety: "safe" });
     }
     planFields(ops, newTable, oldModel, newModel);
+    planIndexes(ops, newTable, oldModel, newModel);
+  }
+}
+
+// An index whose name, columns or uniqueness changed is dropped and recreated.
+function planIndexes(ops: MigrationOp[], table: string, oldModel: ResolvedModel, newModel: ResolvedModel): void {
+  const oldIndexes = tableIndexes(oldModel);
+  const newIndexes = tableIndexes(newModel);
+  const oldIdentities = new Set(oldIndexes.map(indexIdentity));
+  const newIdentities = new Set(newIndexes.map(indexIdentity));
+
+  for (const index of oldIndexes) {
+    if (newIdentities.has(indexIdentity(index))) continue;
+    ops.push({ kind: "DropIndex", table, index, model: newModel, safety: "safe" });
+  }
+  for (const index of newIndexes) {
+    if (oldIdentities.has(indexIdentity(index))) continue;
+    ops.push({ kind: "CreateIndex", table, index, model: newModel, safety: "safe" });
   }
 }
 
@@ -169,7 +194,7 @@ export function previousModel(oldSchema: ResolvedSchema, newSchema: ResolvedSche
 function modelEntries(schema: ResolvedSchema): Map<string, ModelEntry> {
   const map = new Map<string, ModelEntry>();
   for (const model of schema.records.values()) {
-    if (model.isGeneric || isInputModel(model)) continue;
+    if (!isTableModel(model)) continue;
     map.set(model.symbol.localName, { name: model.symbol.localName, decorators: model.decorators, model });
   }
   return map;
@@ -191,6 +216,7 @@ function enumEntries(schema: ResolvedSchema): Map<string, EnumEntry> {
 // so a forward migration is expand-then-contract safe.
 
 const PHASE: Record<MigrationOp["kind"], number> = {
+  DropIndex: -1,        // before any column it covers changes or goes away
   CreateEnum: 0,        // a type must exist before a table/column uses it
   CreateModel: 1,
   RenameModel: 2,
@@ -201,6 +227,7 @@ const PHASE: Record<MigrationOp["kind"], number> = {
   AddField: 6,
   ChangeFieldType: 7,
   ChangeFieldNullability: 7,
+  CreateIndex: 8,       // after the columns it covers exist in their final shape
   DropField: 9,
   DropEnumVariant: 10,
   DropModel: 11,

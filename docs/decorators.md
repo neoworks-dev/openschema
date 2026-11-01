@@ -121,6 +121,39 @@ CREATE TABLE user_accounts (
 );
 ```
 
+| Decorator | Applies to | Effect |
+|-----------|-----------|--------|
+| `@value` | model | An embedded value object: stored inline, as a JSON column, in every model that uses it. The `sql`, `sqlite` and `surrealdb` targets and the migration planner never give it a table. |
+| `@index(fields: [...], unique: true, name: "…")` | model | A table index over the named fields (in order). `unique` defaults to `false`; `name` defaults to `<table>_<columns>_idx`. Repeatable. Renders as `CREATE [UNIQUE] INDEX … ON <table> (…)` after the table in `sql` and `sqlite`, `DEFINE INDEX` in `surrealdb`; migrations drop and create indexes as the declarations change. |
+| `@sqlite.strict` | model | `sqlite` target: make the table `STRICT` (SQLite 3.37+). |
+
+```openschema
+@value
+model Money { 1 amount: i64  2 currency: string }
+
+@index(fields: ["customer", "placedAt"])
+@index(fields: ["reference"], unique: true)
+model Purchase {
+  @primaryKey 1 id: uuid
+  2 customer: uuid
+  3 placedAt: timestamp
+  4 reference: string
+  5 total: Money
+}
+```
+
+```sql
+CREATE TABLE purchase (
+  id UUID NOT NULL PRIMARY KEY,
+  customer UUID NOT NULL,
+  placed_at TIMESTAMPTZ NOT NULL,
+  reference TEXT NOT NULL,
+  total JSONB NOT NULL
+);
+CREATE INDEX purchase_customer_placed_at_idx ON purchase (customer, placed_at);
+CREATE UNIQUE INDEX purchase_reference_idx ON purchase (reference);
+```
+
 ## Lifecycle decorators
 
 | Decorator | Applies to | Effect |

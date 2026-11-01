@@ -8,6 +8,7 @@ import {
   findDecorator, hasDecorator, firstStringArg, decoratorValueToString,
   unwrapNullable, toSnakeCase,
 } from "../typeMapping.js";
+import type { TableIndex } from "../sql/sqlIndexes.js";
 
 // SurrealDB has a small set of primitive types; several DSL scalars collapse onto one.
 const SCALAR_SURREAL: Record<ScalarKind, string> = {
@@ -70,6 +71,13 @@ export function renderFieldIndex(
   const surrealName = surrealFieldName(field, fieldName);
   const indexName = `${tableName}_${toSnakeCase(surrealName)}_unique`;
   return `DEFINE INDEX ${indexName} ON TABLE ${tableName} FIELDS ${surrealName} UNIQUE;`;
+}
+
+/** The `DEFINE INDEX` for a model-level @index. */
+export function renderModelIndexDefine(index: TableIndex): string {
+  const fields = index.fields.map(field => surrealFieldName(field)).join(", ");
+  if (index.unique) return `DEFINE INDEX ${index.name} ON TABLE ${index.table} FIELDS ${fields} UNIQUE;`;
+  return `DEFINE INDEX ${index.name} ON TABLE ${index.table} FIELDS ${fields};`;
 }
 
 /** Both lines a field contributes to a table definition, in order. A field whose

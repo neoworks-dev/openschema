@@ -7,9 +7,9 @@ import type { MigrationEmitContext, MigrationEmitter } from "./types.js";
 import { migrationHeader } from "./types.js";
 import type { MigrationOp } from "../../engine/migration.js";
 import { describeType } from "../../engine/type-compat.js";
-import { unwrapNullable, isInputModel } from "../typeMapping.js";
+import { unwrapNullable, isTableModel } from "../typeMapping.js";
 import {
-  renderCreateTable, renderField, renderFieldDefine, surrealFieldName, tableNameFor,
+  renderCreateTable, renderField, renderFieldDefine, renderModelIndexDefine, surrealFieldName, tableNameFor,
 } from "../surrealdb/surrealDdl.js";
 
 export const surrealMigrationEmitter: MigrationEmitter = {
@@ -93,6 +93,12 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
       if (redefines.length === 0) return header;
       return [header, ...redefines].join("\n");
     }
+
+    case "CreateIndex":
+      return renderModelIndexDefine(op.index);
+
+    case "DropIndex":
+      return `REMOVE INDEX ${op.index.name} ON TABLE ${op.table};`;
   }
 }
 
@@ -124,7 +130,7 @@ function renderChangeFieldType(
 function enumDependentRedefines(enumName: string, ctx: MigrationEmitContext): string[] {
   const lines: string[] = [];
   for (const model of ctx.newSchema.records.values()) {
-    if (model.isGeneric || isInputModel(model)) continue;
+    if (!isTableModel(model)) continue;
     const table = tableNameFor(model);
     for (const field of model.fields) {
       if (field.isPrivate && !ctx.includePrivate) continue;

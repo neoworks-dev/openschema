@@ -112,6 +112,21 @@ export function isInputModel(model: ResolvedModel): boolean {
   return hasDecorator(model.decorators, "input");
 }
 
+/**
+ * A model-level @value marks an embedded value object: it is stored inline (as
+ * JSON) in every model that uses it and never gets a table of its own.
+ */
+export function isValueModel(model: ResolvedModel): boolean {
+  return hasDecorator(model.decorators, "value");
+}
+
+/** True when a database target gives this model a table: not generic, @input or @value. */
+export function isTableModel(model: ResolvedModel): boolean {
+  if (model.isGeneric) return false;
+  if (isInputModel(model)) return false;
+  return !isValueModel(model);
+}
+
 /** Find a decorator by its dotted name, e.g. "sql.type" or "table". */
 export function findDecorator(decorators: Decorator[], name: string): Decorator | null {
   for (const decorator of decorators) {

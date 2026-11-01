@@ -2,8 +2,10 @@
 // Emits SQLite CREATE TABLE statements from a resolved schema.
 
 import type { Emitter, EmitContext, OutputFile } from "../types.js";
-import { isInputModel } from "../typeMapping.js";
+import type { ResolvedModel } from "../../resolver/types.js";
+import { isTableModel } from "../typeMapping.js";
 import { renderCreateTableSqlite } from "./sqliteDdl.js";
+import { renderCreateIndex, tableIndexes } from "./sqlIndexes.js";
 
 export const sqliteEmitter: Emitter = {
   target: "sqlite",
@@ -12,11 +14,15 @@ export const sqliteEmitter: Emitter = {
   emit(context: EmitContext): OutputFile[] {
     const blocks: string[] = [];
     for (const record of context.schema.records.values()) {
-      if (record.isGeneric) continue; // generic records are not directly emittable
-      if (isInputModel(record)) continue; // input-only model: not a table
-      blocks.push(renderCreateTableSqlite(record, context.schema, context.company, context.includePrivate));
+      if (!isTableModel(record)) continue; // generic, @input and @value models have no table
+      blocks.push(renderTable(record, context));
     }
     const contents = blocks.join("\n\n") + "\n";
     return [{ path: `schema.${this.fileExtension}`, contents }];
   },
 };
+
+function renderTable(record: ResolvedModel, context: EmitContext): string {
+  const table = renderCreateTableSqlite(record, context.schema, context.company, context.includePrivate);
+  return [table, ...tableIndexes(record).map(renderCreateIndex)].join("\n");
+}

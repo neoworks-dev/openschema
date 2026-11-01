@@ -31,6 +31,11 @@ it to DDL:
 | new / removed enum             | `CREATE TYPE` / `DROP TYPE`            | comment (inlined as ASSERTs)     |
 | enum variant add / rename      | `ALTER TYPE … ADD VALUE` / `RENAME VALUE` | re-`DEFINE FIELD` updated ASSERT |
 | enum variant remove            | `-- MANUAL` recreate (PG limitation)  | re-`DEFINE FIELD` updated ASSERT |
+| `@index` added / removed       | `CREATE INDEX` / `DROP INDEX`         | `DEFINE INDEX` / `REMOVE INDEX`  |
+| `@index` changed (name, fields, `unique`) | `DROP INDEX` + `CREATE INDEX` | `REMOVE INDEX` + `DEFINE INDEX` |
+
+`@value` models never get a table, so they never appear in a migration; a field
+using one is a JSON column like any other.
 
 SQLite (`migration-sqlite`) runs `CREATE TABLE`, `DROP TABLE`, `RENAME TO`,
 `RENAME COLUMN` and simple `ADD COLUMN`s in place. It cannot alter a column, so

@@ -12,8 +12,9 @@ import { previousModel, type MigrationOp } from "../../engine/migration.js";
 import { pairByOrdinal } from "../../engine/match.js";
 import { describeType } from "../../engine/type-compat.js";
 import type { ResolvedField, ResolvedModel, ResolvedSchema } from "../../resolver/types.js";
-import { applyLink, hasDecorator, isInputModel, toSnakeCase, unwrapNullable } from "../typeMapping.js";
+import { applyLink, hasDecorator, isTableModel, toSnakeCase, unwrapNullable } from "../typeMapping.js";
 import { tableNameFor } from "../sql/sqlDdl.js";
+import { renderCreateIndex, renderDropIndex, tableIndexes } from "../sql/sqlIndexes.js";
 import {
   renderCreateTableSqlite, sqliteColumns, sqliteColumnName, sqliteColumnDefinition,
   sqliteColumnType, needsRebuildToAdd, sqliteString, type SqliteColumn,
@@ -154,7 +155,7 @@ function describeEnumChange(op: EnumVariantOp): string {
 function enumColumns(enumName: string, ctx: MigrationEmitContext): { model: ResolvedModel; field: ResolvedField }[] {
   const found: { model: ResolvedModel; field: ResolvedField }[] = [];
   for (const model of ctx.newSchema.records.values()) {
-    if (model.isGeneric || isInputModel(model)) continue;
+    if (!isTableModel(model)) continue;
     for (const field of model.fields) {
       if (field.isPrivate && !ctx.includePrivate) continue;
       if (enumNameOf(field) === enumName) found.push({ model, field });
@@ -190,8 +191,9 @@ function isFieldOp(op: MigrationOp): op is FieldOp {
     || op.kind === "ChangeFieldType" || op.kind === "ChangeFieldNullability";
 }
 
+// A rebuild recreates every declared index of its table, so it absorbs index creation too.
 function isAbsorbedByRebuild(op: MigrationOp, rebuilds: Map<string, Rebuild>): boolean {
-  if (isFieldOp(op)) return rebuilds.has(op.table);
+  if (isFieldOp(op) || op.kind === "CreateIndex") return rebuilds.has(op.table);
   if (op.kind === "RenameModel") return rebuilds.has(op.newTable);
   return false;
 }
@@ -235,6 +237,7 @@ function renderRebuild(rebuild: Rebuild, ctx: MigrationEmitContext): string {
   }
   lines.push(`DROP TABLE ${oldTable};`);
   lines.push(`ALTER TABLE ${temporaryTable} RENAME TO ${rebuild.table};`);
+  lines.push(...tableIndexes(rebuild.model).map(renderCreateIndex));
   return lines.join("\n");
 }
 
@@ -338,6 +341,12 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
     case "DropEnumVariant":
     case "RenameEnumVariant":
       return `-- enum ${describeEnumChange(op)}: ${enumUsers(op.enumName, ctx)}.`;
+
+    case "CreateIndex":
+      return renderCreateIndex(op.index);
+
+    case "DropIndex":
+      return renderDropIndex(op.index);
   }
 }
 

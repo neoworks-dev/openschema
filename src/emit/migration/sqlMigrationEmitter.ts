@@ -8,6 +8,7 @@ import type { MigrationOp } from "../../engine/migration.js";
 import { describeType } from "../../engine/type-compat.js";
 import { unwrapNullable, toSnakeCase } from "../typeMapping.js";
 import { renderCreateTable, renderCreateEnum, enumTypeName, columnDefinition, columnTypeFor, sqlColumnName } from "../sql/sqlDdl.js";
+import { renderCreateIndex, renderDropIndex } from "../sql/sqlIndexes.js";
 
 export const sqlMigrationEmitter: MigrationEmitter = {
   target: "migration-sql",
@@ -90,6 +91,12 @@ function renderOp(op: MigrationOp, ctx: MigrationEmitContext): string {
         `-- CREATE TYPE ${type} AS ENUM (...) with the remaining values, then repoint back.`,
       ].join("\n");
     }
+
+    case "CreateIndex":
+      return renderCreateIndex(op.index);
+
+    case "DropIndex":
+      return renderDropIndex(op.index);
   }
 }
 
