@@ -159,3 +159,18 @@ describe("package imports", () => {
     expect(schema.diagnostics.map(diagnostic => diagnostic.code)).toContain("OS1008");
   });
 });
+
+describe("relative imports", () => {
+  const COMMON = "namespace shop.common\nmodel Money { 1 cents: i64 }\n";
+
+  for (const specifier of ["./common", "./common.schema"]) {
+    it(`finds common.schema from "${specifier}"`, () => {
+      const files = {
+        "/shop/common.schema": COMMON,
+        "/shop/orders.schema": `namespace shop\nimport { Money } from "${specifier}"\nmodel Order { 1 total: Money }\n`,
+      };
+      const schema = resolveModules(loadProject("/shop/orders.schema", reader(files)));
+      expect(schema.diagnostics).toEqual([]);
+    });
+  }
+});

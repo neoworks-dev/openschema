@@ -622,8 +622,9 @@ model Order {
 ```
 
 - The specifier (`"./common"`) is resolved **relative to the importing file**.
-  The `.schema` extension is added automatically, so `"./common"` finds
-  `common.schema`.
+  The extension is optional: `"./common"` and `"./common.schema"` both find
+  `common.schema` (the exact path is tried first, then `.schema`, then
+  `.openschema`).
 - Importing a name that the target file does not declare is an error
   (`OS1007`). Importing from a file that cannot be found is an error
   (`OS1008`).
