@@ -1,0 +1,1 @@
+{"version":3,"file":"goFormat.d.ts","sourceRoot":"","sources":["../../../src/emit/go/goFormat.ts"],"names":[],"mappings":"AAIA,iGAAiG;AACjG,wBAAgB,SAAS,CAAC,IAAI,EAAE,MAAM,EAAE,EAAE,GAAG,MAAM,EAAE,CAQpD;AAOD,wBAAgB,QAAQ,CAAC,GAAG,EAAE,MAAM,GAAG,IAAI,EAAE,MAAM,EAAE,MAAM,GAAG,MAAM,EAAE,CAGrE;AAGD,wBAAgB,QAAQ,CAAC,IAAI,EAAE,MAAM,GAAG,MAAM,CAG7C"}

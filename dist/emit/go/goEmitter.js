@@ -2,6 +2,7 @@
 // Emits Go structs and enum constants from a resolved schema, formatted the way
 // gofmt formats them.
 import { baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases, hasDecorator, nearestAbstractAncestor, fieldsBeyond, abstractModelOf, } from "../typeMapping.js";
+import { alignRows, docLines, exported } from "./goFormat.js";
 const SCALAR_GO = {
     bool: "bool",
     i8: "int8", i16: "int16", i32: "int32", i64: "int64",
@@ -112,26 +113,6 @@ function jsonTag(field, nullable) {
         return `${field.name},omitempty`;
     return field.name;
 }
-/** Pads every cell but the last of each row to its column's width, as gofmt's tabwriter does. */
-function alignRows(rows) {
-    const widths = [];
-    for (const row of rows) {
-        row.slice(0, -1).forEach((cell, column) => {
-            widths[column] = Math.max(widths[column] ?? 0, cell.length);
-        });
-    }
-    return rows.map(row => row.map((cell, column) => padCell(cell, column, row.length, widths)).join(" "));
-}
-function padCell(cell, column, rowLength, widths) {
-    if (column === rowLength - 1)
-        return cell;
-    return cell.padEnd(widths[column]);
-}
-function docLines(doc, indent) {
-    if (doc === null || doc.trim() === "")
-        return [];
-    return doc.split("\n").map(line => `${indent}// ${line.trim()}`.trimEnd());
-}
 // A value typed as an @abstract model may be any of its subtypes, which Go can
 // only hold as `any`.
 function isAbstractValue(type, schema) {
@@ -152,11 +133,5 @@ function mapType(type, schema) {
         case "union": return "any";
         case "oneof": return "any";
     }
-}
-// Go exports only capitalised identifiers; the rest of the name stays as written.
-function exported(name) {
-    if (name.length === 0)
-        return name;
-    return name.charAt(0).toUpperCase() + name.slice(1);
 }
 //# sourceMappingURL=goEmitter.js.map

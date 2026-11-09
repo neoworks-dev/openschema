@@ -1,22 +1,14 @@
 // src/emit/kotlin/kotlinCollection.ts
 // The class `neoworks.collection(Schema)` returns: one `TableResource` property per table, named like
 // the TypeScript SDK names its resources (`Photo` is `photos`, `AlbumPhoto` is `albumPhotos`).
+import { pluralize } from "../collection/pluralize.js";
 import { identifier, pascalCase } from "./kotlinNames.js";
 import { HEADER, COLLECTIONS_PACKAGE } from "./kotlinRuntime.js";
 import { KotlinTargetError } from "./kotlinTargetError.js";
 import { includeClassName, orderByClassName, whereClassName } from "./kotlinQueries.js";
 import { schemaObjectName, tableDefinitionName } from "./kotlinSchemaObject.js";
 import { updateClassName } from "./kotlinUpdates.js";
-const CONSONANT_BEFORE_Y = /[bcdfghjklmnpqrstvwxz]y$/;
-const SIBILANT_ENDING = /(s|x|z|ch|sh)$/;
-/** The plural of the last word of a camel-cased name: `memory` is `memories`, `address` is `addresses`. */
-export function pluralize(name) {
-    if (CONSONANT_BEFORE_Y.test(name))
-        return `${name.slice(0, -1)}ies`;
-    if (SIBILANT_ENDING.test(name))
-        return `${name}es`;
-    return `${name}s`;
-}
+export { pluralize };
 /** `@neoworks/contacts` is `ContactsCollection`. */
 export function collectionClassName(identity) {
     const collection = identity.name.slice(identity.name.indexOf("/") + 1);
