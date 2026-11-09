@@ -3,6 +3,7 @@
 // the TypeScript SDK names its resources (`Photo` is `photos`, `AlbumPhoto` is `albumPhotos`).
 
 import type { CollectionIdentity } from "../../registry/collectionName.js";
+import { pluralize } from "../collection/pluralize.js";
 import type { SchemaDescriptor } from "../descriptor/descriptorTypes.js";
 import { identifier, pascalCase } from "./kotlinNames.js";
 import { HEADER, SCHEMA_PACKAGE, COLLECTIONS_PACKAGE } from "./kotlinRuntime.js";
@@ -11,15 +12,7 @@ import { includeClassName, orderByClassName, whereClassName } from "./kotlinQuer
 import { schemaObjectName, tableDefinitionName } from "./kotlinSchemaObject.js";
 import { updateClassName } from "./kotlinUpdates.js";
 
-const CONSONANT_BEFORE_Y = /[bcdfghjklmnpqrstvwxz]y$/;
-const SIBILANT_ENDING = /(s|x|z|ch|sh)$/;
-
-/** The plural of the last word of a camel-cased name: `memory` is `memories`, `address` is `addresses`. */
-export function pluralize(name: string): string {
-  if (CONSONANT_BEFORE_Y.test(name)) return `${name.slice(0, -1)}ies`;
-  if (SIBILANT_ENDING.test(name)) return `${name}es`;
-  return `${name}s`;
-}
+export { pluralize };
 
 /** `@neoworks/contacts` is `ContactsCollection`. */
 export function collectionClassName(identity: CollectionIdentity): string {

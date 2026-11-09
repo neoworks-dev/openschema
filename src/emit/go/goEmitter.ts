@@ -9,6 +9,7 @@ import {
   baseFieldsToEmit, overlayFieldsToEmit, unwrapNullable, unionAliases, hasDecorator,
   nearestAbstractAncestor, fieldsBeyond, abstractModelOf,
 } from "../typeMapping.js";
+import { alignRows, docLines, exported } from "./goFormat.js";
 
 const SCALAR_GO: Record<ScalarKind, string> = {
   bool: "bool",
@@ -125,27 +126,6 @@ function jsonTag(field: ResolvedField, nullable: boolean): string {
   return field.name;
 }
 
-/** Pads every cell but the last of each row to its column's width, as gofmt's tabwriter does. */
-function alignRows(rows: string[][]): string[] {
-  const widths: number[] = [];
-  for (const row of rows) {
-    row.slice(0, -1).forEach((cell, column) => {
-      widths[column] = Math.max(widths[column] ?? 0, cell.length);
-    });
-  }
-  return rows.map(row => row.map((cell, column) => padCell(cell, column, row.length, widths)).join(" "));
-}
-
-function padCell(cell: string, column: number, rowLength: number, widths: number[]): string {
-  if (column === rowLength - 1) return cell;
-  return cell.padEnd(widths[column]);
-}
-
-function docLines(doc: string | null, indent: string): string[] {
-  if (doc === null || doc.trim() === "") return [];
-  return doc.split("\n").map(line => `${indent}// ${line.trim()}`.trimEnd());
-}
-
 // A value typed as an @abstract model may be any of its subtypes, which Go can
 // only hold as `any`.
 function isAbstractValue(type: TypeExpr, schema: ResolvedSchema): boolean {
@@ -166,10 +146,4 @@ function mapType(type: TypeExpr, schema: ResolvedSchema): string {
     case "union":    return "any";
     case "oneof":    return "any";
   }
-}
-
-// Go exports only capitalised identifiers; the rest of the name stays as written.
-function exported(name: string): string {
-  if (name.length === 0) return name;
-  return name.charAt(0).toUpperCase() + name.slice(1);
 }
