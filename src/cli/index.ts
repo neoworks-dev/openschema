@@ -22,6 +22,7 @@ import { diff as engineDiff } from "../engine/index.js";
 import { resolveModules, loadProject } from "../resolver/index.js";
 import type { ReadFileOrNull } from "../resolver/moduleGraph.js";
 import { getEmitter, listTargets, type Emitter, type OutputFile } from "../emit/index.js";
+import { GO_SHARE_OPTION } from "../emit/go/goCollectionEmitter.js";
 import { GO_PACKAGE_OPTION } from "../emit/go/goEmitter.js";
 import { getMigrationEmitter, MIGRATION_TARGETS, type MigrationEmitter } from "../emit/migration/index.js";
 import { buildMigrationPlan, type MigrationPlan } from "../engine/migration.js";
@@ -64,6 +65,8 @@ interface GenerateOptions {
   includePrivate?: boolean;
   /** The Go package name, from --package. */
   package?: string;
+  /** From --share: the go-collection target requests the share scope too. */
+  share?: boolean;
   /** A path from --lock, or `false` from --no-lock. */
   lock?: string | boolean;
   frozen?: boolean;
@@ -206,6 +209,7 @@ function recordModules(emitter: Emitter, emitted: OutputFile[], modules: Emitted
 
 function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModules, opts: GenerateOptions): Record<string, string> {
   if (emitter.target === "go") return goOptions(opts);
+  if (emitter.target === "go-collection") return goCollectionOptions(schemaPath, opts);
   if (emitter.target === "versions") return versionsOptions(schemaPath, modules);
   if (emitter.target === "kotlin") return kotlinOptions(schemaPath);
   if (emitter.target !== "collection") return {};
@@ -220,6 +224,17 @@ function emitOptions(emitter: Emitter, schemaPath: string, modules: EmittedModul
 function goOptions(opts: GenerateOptions): Record<string, string> {
   if (opts.package === undefined) return {};
   return { [GO_PACKAGE_OPTION]: opts.package };
+}
+
+/** The go-collection target takes the collection from the manifest beside the schema, the package from --package and the share scope from --share. */
+function goCollectionOptions(schemaPath: string, opts: GenerateOptions): Record<string, string> {
+  const options = goOptions(opts);
+  if (opts.share === true) options[GO_SHARE_OPTION] = "true";
+  const identity = findCollectionIdentity(dirname(schemaPath));
+  if (identity === null) return options;
+  options[COLLECTION_OPTION] = identity.name;
+  options[COLLECTION_VERSION_OPTION] = identity.version;
+  return options;
 }
 
 /** The Kotlin target writes the schema object only for a schema with a manifest beside it. */
@@ -1238,7 +1253,8 @@ program
   .option("-o, --out <dir>", "output directory", ".")
   .option("--company <id>", "include this company's overlay fields")
   .option("--include-private", "include base-record private fields")
-  .option("--package <name>", "Go package name for the go target (default: schema)")
+  .option("--package <name>", "Go package name for the go and go-collection targets (default: schema for go, the collection name for go-collection)")
+  .option("--share", "request the share scope in the go-collection target's Scopes")
   .option("--lock <path>", "ordinal lockfile (default: <schema dir>/openschema.lock)")
   .option("--frozen", "never write the ordinal ledger; fail if it is missing or stale")
   .option("--write-lock", "write the ordinal ledger even when CI is set")

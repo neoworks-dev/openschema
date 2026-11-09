@@ -1,0 +1,104 @@
+namespace acme.kitchen
+
+/// A shelf of recipes.
+@neoworks.table
+model Pantry {
+  @neoworks.title
+  1 name: string
+}
+
+/// A recipe with one field of every kind the Go target maps.
+@neoworks.table
+model Recipe {
+  @belongsTo
+  1 pantry: ref<Pantry>
+  @neoworks.title
+  2 title: string
+  3 notes: string?
+  4 servings: i32
+  5 calories: f64?
+  6 views: i64
+  7 totalViews: u64?
+  8 cookTime: duration
+  /// When it was last cooked.
+  9 cookedAt: timestamp
+  10 lastCooked: timestamp?
+  11 day: date
+  12 startsAt: time?
+  13 token: uuid
+  14 photoData: bytes
+  15 thumbnail: bytes?
+  16 extra: json
+  17 annotations: json?
+  18 version: semver
+  19 price: decimal(10, 2)
+  20 favourite: bool
+  21 level: u8
+  22 difficulty: Difficulty
+  23 mood: Difficulty?
+  24 tags: [string]
+  25 allergens: [string]?
+  26 counts: [i64]
+  27 digits: [u8]
+  28 stamps: [timestamp]?
+  29 blobs: [bytes]
+  30 related: [ref<Recipe>]
+  31 nutrition: {string: f64}
+  32 weights: {string: i64}?
+  33 byYear: {i32: string}
+  34 flags: {bool: string}
+  35 author: Author?
+  36 facts: Nutrition
+  37 steps: [Step]
+  38 sections: [Section]?
+  39 cover: File?
+  40 gallery: [File]
+  41 reminder: oneof {
+    1 email: string
+    2 timer: Timer
+    3 when: oneof {
+      1 moment: timestamp
+      2 count: i64
+    }
+  }?
+  42 source: oneof {
+    1 url: string
+    2 cookbook: i64
+  }
+}
+
+enum Difficulty {
+  1 easy
+  2 hard
+}
+
+/// Who wrote the recipe.
+model Author {
+  1 name: string
+  2 website: string?
+}
+
+model Nutrition {
+  1 energy: f64
+  2 allergens: [Allergen]
+}
+
+model Allergen {
+  1 name: string
+}
+
+model Step {
+  1 text: string
+  2 photo: File?
+}
+
+model Timer {
+  1 length: duration
+}
+
+/// A section of a cookbook that can hold further sections.
+model Section {
+  1 title: string
+  2 child: Section?
+  3 subsections: [Section]
+}

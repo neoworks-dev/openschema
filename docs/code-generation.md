@@ -12,9 +12,10 @@ openschema <schema> --target <target> --out <dir> [options]
 | `--out`, `-o` | output directory (created if missing) | `.` |
 | `--company <id>` | include this company's [overlay](./overlays.md) fields | none |
 | `--include-private` | include the schema's own `private` fields | off |
-| `--package <name>` | Go package name for the `go` target | `schema` |
+| `--package <name>` | Go package name for the `go` and `go-collection` targets | `schema` for `go`, the collection's name for `go-collection` |
+| `--share` | add the `share` scope to the `go-collection` target's `Scopes` | off |
 
-Targets: `sql`, `sqlite`, `ts`, `zod`, `go`, `json-schema`, `graphql`, `openapi`,
+Targets: `sql`, `sqlite`, `ts`, `zod`, `go`, `go-collection`, `json-schema`, `graphql`, `openapi`,
 `surrealdb`, `codec`, `descriptor`, `collection`, `kotlin`, `versions`. Pass several at once
 with a comma: `-t ts,zod,sql`. The `versions` target writes the types of every
 published version of a collection ([Types per version](./collection.md#types-per-version)).
@@ -282,6 +283,51 @@ Type mapping:
 - `@invisible` fields get `json:"-"`, so they never appear in JSON.
 - The output is laid out as `gofmt` would lay it out.
 - `--package <name>` sets the package; the default is `schema`.
+
+---
+
+## Go collection
+
+```bash
+openschema drift.schema --target go-collection --out ./drift
+```
+
+For a schema published as a collection (an `openschema.yaml` beside it, with
+`@neoworks.table` models), the `go-collection` target writes `<package>.go` for
+the Go SDK's `github.com/neoworks-dev/sdk-go/collections` package: the content
+structs, typed field handles for conditions, orders and changes, and the
+collection's tables.
+
+```go
+playlist, err := db.Playlists.Create(ctx, drift.Playlist{Name: "Night drive", CreatedAt: time.Now()})
+rows, err := db.Playlists.All(ctx, collections.ListOptions{
+	Where: []collections.Condition{drift.PlaylistFields.Name.Contains("night")},
+})
+```
+
+The file declares `Collection`, `SchemaVersion`, `Scopes` (`read` and `write`, and
+`share` with `--share`), `Schema` (the descriptor as the registry publishes it), a
+struct per model, a `<Model>Fields` value per table, the `Tables` struct, and
+`Open`. The package is the last segment of the collection's name, or `--package`.
+
+Structs read and write the core's content JSON with `encoding/json`:
+
+| OpenSchema | Go |
+|-----------|-----|
+| `bool`, `i8`..`i32`, `u8`..`u32`, `f32`, `f64` | the Go number or bool |
+| `i64`, `u64`, `duration` | `int64`, `uint64`, `time.Duration` with the `string` tag option (decimal text); `collections.Int64`, `collections.Uint64`, `collections.Duration` inside a list, map or oneof |
+| `timestamp` | `time.Time` |
+| `date`, `time`, `uuid`, `decimal`, `semver` | `string` |
+| `bytes` | `collections.Bytes` (unpadded base64url) |
+| `json` | `json.RawMessage` |
+| `ref<T>` | `string`, the id of the row |
+| `File` | `collections.File` |
+| enum | `type X string` with a constant per variant |
+| `oneof` | a struct with a pointer per variant, written as the single-key object |
+| model | a struct |
+| `[T]` | `[]T`; a list of `u8` is `[]collections.Uint8` so it is not written as base64 text |
+| `{K: V}` | `map[K]V`; bool keys are `string` keys holding `true` or `false` |
+| `T?` | `*T` with `omitempty`; an optional list or map is nil, written as `null` |
 
 ---
 

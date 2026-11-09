@@ -7,6 +7,7 @@ import { sqliteEmitter } from "./sql/sqliteEmitter.js";
 import { typescriptEmitter } from "./typescript/typescriptEmitter.js";
 import { jsonSchemaEmitter } from "./jsonSchema/jsonSchemaEmitter.js";
 import { goEmitter } from "./go/goEmitter.js";
+import { goCollectionEmitter } from "./go/goCollectionEmitter.js";
 import { graphqlEmitter } from "./graphql/graphqlEmitter.js";
 import { openApiEmitter } from "./openapi/openApiEmitter.js";
 import { surrealEmitter } from "./surrealdb/surrealEmitter.js";
@@ -26,6 +27,7 @@ const EMITTERS: Record<string, Emitter> = {
   [typescriptEmitter.target]: typescriptEmitter,
   [jsonSchemaEmitter.target]: jsonSchemaEmitter,
   [goEmitter.target]: goEmitter,
+  [goCollectionEmitter.target]: goCollectionEmitter,
   [graphqlEmitter.target]: graphqlEmitter,
   [openApiEmitter.target]: openApiEmitter,
   [surrealEmitter.target]: surrealEmitter,
