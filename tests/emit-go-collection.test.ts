@@ -107,7 +107,8 @@ describe("the go-collection target", () => {
     const result = runGo(["test", "./..."], directory);
     expect(result.output).toContain("ok");
     expect(result.exitCode).toBe(0);
-  });
+    // Compiling the SDK from a cold Go build cache takes 10 to 15 seconds in CI.
+  }, 120_000);
 });
 
 describe("go-collection output", () => {
